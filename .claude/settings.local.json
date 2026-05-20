@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Skill(shinsekai)",
+      "Bash(uv run *)"
+    ]
+  }
+}

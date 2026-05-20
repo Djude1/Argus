@@ -1,0 +1,115 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+  .panel {
+    @apply rounded-2xl border border-slate-200 bg-white p-5 shadow-sm;
+  }
+
+  .eyebrow {
+    @apply text-xs font-bold uppercase tracking-[0.2em] text-blue-600;
+  }
+
+  .section-title {
+    @apply text-xl font-bold text-slate-950;
+  }
+
+  .input {
+    @apply w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none ring-blue-200 focus:ring-4;
+  }
+
+  .primary-button {
+    @apply inline-flex items-center justify-center rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-400;
+  }
+
+  .secondary-button {
+    @apply inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50;
+  }
+
+  .checkbox-row {
+    @apply flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700;
+  }
+
+  .checkbox-row.warning {
+    @apply border-amber-200 bg-amber-50 text-amber-900;
+  }
+
+  .error-text {
+    @apply rounded-xl bg-red-50 p-3 text-sm text-red-700;
+  }
+
+  .scan-card {
+    @apply flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white p-3 text-left hover:border-blue-300;
+  }
+
+  .scan-card.active {
+    @apply border-blue-500 bg-blue-50;
+  }
+
+  .score-badge {
+    @apply rounded-full px-3 py-1 text-xs font-bold;
+  }
+
+  .score-badge.good {
+    @apply bg-emerald-100 text-emerald-700;
+  }
+
+  .score-badge.medium {
+    @apply bg-amber-100 text-amber-700;
+  }
+
+  .score-badge.bad {
+    @apply bg-red-100 text-red-700;
+  }
+
+  .score-badge.muted {
+    @apply bg-slate-100 text-slate-500;
+  }
+
+  .screenshot-shell {
+    @apply min-h-[460px] overflow-auto rounded-2xl border border-slate-200 bg-slate-50 p-4;
+  }
+
+  .screenshot-image {
+    @apply max-w-full rounded-xl border border-slate-200;
+  }
+
+  .highlight-box {
+    @apply absolute border-2 border-amber-400 bg-amber-300/20 opacity-60;
+  }
+
+  .highlight-box.active {
+    @apply animate-pulse border-red-500 bg-red-400/30 opacity-100;
+  }
+
+  .finding-card {
+    @apply flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 text-left text-sm hover:border-blue-300;
+  }
+
+  .finding-card.active {
+    @apply border-blue-500 bg-blue-50;
+  }
+
+  .severity {
+    @apply rounded-full px-2 py-0.5 text-xs font-bold;
+  }
+
+  .severity.critical,
+  .severity.high {
+    @apply bg-red-100 text-red-700;
+  }
+
+  .severity.medium {
+    @apply bg-amber-100 text-amber-700;
+  }
+
+  .severity.low,
+  .severity.info {
+    @apply bg-slate-100 text-slate-700;
+  }
+
+  .finding-detail {
+    @apply space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700;
+  }
+}

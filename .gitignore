@@ -1,0 +1,16 @@
+.env
+GoogleCloud_ApiKey.json
+.venv/
+node_modules/
+__pycache__/
+*.pyc
+dist/
+build/
+.sisyphus/*.local.md
+backend/db.sqlite3
+db.sqlite3
+backend/media/
+backend/staticfiles/
+.ruff_cache/
+.ms-playwright/
+frontend/dist/

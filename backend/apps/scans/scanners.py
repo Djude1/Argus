@@ -1,0 +1,572 @@
+import re
+from dataclasses import dataclass
+from html.parser import HTMLParser
+from urllib.parse import urlparse
+
+from apps.scans.models import Finding
+
+# HTML5 語意化區塊標籤，用於 GEO FAST 的 Structured 維度判斷
+SEMANTIC_LANDMARK_TAGS = {"main", "article", "header", "nav", "section", "footer", "aside"}
+
+
+@dataclass
+class PageAnalysisInput:
+    url: str
+    final_url: str
+    title: str
+    html: str
+    headers: dict[str, str]
+    element_boxes: dict[str, dict]
+    html_only: str = ""
+
+
+class HtmlSignalParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.meta_description = ""
+        self.canonical = ""
+        self.hreflang_count = 0
+        self.h1_count = 0
+        self.heading_levels: list[int] = []
+        self.image_count = 0
+        self.image_without_alt = 0
+        self.form_count = 0
+        self.form_without_csrf = 0
+        self.json_ld_blocks: list[str] = []
+        self.dl_count = 0
+        self.current_script_type = ""
+        self.current_script_parts: list[str] = []
+        self.in_form = False
+        self.form_has_csrf = False
+        self.semantic_landmarks: set[str] = set()
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        attributes = {name.lower(): value or "" for name, value in attrs}
+        normalized_tag = tag.lower()
+
+        if normalized_tag == "meta" and attributes.get("name", "").lower() == "description":
+            self.meta_description = attributes.get("content", "")
+        elif normalized_tag == "link":
+            rel = attributes.get("rel", "").lower()
+            if rel == "canonical":
+                self.canonical = attributes.get("href", "")
+            if rel == "alternate" and attributes.get("hreflang"):
+                self.hreflang_count += 1
+        elif normalized_tag == "h1":
+            self.h1_count += 1
+            self.heading_levels.append(1)
+        elif normalized_tag in {"h2", "h3", "h4", "h5", "h6"}:
+            self.heading_levels.append(int(normalized_tag[1]))
+        elif normalized_tag == "img":
+            self.image_count += 1
+            if not attributes.get("alt", "").strip():
+                self.image_without_alt += 1
+        elif normalized_tag == "form":
+            self.form_count += 1
+            self.in_form = True
+            self.form_has_csrf = False
+        elif normalized_tag == "input" and self.in_form:
+            name = attributes.get("name", "").lower()
+            if "csrf" in name or attributes.get("type", "").lower() == "hidden" and "token" in name:
+                self.form_has_csrf = True
+        elif normalized_tag == "script":
+            self.current_script_type = attributes.get("type", "").lower()
+            self.current_script_parts = []
+        elif normalized_tag == "dl":
+            self.dl_count += 1
+
+        if normalized_tag in SEMANTIC_LANDMARK_TAGS:
+            self.semantic_landmarks.add(normalized_tag)
+
+    def handle_data(self, data: str) -> None:
+        if self.current_script_type == "application/ld+json":
+            self.current_script_parts.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        normalized_tag = tag.lower()
+        if normalized_tag == "script" and self.current_script_type == "application/ld+json":
+            self.json_ld_blocks.append("".join(self.current_script_parts))
+            self.current_script_type = ""
+            self.current_script_parts = []
+        elif normalized_tag == "form" and self.in_form:
+            if not self.form_has_csrf:
+                self.form_without_csrf += 1
+            self.in_form = False
+            self.form_has_csrf = False
+
+
+def build_ai_handoff_prompt(
+    *,
+    category: str,
+    severity: str,
+    description: str,
+    remediation: str,
+    evidence: str,
+) -> str:
+    return (
+        "我網站有以下問題，請協助我分析並提供修復方向：\n"
+        f"- 問題類型：{category}\n"
+        f"- 嚴重度：{severity}\n"
+        f"- 問題描述：{description}\n"
+        "- 相關證據：\n"
+        f"{evidence}\n"
+        f"- 修補建議方向：{remediation}\n\n"
+        "請依此資訊提供具體修改方向、檢查步驟與注意事項；不要輸出完整修復程式碼。"
+    )
+
+
+def make_finding(
+    *,
+    category: str,
+    severity: str,
+    title: str,
+    description: str,
+    remediation: str,
+    evidence: str = "",
+    selector: str = "",
+    bounding_box: dict | None = None,
+    priority_score: float | None = None,
+    impact_area: str = "",
+    confidence: float = 1.0,
+) -> dict:
+    return {
+        "category": category,
+        "severity": severity,
+        "title": title,
+        "description": description,
+        "remediation": remediation,
+        "evidence": evidence[:4000],
+        "selector": selector,
+        "bounding_box": bounding_box,
+        "priority_score": priority_score,
+        "impact_area": impact_area,
+        "confidence": confidence,
+        "ai_handoff_prompt": build_ai_handoff_prompt(
+            category=category,
+            severity=severity,
+            description=description,
+            remediation=remediation,
+            evidence=evidence[:2000],
+        ),
+    }
+
+
+def parse_html_signals(html: str) -> HtmlSignalParser:
+    parser = HtmlSignalParser()
+    parser.feed(html or "")
+    return parser
+
+
+def analyze_page(page_input: PageAnalysisInput) -> list[dict]:
+    parser = parse_html_signals(page_input.html)
+    findings: list[dict] = []
+    findings.extend(analyze_seo(page_input, parser))
+    findings.extend(analyze_aeo(page_input, parser))
+    findings.extend(analyze_geo(page_input, parser))
+    findings.extend(analyze_geo_fast(page_input, parser))
+    findings.extend(analyze_security(page_input, parser))
+    return findings
+
+
+def analyze_seo(page_input: PageAnalysisInput, parser: HtmlSignalParser) -> list[dict]:
+    findings: list[dict] = []
+    title_length = len((page_input.title or "").strip())
+    if title_length < 10 or title_length > 65:
+        findings.append(
+            make_finding(
+                category=Finding.Category.SEO,
+                severity=Finding.Severity.MEDIUM,
+                title="Meta title 長度不理想",
+                description="頁面標題過短或過長，可能降低搜尋結果可讀性與點擊率。",
+                remediation="將 title 調整為清楚描述頁面主題且約 10 到 65 字元。",
+                evidence=f"title={page_input.title!r}, length={title_length}",
+                selector="title",
+                impact_area="metadata",
+                priority_score=60,
+            )
+        )
+    description_length = len(parser.meta_description.strip())
+    if description_length < 50 or description_length > 160:
+        findings.append(
+            make_finding(
+                category=Finding.Category.SEO,
+                severity=Finding.Severity.MEDIUM,
+                title="Meta description 缺失或長度不理想",
+                description="Meta description 缺失、過短或過長，會影響搜尋摘要品質。",
+                remediation="補上清楚摘要頁面價值的 description，建議約 50 到 160 字元。",
+                evidence=f"description_length={description_length}",
+                selector='meta[name="description"]',
+                impact_area="metadata",
+                priority_score=58,
+            )
+        )
+    if parser.h1_count != 1:
+        findings.append(
+            make_finding(
+                category=Finding.Category.SEO,
+                severity=Finding.Severity.HIGH if parser.h1_count == 0 else Finding.Severity.MEDIUM,
+                title="H1 標題數量不正確",
+                description="每頁應有唯一且明確的 H1，協助搜尋引擎與使用者理解頁面主題。",
+                remediation="保留一個代表頁面主題的 H1，其他段落標題改用 H2-H6。",
+                evidence=f"h1_count={parser.h1_count}",
+                selector="h1",
+                bounding_box=page_input.element_boxes.get("h1"),
+                impact_area="heading",
+                priority_score=72,
+            )
+        )
+    if parser.image_without_alt:
+        findings.append(
+            make_finding(
+                category=Finding.Category.SEO,
+                severity=Finding.Severity.LOW,
+                title="圖片缺少 alt 屬性",
+                description="圖片缺少替代文字會降低無障礙體驗，也讓搜尋引擎難以理解圖片內容。",
+                remediation="為有語意的圖片補上精準 alt，裝飾性圖片可使用空 alt。",
+                evidence=(
+                    f"image_count={parser.image_count}, "
+                    f"image_without_alt={parser.image_without_alt}"
+                ),
+                selector="img:not([alt])",
+                bounding_box=page_input.element_boxes.get("img:not([alt])"),
+                impact_area="accessibility",
+                priority_score=35,
+            )
+        )
+    if not parser.canonical:
+        findings.append(
+            make_finding(
+                category=Finding.Category.SEO,
+                severity=Finding.Severity.LOW,
+                title="缺少 canonical URL",
+                description="缺少 canonical 可能讓重複內容頁面分散搜尋權重。",
+                remediation="為主要內容頁加入 canonical，指向該內容的標準 URL。",
+                evidence="canonical_missing=true",
+                selector='link[rel="canonical"]',
+                impact_area="metadata",
+                priority_score=30,
+            )
+        )
+    return findings
+
+
+def analyze_aeo(page_input: PageAnalysisInput, parser: HtmlSignalParser) -> list[dict]:
+    findings: list[dict] = []
+    json_ld_text = "\n".join(parser.json_ld_blocks).lower()
+    has_faq_or_howto = "faqpage" in json_ld_text or "howto" in json_ld_text
+    question_like = len(re.findall(r"[？?]|什麼|如何|為何|怎麼", page_input.html or ""))
+    if not has_faq_or_howto and question_like >= 2:
+        findings.append(
+            make_finding(
+                category=Finding.Category.AEO,
+                severity=Finding.Severity.MEDIUM,
+                title="問答內容缺少 FAQPage 或 HowTo 結構化資料",
+                description="頁面含問答語氣但缺少對應 Schema，AI answer engine 較難穩定抽取答案。",
+                remediation=(
+                    "若頁面確實提供 FAQ 或教學步驟，加入符合內容的 FAQPage 或 HowTo Schema。"
+                ),
+                evidence=(
+                    f"question_like_count={question_like}, "
+                    f"json_ld_blocks={len(parser.json_ld_blocks)}"
+                ),
+                selector='script[type="application/ld+json"]',
+                impact_area="answer_engine",
+                priority_score=62,
+            )
+        )
+    if parser.dl_count == 0 and question_like >= 3:
+        findings.append(
+            make_finding(
+                category=Finding.Category.AEO,
+                severity=Finding.Severity.LOW,
+                title="問答資訊缺少明確結構",
+                description="問答內容若沒有清楚的問題與答案區塊，AI 與使用者都較難快速理解。",
+                remediation="使用明確標題、FAQ 區塊或定義列表整理問答內容。",
+                evidence=f"question_like_count={question_like}, dl_count={parser.dl_count}",
+                impact_area="content_structure",
+                priority_score=40,
+            )
+        )
+    return findings
+
+
+def analyze_geo(page_input: PageAnalysisInput, parser: HtmlSignalParser) -> list[dict]:
+    findings: list[dict] = []
+    text = re.sub(r"<[^>]+>", " ", page_input.html or "")
+    paragraph_count = len(re.findall(r"<p[\s>]", page_input.html or "", flags=re.IGNORECASE))
+    json_ld_text = "\n".join(parser.json_ld_blocks).lower()
+    if not parser.json_ld_blocks:
+        findings.append(
+            make_finding(
+                category=Finding.Category.GEO,
+                severity=Finding.Severity.MEDIUM,
+                title="缺少 JSON-LD 結構化資料",
+                description=(
+                    "缺少 Schema.org JSON-LD 會降低 AI 系統辨識品牌、頁面類型與主要實體的穩定性。"
+                ),
+                remediation=(
+                    "依頁面類型加入 Organization、Article、Product、FAQPage "
+                    "或 BreadcrumbList 等 Schema。"
+                ),
+                evidence="json_ld_blocks=0",
+                selector='script[type="application/ld+json"]',
+                impact_area="structured_data",
+                priority_score=68,
+            )
+        )
+    elif not any(
+        kind in json_ld_text for kind in ["organization", "article", "product", "faqpage"]
+    ):
+        findings.append(
+            make_finding(
+                category=Finding.Category.GEO,
+                severity=Finding.Severity.LOW,
+                title="JSON-LD 缺少常見核心實體類型",
+                description="結構化資料存在，但可能未清楚描述組織、文章、產品或問答等核心實體。",
+                remediation="檢查 Schema 類型是否符合頁面目的，並補齊必要欄位。",
+                evidence=json_ld_text[:1000],
+                selector='script[type="application/ld+json"]',
+                impact_area="structured_data",
+                priority_score=42,
+            )
+        )
+    if paragraph_count < 2 or len(text.strip()) < 300:
+        findings.append(
+            make_finding(
+                category=Finding.Category.GEO,
+                severity=Finding.Severity.INFO,
+                title="可引用文字區塊偏少",
+                description="AI 系統通常需要清楚、可獨立引用的段落來生成可靠答案。",
+                remediation="增加清楚的小段落、定義、數據來源與具體事實，讓內容更容易被引用。",
+                evidence=f"paragraph_count={paragraph_count}, text_length={len(text.strip())}",
+                selector="main",
+                bounding_box=page_input.element_boxes.get("main"),
+                impact_area="chunkability",
+                priority_score=25,
+            )
+        )
+    return findings
+
+
+def analyze_security(page_input: PageAnalysisInput, parser: HtmlSignalParser) -> list[dict]:
+    findings: list[dict] = []
+    parsed = urlparse(page_input.final_url)
+    headers = {key.lower(): value for key, value in page_input.headers.items()}
+    if parsed.scheme != "https":
+        findings.append(
+            make_finding(
+                category=Finding.Category.SECURITY,
+                severity=Finding.Severity.HIGH,
+                title="頁面未使用 HTTPS",
+                description="HTTP 連線可能被竊聽或竄改，會影響使用者安全與信任。",
+                remediation="為網站啟用 HTTPS，並將 HTTP 流量重新導向 HTTPS。",
+                evidence=f"scheme={parsed.scheme}",
+                impact_area="transport_security",
+                priority_score=90,
+            )
+        )
+    required_headers = {
+        "strict-transport-security": ("medium", "缺少 HSTS"),
+        "content-security-policy": ("medium", "缺少 CSP"),
+        "x-frame-options": ("low", "缺少 X-Frame-Options"),
+        "x-content-type-options": ("low", "缺少 X-Content-Type-Options"),
+    }
+    for header_name, (severity, title) in required_headers.items():
+        if header_name not in headers:
+            findings.append(
+                make_finding(
+                    category=Finding.Category.SECURITY,
+                    severity=severity,
+                    title=title,
+                    description=f"Response header 缺少 {header_name}，可能降低瀏覽器防護能力。",
+                    remediation=f"依網站需求設定合適的 {header_name} header。",
+                    evidence=f"missing_header={header_name}",
+                    impact_area="security_headers",
+                    priority_score=55 if severity == "medium" else 32,
+                )
+            )
+    if parser.form_without_csrf:
+        findings.append(
+            make_finding(
+                category=Finding.Category.SECURITY,
+                severity=Finding.Severity.MEDIUM,
+                title="表單可能缺少 CSRF token",
+                description="表單缺少 CSRF 防護可能讓使用者在不知情下提交非預期請求。",
+                remediation="確認會改變狀態的表單都具備 CSRF token 或等效防護。",
+                evidence=(
+                    f"form_count={parser.form_count}, "
+                    f"form_without_csrf={parser.form_without_csrf}"
+                ),
+                selector="form",
+                bounding_box=page_input.element_boxes.get("form"),
+                impact_area="csrf",
+                priority_score=64,
+            )
+        )
+    return findings
+
+
+def visible_text_length(html: str) -> int:
+    """估算 HTML 去除 script/style 後的可見文字字數（不含空白）。"""
+    without_scripts = re.sub(
+        r"<(script|style)\b[^>]*>.*?</\1>",
+        " ",
+        html or "",
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    text = re.sub(r"<[^>]+>", " ", without_scripts)
+    return len(re.sub(r"\s+", "", text))
+
+
+def analyze_geo_fast(page_input: PageAnalysisInput, parser: HtmlSignalParser) -> list[dict]:
+    """GEO FAST 框架補充檢查：Accessible、Structured、Trim 三個維度。"""
+    findings: list[dict] = []
+
+    # Accessible：核心內容是否在初始 HTML 即可取得，而非高度依賴 JavaScript 渲染
+    if page_input.html_only:
+        rendered_length = visible_text_length(page_input.html)
+        raw_length = visible_text_length(page_input.html_only)
+        if rendered_length >= 400 and raw_length < rendered_length * 0.5:
+            findings.append(
+                make_finding(
+                    category=Finding.Category.GEO,
+                    severity=Finding.Severity.MEDIUM,
+                    title="核心內容高度依賴 JavaScript 渲染",
+                    description=(
+                        "初始 HTML 的文字量明顯少於渲染後內容，"
+                        "不執行 JavaScript 的 AI 爬蟲可能讀不到主要內容。"
+                    ),
+                    remediation=(
+                        "以伺服器端渲染或靜態 HTML 提供核心內容，"
+                        "確保不執行 JavaScript 也能取得主要文字。"
+                    ),
+                    evidence=f"raw_html_text={raw_length}, rendered_text={rendered_length}",
+                    impact_area="accessible",
+                    priority_score=66,
+                )
+            )
+
+    # Structured：是否使用語意化主內容區塊標籤
+    if "main" not in parser.semantic_landmarks:
+        findings.append(
+            make_finding(
+                category=Finding.Category.GEO,
+                severity=Finding.Severity.LOW,
+                title="缺少語意化主內容區塊",
+                description="頁面未使用 main 等語意化區塊標籤，AI 與輔助技術較難辨識主要內容範圍。",
+                remediation="以 main、article、section 等語意化標籤標示主要內容與段落結構。",
+                evidence=f"semantic_landmarks={sorted(parser.semantic_landmarks)}",
+                selector="main",
+                impact_area="structured",
+                priority_score=34,
+            )
+        )
+
+    # Trim：段落是否過長，影響可被獨立引用的程度
+    paragraphs = re.findall(
+        r"<p[^>]*>(.*?)</p>",
+        page_input.html or "",
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    long_paragraphs = [
+        paragraph
+        for paragraph in paragraphs
+        if len(re.sub(r"<[^>]+>", "", paragraph).strip()) > 1000
+    ]
+    if long_paragraphs:
+        findings.append(
+            make_finding(
+                category=Finding.Category.GEO,
+                severity=Finding.Severity.LOW,
+                title="段落過長不利於 AI 引用",
+                description="頁面有過長的段落，AI 系統較難擷取簡短、可獨立引用的內容片段。",
+                remediation="將過長段落拆成聚焦單一重點的短段落，並適度加入小標題。",
+                evidence=f"long_paragraph_count={len(long_paragraphs)}",
+                selector="p",
+                impact_area="trim",
+                priority_score=28,
+            )
+        )
+    return findings
+
+
+def analyze_site_signals(site_signals: dict) -> list[dict]:
+    """GEO FAST 框架的 Fetchable 維度：站台層級的 llms.txt 與 AI 爬蟲可存取性。"""
+    findings: list[dict] = []
+    if not site_signals.get("llms_txt_found"):
+        findings.append(
+            make_finding(
+                category=Finding.Category.GEO,
+                severity=Finding.Severity.INFO,
+                title="網站未提供 llms.txt",
+                description=(
+                    "llms.txt 可主動告知 AI 系統網站定位與重要頁面；"
+                    "缺少時 AI 需自行推斷網站重點。"
+                ),
+                remediation="在網站根目錄建立 llms.txt，列出網站簡介與重要頁面連結。",
+                evidence="llms_txt_found=false",
+                impact_area="fetchable",
+                priority_score=20,
+            )
+        )
+    blocked = site_signals.get("blocked_ai_crawlers") or []
+    if blocked:
+        findings.append(
+            make_finding(
+                category=Finding.Category.GEO,
+                severity=Finding.Severity.INFO,
+                title="robots.txt 阻擋了主流 AI 爬蟲",
+                description=(
+                    "robots.txt 目前阻擋部分 AI 爬蟲；"
+                    "若你希望內容能被 AI 引用，這會降低曝光，請依自身策略判斷。"
+                ),
+                remediation=(
+                    "若希望被 AI 系統收錄，檢視 robots.txt 對 AI 爬蟲 User-Agent 的規則；"
+                    "若刻意阻擋則可忽略此項。"
+                ),
+                evidence=f"blocked_ai_crawlers={blocked}",
+                impact_area="fetchable",
+                priority_score=18,
+            )
+        )
+    return findings
+
+
+def calculate_scores(findings: list[dict]) -> tuple[int, dict[str, int], list[dict]]:
+    categories = [
+        Finding.Category.SEO,
+        Finding.Category.AEO,
+        Finding.Category.GEO,
+        Finding.Category.SECURITY,
+        Finding.Category.UX,
+    ]
+    severity_penalty = {
+        Finding.Severity.CRITICAL: 35,
+        Finding.Severity.HIGH: 25,
+        Finding.Severity.MEDIUM: 14,
+        Finding.Severity.LOW: 6,
+        Finding.Severity.INFO: 2,
+    }
+    category_scores: dict[str, int] = {}
+    for category in categories:
+        penalty = sum(
+            severity_penalty.get(finding["severity"], 0)
+            for finding in findings
+            if finding["category"] == category
+        )
+        category_scores[category] = max(0, 100 - penalty)
+    overall_score = round(sum(category_scores.values()) / len(category_scores))
+    top_actions = [
+        {
+            "title": finding["title"],
+            "category": finding["category"],
+            "severity": finding["severity"],
+            "priority_score": finding.get("priority_score") or 0,
+        }
+        for finding in sorted(
+            findings,
+            key=lambda item: item.get("priority_score") or 0,
+            reverse=True,
+        )[:5]
+    ]
+    return overall_score, category_scores, top_actions
