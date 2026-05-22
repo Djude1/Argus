@@ -53,6 +53,8 @@ def run_scan_job(self, scan_job_id: int) -> dict:
                 depth=page_data["depth"],
                 blocked_reason=page_data["blocked_reason"],
                 outgoing_links=page_data["outgoing_links"],
+                headers=page_data["headers"],
+                element_boxes=page_data["element_boxes"],
             )
             # 被阻擋的頁面內容是錯誤頁，不進行四維掃描，僅保留紀錄與警告
             if page_data["blocked_reason"]:
@@ -101,7 +103,11 @@ def run_scan_job(self, scan_job_id: int) -> dict:
         }
     except Exception as exc:
         scan_job.status = ScanJob.Status.FAILED
-        scan_job.error_message = exc.__class__.__name__
+        # 只存類別名（"Error"）會讓使用者在 UI 看到「掃描失敗：Error」，無法診斷。
+        # 帶上 str(exc) 截斷至 500 字（避免完整 traceback 灌爆欄位、洩漏內部路徑）。
+        detail = str(exc).strip()[:500]
+        class_name = exc.__class__.__name__
+        scan_job.error_message = f"{class_name}: {detail}" if detail else class_name
         scan_job.completed_at = timezone.now()
         scan_job.save(update_fields=["status", "error_message", "completed_at", "updated_at"])
         raise

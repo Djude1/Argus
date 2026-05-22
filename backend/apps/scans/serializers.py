@@ -2,7 +2,7 @@ from django.conf import settings
 from django.db import transaction
 from rest_framework import serializers
 
-from apps.scans.models import AuthorizationConsent, Finding, Page, ScanJob
+from apps.scans.models import AuthorizationConsent, Finding, Page, ScanJob, UserScanQuota
 from apps.scans.services import get_hostname, get_origin, is_obvious_third_party, normalize_url
 
 
@@ -23,6 +23,14 @@ class ScanJobCreateSerializer(serializers.Serializer):
         if not attrs["authorization_confirmed"]:
             raise serializers.ValidationError(
                 {"authorization_confirmed": "送出掃描前必須確認擁有網站或已取得書面授權。"}
+            )
+
+        # 配額檢查：每使用者每自然月可建立的 ScanJob 數量上限
+        request = self.context["request"]
+        quota, _ = UserScanQuota.objects.get_or_create(user=request.user)
+        if not quota.has_quota_remaining():
+            raise serializers.ValidationError(
+                {"quota": f"本月掃描配額已用完（上限 {quota.monthly_limit} 次）。"}
             )
 
         try:

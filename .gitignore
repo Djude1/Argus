@@ -1,5 +1,8 @@
 .env
 GoogleCloud_ApiKey.json
+client_secret_*.json
+螢幕擷取畫面*.png
+Screenshot*.png
 .venv/
 node_modules/
 __pycache__/

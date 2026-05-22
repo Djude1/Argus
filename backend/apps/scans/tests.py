@@ -1,11 +1,15 @@
+from io import StringIO
+
 from django.contrib.auth import get_user_model
+from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.test import override_settings
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
 from apps.scans.crawler import classify_blocked, compute_min_interval
-from apps.scans.models import AuthorizationConsent, ScanJob
+from apps.scans.models import AuthorizationConsent, Finding, Page, ScanJob, UserScanQuota
 from apps.scans.scanners import (
     PageAnalysisInput,
     analyze_geo_fast,
@@ -328,3 +332,88 @@ class ScanAdminTests(APITestCase):
         response = self.client.get("/admin/scans/authorizationconsent/add/")
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+
+@override_settings(ARGUS_AUTO_QUEUE_SCANS=False)
+class UserScanQuotaTests(APITestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="quota-user",
+            email="quota@example.com",
+            password="safe-test-password",
+        )
+        self.client.force_authenticate(self.user)
+        self.url = reverse("scan-list")
+
+    def test_quota_auto_created_with_default_limit(self):
+        response = self.client.post(
+            self.url,
+            {"url": "https://example.com/", "authorization_confirmed": True},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        quota = UserScanQuota.objects.get(user=self.user)
+        self.assertEqual(quota.monthly_limit, 20)
+
+    def test_quota_blocks_when_exhausted(self):
+        UserScanQuota.objects.create(user=self.user, monthly_limit=1)
+        first = self.client.post(
+            self.url,
+            {"url": "https://example.com/", "authorization_confirmed": True},
+            format="json",
+        )
+        self.assertEqual(first.status_code, status.HTTP_201_CREATED)
+
+        second = self.client.post(
+            self.url,
+            {"url": "https://example.com/foo", "authorization_confirmed": True},
+            format="json",
+        )
+
+        self.assertEqual(second.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("quota", second.data)
+
+    def test_has_quota_remaining_with_no_scans(self):
+        quota = UserScanQuota.objects.create(user=self.user, monthly_limit=5)
+
+        self.assertTrue(quota.has_quota_remaining())
+        self.assertEqual(quota.consumed_this_month(), 0)
+
+
+class RerunScanCommandTests(APITestCase):
+    def test_rerun_scan_regenerates_findings_from_saved_pages(self):
+        user = get_user_model().objects.create_user(
+            username="replayer",
+            email="replay@example.com",
+            password="safe-test-password",
+        )
+        scan_job = ScanJob.objects.create(
+            user=user,
+            original_url="https://example.com/",
+            normalized_url="https://example.com/",
+            origin="https://example.com",
+            status=ScanJob.Status.COMPLETED,
+        )
+        Page.objects.create(
+            scan_job=scan_job,
+            url="https://example.com/",
+            final_url="https://example.com/",
+            origin="https://example.com",
+            status_code=200,
+            title="範例頁",
+            html="<html><body><h1>主標題</h1></body></html>",
+            html_only_text="<html><body><h1>主標題</h1></body></html>",
+            headers={},
+            element_boxes={},
+        )
+
+        out = StringIO()
+        call_command("rerun_scan", scan_job.id, stdout=out)
+
+        self.assertIn("重新掃描", out.getvalue())
+        self.assertGreater(Finding.objects.filter(scan_job=scan_job).count(), 0)
+
+    def test_rerun_scan_raises_on_missing_scan_job(self):
+        with self.assertRaises(CommandError):
+            call_command("rerun_scan", 999999)

@@ -2,6 +2,133 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ========================================
+   全域動畫 keyframes
+   ======================================== */
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes bar-grow {
+  from { width: 0%; }
+}
+
+@keyframes ring-draw {
+  from {
+    stroke-dashoffset: var(--ring-circumference, 264);
+  }
+}
+
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* ========================================
+   App shell：深色 nav + 白底主內容
+   ======================================== */
+
+.argus-app {
+  @apply min-h-screen bg-slate-100;
+}
+
+.argus-main {
+  @apply mx-auto max-w-7xl p-4 md:p-8;
+}
+
+.argus-main.with-nav {
+  @apply pt-6;
+}
+
+/* 深色高科技 nav */
+.argus-nav {
+  background: linear-gradient(135deg, #060b1f 0%, #0a1535 55%, #142455 100%);
+  border-bottom: 1px solid rgba(56, 189, 248, 0.25);
+  box-shadow: 0 8px 24px -10px rgba(8, 47, 73, 0.55);
+}
+
+.argus-nav-inner {
+  @apply mx-auto flex max-w-7xl flex-wrap items-center gap-4 px-4 py-3 md:px-8;
+}
+
+.argus-brand {
+  @apply flex items-center gap-3 text-white;
+}
+
+.argus-brand-glyph {
+  @apply inline-flex h-9 w-9 items-center justify-center rounded-lg text-lg font-bold;
+  background: linear-gradient(135deg, rgba(34, 211, 238, 0.25), rgba(167, 139, 250, 0.25));
+  color: #67e8f9;
+  border: 1px solid rgba(103, 232, 249, 0.5);
+  box-shadow: 0 0 14px rgba(34, 211, 238, 0.45);
+}
+
+.argus-brand-title {
+  @apply block text-lg font-bold tracking-[0.3em];
+  color: #e0f2fe;
+}
+
+.argus-brand-sub {
+  @apply block text-[10px] uppercase tracking-[0.25em];
+  color: rgba(186, 230, 253, 0.6);
+}
+
+.argus-nav-links {
+  @apply ml-auto flex flex-wrap items-center gap-1;
+}
+
+.argus-nav-link {
+  @apply inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition;
+  color: rgba(186, 230, 253, 0.75);
+}
+
+.argus-nav-link:hover {
+  background: rgba(56, 189, 248, 0.1);
+  color: #e0f2fe;
+}
+
+.argus-nav-link.active {
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.18), rgba(167, 139, 250, 0.18));
+  color: #f0f9ff;
+  box-shadow: inset 0 0 0 1px rgba(103, 232, 249, 0.45),
+    0 0 14px rgba(56, 189, 248, 0.25);
+}
+
+/* AccountBar 在深色 nav 內外觀 */
+.argus-nav-inner .account-bar {
+  border-color: rgba(103, 232, 249, 0.35) !important;
+  background: rgba(8, 22, 52, 0.6) !important;
+  color: rgba(186, 230, 253, 0.85);
+}
+
+.argus-nav-inner .account-bar .secondary-button {
+  border-color: rgba(186, 230, 253, 0.3);
+  background: transparent;
+  color: rgba(186, 230, 253, 0.9);
+}
+
+.argus-nav-inner .account-bar .secondary-button:hover {
+  background: rgba(56, 189, 248, 0.12);
+}
+
 @layer components {
   .panel {
     @apply rounded-2xl border border-slate-200 bg-white p-5 shadow-sm;
@@ -37,6 +164,90 @@
 
   .error-text {
     @apply rounded-xl bg-red-50 p-3 text-sm text-red-700;
+  }
+
+  /* 掃描頁 layout：
+     list-mode（/scans）→ sidebar inline 固定 360px
+     detail-mode（/scans/:id）→ sidebar 變 drawer overlay，內容區拿全寬 */
+  .scan-sidebar {
+    @apply space-y-4;
+  }
+
+  .scan-content {
+    min-height: 640px;
+  }
+
+  /* list-mode：兩欄 grid */
+  .scan-layout.list-mode {
+    @apply grid gap-4 lg:grid-cols-[360px_1fr];
+    align-items: start;
+  }
+
+  .scan-layout.list-mode .scan-sidebar {
+    align-self: start;
+    position: sticky;
+    top: 1rem;
+  }
+
+  /* detail-mode：單欄，sidebar 抽離為 drawer */
+  .scan-layout.detail-mode {
+    @apply block;
+  }
+
+  .scan-layout.detail-mode .scan-sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 40;
+    width: 360px;
+    max-width: 88vw;
+    overflow-y: auto;
+    padding: 1rem;
+    background: #f1f5f9;
+    box-shadow: 0 20px 50px -12px rgba(8, 47, 73, 0.5);
+    transform: translateX(-100%);
+    transition: transform 0.26s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .scan-layout.detail-mode.drawer-open .scan-sidebar {
+    transform: translateX(0);
+  }
+
+  .scan-sidebar-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 35;
+    border: 0;
+    background: rgba(8, 15, 35, 0.55);
+    backdrop-filter: blur(2px);
+    animation: fade-in 0.2s ease-out;
+  }
+
+  /* 詳情頁頂部工具列：展開列表 / 回列表 */
+  .scan-content-toolbar {
+    @apply mb-3 flex flex-wrap items-center gap-2;
+  }
+
+  .drawer-toggle {
+    @apply inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-blue-400 hover:bg-blue-50;
+  }
+
+  .back-to-list-button {
+    @apply inline-flex items-center rounded-xl px-3 py-2 text-sm font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-700;
+  }
+
+  /* 整頁紅色高光：站台層級 / 無座標 finding 被選中時的視覺反饋 */
+  .whole-page-highlight {
+    position: absolute;
+    inset: 0;
+    border: 3px solid #ef4444;
+    border-radius: 0.75rem;
+    box-shadow:
+      inset 0 0 0 1px rgba(255, 255, 255, 0.6),
+      inset 0 0 32px rgba(239, 68, 68, 0.3),
+      0 0 16px rgba(239, 68, 68, 0.4);
+    animation: pulse-soft 1.4s ease-in-out infinite;
   }
 
   .scan-card {
@@ -91,6 +302,126 @@
     @apply border-blue-500 bg-blue-50;
   }
 
+  /* 分組顯示：同分類同標題的 finding 折成一個群組卡 */
+  .finding-group {
+    @apply rounded-xl border border-slate-200 bg-white;
+  }
+
+  .finding-group.active {
+    @apply border-blue-400 ring-1 ring-blue-200;
+  }
+
+  .finding-group-header {
+    @apply flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-50;
+  }
+
+  .finding-group-title {
+    @apply flex-1 truncate font-medium text-slate-900;
+  }
+
+  .finding-group-count {
+    @apply min-w-[28px] rounded-full bg-slate-100 px-2 py-0.5 text-center text-xs font-semibold text-slate-600;
+  }
+
+  .finding-group-chevron {
+    @apply text-xs text-slate-400;
+  }
+
+  .finding-group-items {
+    @apply space-y-1 border-t border-slate-100 px-2 py-2;
+  }
+
+  .finding-item {
+    @apply flex w-full flex-col items-start gap-0.5 rounded-lg px-2 py-1.5 text-left hover:bg-slate-50;
+  }
+
+  .finding-item.active {
+    @apply bg-blue-50 text-blue-900;
+  }
+
+  .finding-item-url {
+    @apply w-full truncate text-xs font-mono text-slate-700;
+  }
+
+  .finding-item-evidence {
+    @apply w-full truncate text-[11px] text-slate-400;
+  }
+
+  .category-pill {
+    @apply rounded-md px-1.5 py-0.5 text-[10px] font-semibold tracking-wide;
+  }
+
+  .category-pill.cat-security {
+    @apply bg-red-50 text-red-700;
+  }
+
+  .category-pill.cat-seo {
+    @apply bg-indigo-50 text-indigo-700;
+  }
+
+  .category-pill.cat-aeo {
+    @apply bg-violet-50 text-violet-700;
+  }
+
+  .category-pill.cat-geo {
+    @apply bg-cyan-50 text-cyan-700;
+  }
+
+  .category-pill.cat-ux {
+    @apply bg-emerald-50 text-emerald-700;
+  }
+
+  .screenshot-caption {
+    @apply mb-2 truncate text-xs font-mono text-slate-500;
+  }
+
+  /* 站台層級 finding 在截圖頂部畫紅色 banner */
+  .site-banner-overlay {
+    @apply absolute inset-x-0 top-0 z-10 flex flex-wrap items-center gap-2 rounded-t-xl border-b-2 px-3 py-2 text-sm font-medium;
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.92), rgba(190, 18, 60, 0.92));
+    border-color: rgba(255, 255, 255, 0.4);
+    color: #fff;
+    box-shadow: 0 4px 14px rgba(239, 68, 68, 0.4);
+  }
+
+  .site-banner-overlay .severity,
+  .site-banner-overlay .category-pill {
+    @apply !bg-white/20 !text-white;
+  }
+
+  .site-banner-title {
+    @apply flex-1 truncate;
+  }
+
+  .site-banner-note {
+    @apply text-[11px] opacity-80;
+  }
+
+  /* 頁面 tabs（報告區頂部） */
+  .page-tabs {
+    @apply mb-4 flex flex-wrap gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-1;
+  }
+
+  .page-tab {
+    @apply inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-white;
+  }
+
+  .page-tab.active {
+    @apply bg-white text-slate-900 shadow-sm;
+  }
+
+  .page-tab-label {
+    @apply max-w-[140px] truncate;
+  }
+
+  .page-tab-count {
+    @apply min-w-[22px] rounded-full bg-slate-200 px-1.5 py-0.5 text-center text-[10px] font-bold text-slate-600;
+  }
+
+  .page-tab.active .page-tab-count {
+    @apply bg-blue-100 text-blue-700;
+  }
+
   .severity {
     @apply rounded-full px-2 py-0.5 text-xs font-bold;
   }
@@ -111,5 +442,714 @@
 
   .finding-detail {
     @apply space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700;
+  }
+
+  .account-bar {
+    @apply flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-2 shadow-sm;
+  }
+
+  .status-badge {
+    @apply inline-flex items-center gap-1 rounded-full px-3 py-0.5 text-xs font-semibold;
+  }
+
+  .status-badge.status-slate {
+    @apply bg-slate-100 text-slate-700;
+  }
+
+  .status-badge.status-blue {
+    @apply bg-blue-100 text-blue-700;
+  }
+
+  .status-badge.status-emerald {
+    @apply bg-emerald-100 text-emerald-700;
+  }
+
+  .status-badge.status-red {
+    @apply bg-red-100 text-red-700;
+  }
+
+  /* ========================================
+     Dashboard
+     ======================================== */
+
+  .dashboard-grid {
+    @apply grid gap-4 lg:grid-cols-2;
+  }
+
+  .dashboard-hero {
+    @apply col-span-full flex flex-wrap items-center justify-between gap-6 rounded-2xl p-6 text-white shadow-lg;
+    background: linear-gradient(135deg, #050a1c 0%, #0a1535 60%, #1e1b4b 100%);
+    border: 1px solid rgba(103, 232, 249, 0.25);
+    box-shadow: 0 18px 40px -20px rgba(8, 47, 73, 0.7);
+  }
+
+  .dashboard-hero-title {
+    @apply text-3xl font-bold md:text-4xl;
+    color: #e0f2fe;
+  }
+
+  .dashboard-hero-title span {
+    color: #67e8f9;
+    text-shadow: 0 0 18px rgba(34, 211, 238, 0.6);
+  }
+
+  .dashboard-hero-sub {
+    @apply mt-2 text-sm;
+    color: rgba(186, 230, 253, 0.7);
+  }
+
+  .stat-grid {
+    @apply col-span-full grid grid-cols-2 gap-3 md:grid-cols-4;
+  }
+
+  .stat-tile {
+    @apply rounded-2xl border p-4 text-white;
+    background: linear-gradient(160deg, #0a1535 0%, #111c4a 100%);
+    border-color: rgba(103, 232, 249, 0.2);
+  }
+
+  .stat-tile.tone-cyan {
+    border-color: rgba(34, 211, 238, 0.4);
+    box-shadow: 0 0 18px -6px rgba(34, 211, 238, 0.45);
+  }
+  .stat-tile.tone-violet {
+    border-color: rgba(167, 139, 250, 0.4);
+    box-shadow: 0 0 18px -6px rgba(167, 139, 250, 0.45);
+  }
+  .stat-tile.tone-amber {
+    border-color: rgba(251, 191, 36, 0.4);
+    box-shadow: 0 0 18px -6px rgba(251, 191, 36, 0.4);
+  }
+  .stat-tile.tone-rose {
+    border-color: rgba(251, 113, 133, 0.45);
+    box-shadow: 0 0 18px -6px rgba(251, 113, 133, 0.5);
+  }
+
+  .stat-tile-label {
+    @apply text-xs uppercase tracking-[0.18em];
+    color: rgba(186, 230, 253, 0.65);
+  }
+
+  .stat-tile-value {
+    @apply mt-1 text-3xl font-bold;
+    color: #f0f9ff;
+  }
+
+  .stat-tile-hint {
+    @apply mt-1 text-xs;
+    color: rgba(186, 230, 253, 0.55);
+  }
+
+  .dashboard-panel {
+    @apply col-span-full;
+  }
+
+  .dashboard-panel-header {
+    @apply mb-3 flex items-center justify-between;
+  }
+
+  .dashboard-panel-header h3 {
+    @apply text-base font-bold text-slate-900;
+  }
+
+  /* Score ring */
+  .score-ring {
+    @apply relative inline-flex items-center justify-center;
+  }
+
+  .score-ring .ring-track {
+    stroke: rgba(148, 163, 184, 0.25);
+  }
+
+  .score-ring .ring-progress {
+    transition: stroke-dashoffset 0.6s ease;
+  }
+
+  .score-ring.tone-good .ring-progress {
+    stroke: #34d399;
+    filter: drop-shadow(0 0 6px rgba(52, 211, 153, 0.55));
+  }
+  .score-ring.tone-medium .ring-progress {
+    stroke: #fbbf24;
+    filter: drop-shadow(0 0 6px rgba(251, 191, 36, 0.55));
+  }
+  .score-ring.tone-bad .ring-progress {
+    stroke: #f87171;
+    filter: drop-shadow(0 0 6px rgba(248, 113, 113, 0.55));
+  }
+
+  .score-ring-text {
+    @apply absolute inset-0 flex flex-col items-center justify-center text-center;
+  }
+
+  .score-ring-value {
+    @apply text-2xl font-bold;
+    color: #e0f2fe;
+  }
+
+  .score-ring-label {
+    @apply text-[10px] uppercase tracking-[0.2em];
+    color: rgba(186, 230, 253, 0.55);
+  }
+
+  /* 白底面板內的 score ring 文字用深色 */
+  .panel .score-ring-value {
+    @apply text-slate-900;
+  }
+
+  .panel .score-ring-label {
+    color: rgba(71, 85, 105, 0.7);
+  }
+
+  .category-rings {
+    @apply mt-2 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-5;
+  }
+
+  .category-ring-item {
+    @apply flex flex-col items-center gap-2;
+  }
+
+  .recent-list {
+    @apply space-y-2;
+  }
+
+  .recent-row {
+    @apply flex w-full items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-left text-sm hover:border-blue-300;
+  }
+
+  .recent-origin {
+    @apply flex-1 truncate font-mono text-slate-700;
+  }
+
+  /* ========================================
+     History 頁
+     ======================================== */
+
+  .history-grid {
+    @apply mt-3 grid gap-3 md:grid-cols-2;
+  }
+
+  .history-card {
+    @apply rounded-2xl border border-slate-200 bg-white p-4 shadow-sm;
+  }
+
+  .history-card-head {
+    @apply flex items-center justify-between gap-2;
+  }
+
+  .history-origin {
+    @apply truncate font-mono text-sm font-semibold text-slate-800;
+  }
+
+  .history-card-mid {
+    @apply mt-2 flex flex-wrap items-center gap-3;
+  }
+
+  .history-delta {
+    @apply rounded-full px-2 py-0.5 text-xs font-bold;
+  }
+
+  .history-delta.tone-good {
+    @apply bg-emerald-100 text-emerald-700;
+  }
+  .history-delta.tone-bad {
+    @apply bg-red-100 text-red-700;
+  }
+  .history-delta.tone-neutral {
+    @apply bg-slate-100 text-slate-500;
+  }
+
+  .sparkline polyline {
+    stroke: #38bdf8;
+    filter: drop-shadow(0 0 3px rgba(56, 189, 248, 0.45));
+  }
+
+  .history-list {
+    @apply mt-3 space-y-1;
+  }
+
+  .history-row {
+    @apply flex w-full items-center justify-between gap-3 rounded-lg px-2 py-1 text-left hover:bg-slate-50;
+  }
+
+  /* ========================================
+     Audit 頁
+     ======================================== */
+
+  .timeline {
+    @apply mt-3 space-y-3 border-l-2 border-slate-200 pl-5;
+  }
+
+  .timeline-item {
+    @apply relative;
+  }
+
+  .timeline-marker {
+    @apply absolute -left-[34px] flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-slate-100 text-sm shadow;
+  }
+  .timeline-marker.tone-blue {
+    @apply bg-blue-100 text-blue-700;
+  }
+  .timeline-marker.tone-emerald {
+    @apply bg-emerald-100 text-emerald-700;
+  }
+  .timeline-marker.tone-red {
+    @apply bg-red-100 text-red-700;
+  }
+
+  .timeline-body {
+    @apply rounded-xl border border-slate-200 bg-white p-3;
+  }
+
+  .timeline-row {
+    @apply flex flex-wrap items-center justify-between gap-2;
+  }
+
+  .timeline-label {
+    @apply text-xs font-bold uppercase tracking-[0.18em] text-slate-700;
+  }
+
+  .timeline-time {
+    @apply text-xs text-slate-400;
+  }
+
+  .timeline-message {
+    @apply mt-1 text-sm text-slate-700;
+  }
+
+  .link-button {
+    @apply mt-1 text-xs font-semibold text-blue-600 hover:underline;
+  }
+
+  /* ========================================
+     Categories 頁
+     ======================================== */
+
+  .category-tabs {
+    @apply mb-4 flex flex-wrap gap-2;
+  }
+
+  .category-tab {
+    @apply inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-blue-300;
+  }
+
+  .category-tab.active {
+    @apply border-blue-500 bg-blue-50 text-blue-900;
+  }
+
+  .category-tab.cat-security.active {
+    @apply border-red-500 bg-red-50 text-red-900;
+  }
+  .category-tab.cat-seo.active {
+    @apply border-indigo-500 bg-indigo-50 text-indigo-900;
+  }
+  .category-tab.cat-aeo.active {
+    @apply border-violet-500 bg-violet-50 text-violet-900;
+  }
+  .category-tab.cat-geo.active {
+    @apply border-cyan-500 bg-cyan-50 text-cyan-900;
+  }
+  .category-tab.cat-ux.active {
+    @apply border-emerald-500 bg-emerald-50 text-emerald-900;
+  }
+
+  .category-tab-label {
+    @apply font-semibold;
+  }
+
+  .category-tab-count {
+    @apply min-w-[28px] rounded-full bg-slate-100 px-2 py-0.5 text-center text-xs font-bold text-slate-600;
+  }
+
+  .category-issue-list {
+    @apply space-y-2;
+  }
+
+  .category-issue-row {
+    @apply flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3;
+  }
+
+  .category-issue-title {
+    @apply flex-1 truncate text-sm font-medium text-slate-800;
+  }
+
+  .category-issue-count {
+    @apply rounded-full bg-slate-100 px-3 py-0.5 text-sm font-bold text-slate-700;
+  }
+
+  /* ========================================
+     Settings 頁
+     ======================================== */
+
+  .settings-grid {
+    @apply grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4;
+  }
+
+  .settings-card {
+    @apply rounded-2xl border border-slate-200 bg-slate-50 p-4;
+  }
+
+  .settings-card-label {
+    @apply text-xs uppercase tracking-[0.18em] text-slate-500;
+  }
+
+  .settings-card-value {
+    @apply mt-1 text-2xl font-bold text-slate-900;
+  }
+
+  .settings-card-hint {
+    @apply mt-1 text-xs text-slate-500;
+  }
+
+  .settings-about {
+    @apply space-y-2 rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700;
+  }
+
+  /* ========================================
+     視覺化元件：StackedBar / BarChart / LineChart
+     ======================================== */
+
+  .stacked-bar-wrap {
+    @apply space-y-3;
+  }
+
+  .stacked-bar {
+    @apply flex overflow-hidden rounded-full;
+    background: rgba(148, 163, 184, 0.18);
+  }
+
+  .stacked-bar.empty {
+    background: repeating-linear-gradient(
+      45deg,
+      rgba(148, 163, 184, 0.12),
+      rgba(148, 163, 184, 0.12) 8px,
+      rgba(148, 163, 184, 0.2) 8px,
+      rgba(148, 163, 184, 0.2) 16px
+    );
+  }
+
+  .stacked-bar-seg {
+    transition: width 0.6s ease-out;
+    animation: bar-grow 0.6s ease-out;
+  }
+
+  .stacked-bar-seg:hover {
+    filter: brightness(1.15);
+  }
+
+  .stacked-bar-legend {
+    @apply flex flex-wrap gap-x-4 gap-y-1;
+  }
+
+  .stacked-bar-legend-item {
+    @apply inline-flex items-center gap-2 text-xs;
+  }
+
+  .stacked-bar-swatch {
+    @apply inline-block h-3 w-3 rounded-sm;
+  }
+
+  .stacked-bar-legend-label {
+    @apply font-medium text-slate-700;
+  }
+
+  .stacked-bar-legend-value {
+    @apply font-bold tabular-nums text-slate-500;
+  }
+
+  /* BarChart */
+  .bar-chart {
+    @apply space-y-2;
+  }
+
+  .bar-chart-header {
+    @apply flex items-center justify-between;
+  }
+
+  .bar-chart-header h4,
+  .bar-chart-header-h4 {
+    @apply text-sm font-semibold text-slate-700;
+  }
+
+  .bar-chart-total {
+    @apply text-xs font-bold tabular-nums text-slate-500;
+  }
+
+  .bar-chart-rows {
+    @apply space-y-1.5;
+  }
+
+  .bar-chart-row {
+    @apply flex items-center gap-3;
+  }
+
+  .bar-chart-label {
+    @apply min-w-[40px] text-center;
+  }
+
+  .bar-chart-track {
+    @apply relative h-3 flex-1 overflow-hidden rounded-full;
+    background: rgba(148, 163, 184, 0.18);
+  }
+
+  .bar-chart-fill {
+    @apply h-full rounded-full;
+    transition: width 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+    animation: bar-grow 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .bar-chart-count {
+    @apply min-w-[36px] text-right text-sm font-bold tabular-nums text-slate-700;
+  }
+
+  /* LineChart */
+  .line-chart {
+    @apply block;
+  }
+
+  .line-chart-empty {
+    @apply text-xs text-slate-400;
+  }
+
+  .line-chart-grid {
+    stroke: rgba(148, 163, 184, 0.2);
+    stroke-dasharray: 2 3;
+  }
+
+  .line-chart-axis-label {
+    @apply text-[10px];
+    fill: rgba(100, 116, 139, 0.7);
+  }
+
+  .line-chart-line {
+    stroke: #38bdf8;
+    stroke-width: 2;
+    filter: drop-shadow(0 0 3px rgba(56, 189, 248, 0.45));
+    stroke-dasharray: 1000;
+    stroke-dashoffset: 0;
+    animation: fade-in 0.7s ease-out;
+  }
+
+  .line-chart-dot {
+    fill: #0ea5e9;
+    stroke: #fff;
+    stroke-width: 1.5;
+    filter: drop-shadow(0 0 4px rgba(56, 189, 248, 0.55));
+    transition: r 0.2s;
+  }
+
+  .line-chart-dot:hover {
+    r: 5;
+  }
+
+  .line-chart-value {
+    @apply text-[10px] font-bold;
+    fill: #0c4a6e;
+  }
+
+  /* ========================================
+     報告區 viz block
+     ======================================== */
+
+  .report-viz {
+    @apply mb-4 grid gap-4 md:grid-cols-2;
+  }
+
+  .report-viz-block {
+    @apply rounded-2xl border border-slate-200 bg-slate-50 p-4;
+  }
+
+  /* Top Actions 改為可點按鈕 */
+  .top-actions-box {
+    @apply rounded-2xl bg-gradient-to-br from-slate-50 to-blue-50/60 p-4;
+  }
+
+  .top-actions-title {
+    @apply mb-2 text-sm font-bold text-slate-800;
+  }
+
+  .top-action-row {
+    @apply mt-1.5 flex w-full items-center gap-2 rounded-xl border border-transparent bg-white/70 px-2 py-1.5 text-left text-xs transition hover:border-blue-300 hover:bg-white;
+  }
+
+  .top-action-title {
+    @apply flex-1 truncate font-medium text-slate-700;
+  }
+
+  /* ========================================
+     掃描列表 sidebar 強化
+     ======================================== */
+
+  .scan-card {
+    @apply relative overflow-hidden;
+  }
+
+  .scan-card-stripe {
+    @apply absolute inset-y-0 left-0 w-1;
+    background: rgba(148, 163, 184, 0.4);
+  }
+
+  .scan-card-stripe.tone-good {
+    background: linear-gradient(180deg, #34d399, #10b981);
+    box-shadow: 0 0 8px rgba(52, 211, 153, 0.5);
+  }
+  .scan-card-stripe.tone-medium {
+    background: linear-gradient(180deg, #fbbf24, #f59e0b);
+    box-shadow: 0 0 8px rgba(251, 191, 36, 0.5);
+  }
+  .scan-card-stripe.tone-bad {
+    background: linear-gradient(180deg, #fb7185, #ef4444);
+    box-shadow: 0 0 8px rgba(251, 113, 133, 0.5);
+  }
+
+  .scan-card-body {
+    @apply flex-1 space-y-1 pl-2;
+  }
+
+  .scan-card-origin {
+    @apply truncate font-mono text-sm font-semibold text-slate-900;
+  }
+
+  .scan-card-meta {
+    @apply flex items-center gap-2;
+  }
+
+  .scan-card-delta {
+    @apply rounded-full px-1.5 py-0.5 text-[10px] font-bold;
+  }
+
+  .scan-card-delta.tone-good {
+    @apply bg-emerald-100 text-emerald-700;
+  }
+
+  .scan-card-delta.tone-bad {
+    @apply bg-red-100 text-red-700;
+  }
+
+  /* ========================================
+     Settings 配額 panel
+     ======================================== */
+
+  .quota-panel {
+    @apply rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-5;
+  }
+
+  .quota-panel-head {
+    @apply flex items-end justify-between gap-3;
+  }
+
+  .quota-label {
+    @apply text-xs uppercase tracking-[0.18em] text-slate-500;
+  }
+
+  .quota-value {
+    @apply mt-1 flex items-baseline gap-1;
+  }
+
+  .quota-used {
+    @apply text-4xl font-bold tabular-nums text-slate-900;
+  }
+
+  .quota-divider {
+    @apply text-2xl text-slate-400;
+  }
+
+  .quota-limit {
+    @apply text-2xl font-bold tabular-nums text-slate-500;
+  }
+
+  .quota-unit {
+    @apply ml-1 text-sm text-slate-500;
+  }
+
+  .quota-tone-badge {
+    @apply rounded-full px-3 py-1 text-sm font-bold tabular-nums;
+  }
+
+  .quota-tone-badge.tone-good {
+    @apply bg-emerald-100 text-emerald-700;
+  }
+  .quota-tone-badge.tone-medium {
+    @apply bg-amber-100 text-amber-700;
+  }
+  .quota-tone-badge.tone-bad {
+    @apply bg-red-100 text-red-700;
+  }
+
+  .quota-progress {
+    @apply mt-3 h-3 overflow-hidden rounded-full bg-slate-200;
+  }
+
+  .quota-progress-fill {
+    @apply h-full rounded-full;
+    transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+    animation: bar-grow 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .quota-progress-fill.tone-good {
+    background: linear-gradient(90deg, #34d399, #10b981);
+    box-shadow: 0 0 8px rgba(52, 211, 153, 0.5);
+  }
+  .quota-progress-fill.tone-medium {
+    background: linear-gradient(90deg, #fbbf24, #f59e0b);
+    box-shadow: 0 0 8px rgba(251, 191, 36, 0.5);
+  }
+  .quota-progress-fill.tone-bad {
+    background: linear-gradient(90deg, #fb7185, #ef4444);
+    box-shadow: 0 0 8px rgba(251, 113, 133, 0.5);
+  }
+
+  .stat-card-glow {
+    @apply transition;
+  }
+
+  .stat-card-glow:hover {
+    @apply -translate-y-0.5 border-blue-300 shadow-md;
+  }
+
+  /* ========================================
+     History 圖表容器
+     ======================================== */
+
+  .history-chart {
+    @apply mt-3 rounded-xl border border-slate-200 bg-slate-50 p-2;
+  }
+
+  /* ========================================
+     全域 hover 微互動
+     ======================================== */
+
+  .stat-tile {
+    transition: transform 0.2s, box-shadow 0.2s;
+    animation: fade-up 0.4s ease-out;
+  }
+
+  .stat-tile:hover {
+    transform: translateY(-2px);
+  }
+
+  .history-card,
+  .recent-row,
+  .timeline-body,
+  .finding-group {
+    transition: transform 0.18s, box-shadow 0.18s, border-color 0.18s;
+  }
+
+  .history-card:hover {
+    @apply -translate-y-0.5 shadow-md;
+  }
+
+  .scan-card {
+    transition: transform 0.18s, box-shadow 0.18s, border-color 0.18s;
+  }
+
+  .scan-card:hover {
+    @apply -translate-y-0.5 shadow-md;
+  }
+
+  .panel,
+  .dashboard-hero,
+  .stat-tile {
+    animation: fade-up 0.4s ease-out;
   }
 }

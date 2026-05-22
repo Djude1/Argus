@@ -1,7 +1,9 @@
 from django.urls import path
 
-from apps.accounts.views import RegisterView
+from apps.accounts.views import DevLoginView, GoogleLoginView
 
 urlpatterns = [
-    path("register/", RegisterView.as_view(), name="register"),
+    path("google/", GoogleLoginView.as_view(), name="google-login"),
+    # DEV LOGIN BACKDOOR — REMOVE WHEN GOOGLE OAUTH IS FULLY WORKING
+    path("dev-login/", DevLoginView.as_view(), name="dev-login"),
 ]

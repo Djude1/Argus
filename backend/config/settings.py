@@ -67,7 +67,8 @@ ROOT_URLCONF = "config.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        # 把 Vite build 出的 index.html 視為 Django 可渲染的模板，讓 runserver 一個命令就能服務 SPA
+        "DIRS": [PROJECT_ROOT / "frontend" / "dist"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -143,3 +144,7 @@ ARGUS_ACTIVE_MAX_RPS = 2
 ARGUS_PASSIVE_MAX_RPS = 5
 ARGUS_SCANNER_USER_AGENT = "SiteSense-AI-Scanner/1.0 (authorized-audit)"
 ARGUS_AUTO_QUEUE_SCANS = env_bool("ARGUS_AUTO_QUEUE_SCANS", default=not DEBUG)
+
+# Google OAuth Client ID（從 Google Cloud Console > Credentials 取得）
+# 一般使用者透過 Google 帳號登入時用於驗證 ID Token；空字串代表未啟用
+GOOGLE_OAUTH_CLIENT_ID = os.getenv("GOOGLE_OAUTH_CLIENT_ID", "")
