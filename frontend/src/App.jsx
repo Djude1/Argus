@@ -690,7 +690,7 @@ function ScanList({ scans, onRefresh }) {
             </button>
           );
         })}
-        {!scans.length && <p className="text-sm text-slate-500">尚無掃描任務。</p>}
+        {!scans.length && <p className="hint-text">尚無掃描任務。</p>}
       </div>
     </section>
   );
@@ -774,7 +774,7 @@ function FindingsGroupList({
 
   if (!groups.length) {
     return (
-      <p className="text-sm text-slate-500">
+      <p className="hint-text">
         {totalFindings
           ? "沒有符合篩選條件的項目。"
           : isInProgress(scanStatus)
@@ -918,7 +918,7 @@ function ScreenshotCanvas({ scan, targetPage, findings, selectedFinding }) {
         </p>
       )}
       {!imageUrl && (
-        <p className="text-sm text-slate-500">
+        <p className="hint-text">
           {isInProgress(scan?.status)
             ? "正在爬取頁面...截圖完成後會顯示在此。"
             : targetPage
@@ -1409,7 +1409,7 @@ function LoginPage() {
 function ScansPlaceholder() {
   return (
     <section className="panel">
-      <p className="text-sm text-slate-500">請從左側選擇一個掃描任務查看互動報告。</p>
+      <p className="hint-text">請從左側選擇一個掃描任務查看互動報告。</p>
     </section>
   );
 }
@@ -1474,7 +1474,7 @@ function ScanDetailPage() {
   }
   return (
     <section className="panel">
-      <p className="text-sm text-slate-500">載入掃描資料中...</p>
+      <p className="hint-text">載入掃描資料中...</p>
     </section>
   );
 }
@@ -1620,7 +1620,7 @@ function DashboardPage() {
   if (!data) {
     return (
       <section className="panel">
-        <p className="text-sm text-slate-500">載入 Dashboard 中...</p>
+        <p className="hint-text">載入 Dashboard 中...</p>
       </section>
     );
   }
@@ -1684,7 +1684,7 @@ function DashboardPage() {
       <div className="panel dashboard-panel">
         <div className="dashboard-panel-header">
           <h3>Findings 嚴重度分佈</h3>
-          <span className="text-xs text-slate-400">跨所有掃描</span>
+          <span className="hint-text-sm">跨所有掃描</span>
         </div>
         <SeverityBarChart
           severityTotals={data.severity_totals}
@@ -1695,7 +1695,7 @@ function DashboardPage() {
       <div className="panel dashboard-panel">
         <div className="dashboard-panel-header">
           <h3>各類別 finding 佔比</h3>
-          <span className="text-xs text-slate-400">哪一類問題最多</span>
+          <span className="hint-text-sm">哪一類問題最多</span>
         </div>
         <StackedBar
           data={Object.keys(CATEGORY_LABELS).map((cat) => ({
@@ -1709,7 +1709,7 @@ function DashboardPage() {
       <div className="panel dashboard-panel">
         <div className="dashboard-panel-header">
           <h3>各類別平均</h3>
-          <span className="text-xs text-slate-400">基於完成的掃描</span>
+          <span className="hint-text-sm">基於完成的掃描</span>
         </div>
         <div className="category-rings">
           {Object.keys(CATEGORY_LABELS).map((cat) => (
@@ -1799,13 +1799,13 @@ function HistoryPage() {
   }, []);
 
   if (error) return <section className="panel"><p className="error-text">{error}</p></section>;
-  if (!data) return <section className="panel"><p className="text-sm text-slate-500">載入中...</p></section>;
+  if (!data) return <section className="panel"><p className="hint-text">載入中...</p></section>;
 
   return (
     <section className="panel">
       <div className="dashboard-panel-header">
         <h3>同網址分數歷史</h3>
-        <span className="text-xs text-slate-400">每個 origin 的歷次健檢</span>
+        <span className="hint-text-sm">每個 origin 的歷次健檢</span>
       </div>
       {data.origins.length === 0 && (
         <p className="mt-3 text-sm text-slate-500">尚無紀錄。</p>
@@ -1841,7 +1841,7 @@ function HistoryPage() {
             <div key={origin.origin} className="history-card">
               <div className="history-card-head">
                 <span className="history-origin">{origin.origin}</span>
-                <span className="text-xs text-slate-400">{origin.total_scans} 次</span>
+                <span className="hint-text-sm">{origin.total_scans} 次</span>
               </div>
               <div className="history-card-mid">
                 <ScoreBadge score={origin.latest_score} />
@@ -1907,13 +1907,13 @@ function AuditPage() {
   }, []);
 
   if (error) return <section className="panel"><p className="error-text">{error}</p></section>;
-  if (!data) return <section className="panel"><p className="text-sm text-slate-500">載入中...</p></section>;
+  if (!data) return <section className="panel"><p className="hint-text">載入中...</p></section>;
 
   return (
     <section className="panel">
       <div className="dashboard-panel-header">
         <h3>活動紀錄</h3>
-        <span className="text-xs text-slate-400">{data.events.length} 筆事件</span>
+        <span className="hint-text-sm">{data.events.length} 筆事件</span>
       </div>
       {data.events.length === 0 && (
         <p className="mt-3 text-sm text-slate-500">尚無活動。</p>
@@ -1971,7 +1971,7 @@ function CategoriesPage() {
   }, []);
 
   if (error) return <section className="panel"><p className="error-text">{error}</p></section>;
-  if (!data) return <section className="panel"><p className="text-sm text-slate-500">載入中...</p></section>;
+  if (!data) return <section className="panel"><p className="hint-text">載入中...</p></section>;
 
   const categories = Object.keys(CATEGORY_LABELS);
   const current = data.categories[active] || { total_findings: 0, items: [] };
@@ -1980,7 +1980,7 @@ function CategoriesPage() {
     <section className="panel">
       <div className="dashboard-panel-header">
         <h3>跨掃描分類彙總</h3>
-        <span className="text-xs text-slate-400">同類問題重複出現的次數</span>
+        <span className="hint-text-sm">同類問題重複出現的次數</span>
       </div>
       <div className="category-tabs">
         {categories.map((cat) => {
@@ -2000,7 +2000,7 @@ function CategoriesPage() {
       </div>
       <ul className="category-issue-list">
         {current.items.length === 0 && (
-          <li className="text-sm text-slate-500">此分類目前沒有 finding。</li>
+          <li className="hint-text">此分類目前沒有 finding。</li>
         )}
         {current.items.map((item) => (
           <li key={`${active}-${item.title}`} className="category-issue-row">

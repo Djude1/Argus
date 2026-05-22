@@ -43,6 +43,48 @@
 }
 
 /* ========================================
+   全域設計 token（:root）
+   色彩 / 圓角 / 陰影集中於此，要換主題色改這裡即可。
+   半透明 glow / border 效果沿用原 rgba，視覺隨主色走。
+   ======================================== */
+
+:root {
+  /* 深藍背景階（高科技主題）*/
+  --argus-navy-950: #050a1c;
+  --argus-navy-900: #060b1f;
+  --argus-navy-800: #0a1535;
+  --argus-navy-700: #111c4a;
+  --argus-navy-600: #142455;
+  --argus-indigo-900: #1e1b4b;
+
+  /* 強調色與深色介面文字 */
+  --argus-cyan: #38bdf8;
+  --argus-cyan-glow: #67e8f9;
+  --argus-cyan-dot: #0ea5e9;
+  --argus-cyan-deep: #0c4a6e;
+  --argus-text-bright: #e0f2fe;
+  --argus-text-white: #f0f9ff;
+
+  /* tone：good / medium / bad（分數、配額、色帶共用）*/
+  --tone-good: #10b981;
+  --tone-good-bright: #34d399;
+  --tone-medium: #f59e0b;
+  --tone-medium-bright: #fbbf24;
+  --tone-bad: #ef4444;
+  --tone-bad-bright: #fb7185;
+  --tone-bad-soft: #f87171;
+
+  /* 圓角 */
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
+
+  /* 陰影 */
+  --shadow-card: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-pop: 0 10px 25px -12px rgb(8 47 73 / 0.5);
+}
+
+/* ========================================
    App shell：深色 nav + 白底主內容
    ======================================== */
 
@@ -60,7 +102,7 @@
 
 /* 深色高科技 nav */
 .argus-nav {
-  background: linear-gradient(135deg, #060b1f 0%, #0a1535 55%, #142455 100%);
+  background: linear-gradient(135deg, var(--argus-navy-900) 0%, var(--argus-navy-800) 55%, var(--argus-navy-600) 100%);
   border-bottom: 1px solid rgba(56, 189, 248, 0.25);
   box-shadow: 0 8px 24px -10px rgba(8, 47, 73, 0.55);
 }
@@ -76,14 +118,14 @@
 .argus-brand-glyph {
   @apply inline-flex h-9 w-9 items-center justify-center rounded-lg text-lg font-bold;
   background: linear-gradient(135deg, rgba(34, 211, 238, 0.25), rgba(167, 139, 250, 0.25));
-  color: #67e8f9;
+  color: var(--argus-cyan-glow);
   border: 1px solid rgba(103, 232, 249, 0.5);
   box-shadow: 0 0 14px rgba(34, 211, 238, 0.45);
 }
 
 .argus-brand-title {
   @apply block text-lg font-bold tracking-[0.3em];
-  color: #e0f2fe;
+  color: var(--argus-text-bright);
 }
 
 .argus-brand-sub {
@@ -102,12 +144,12 @@
 
 .argus-nav-link:hover {
   background: rgba(56, 189, 248, 0.1);
-  color: #e0f2fe;
+  color: var(--argus-text-bright);
 }
 
 .argus-nav-link.active {
   background: linear-gradient(135deg, rgba(56, 189, 248, 0.18), rgba(167, 139, 250, 0.18));
-  color: #f0f9ff;
+  color: var(--argus-text-white);
   box-shadow: inset 0 0 0 1px rgba(103, 232, 249, 0.45),
     0 0 14px rgba(56, 189, 248, 0.25);
 }
@@ -164,6 +206,15 @@
 
   .error-text {
     @apply rounded-xl bg-red-50 p-3 text-sm text-red-700;
+  }
+
+  /* 次要說明文字（重複的 utility 組合抽成全域語意 class）*/
+  .hint-text {
+    @apply text-sm text-slate-500;
+  }
+
+  .hint-text-sm {
+    @apply text-xs text-slate-400;
   }
 
   /* 掃描頁 layout：
@@ -241,7 +292,7 @@
   .whole-page-highlight {
     position: absolute;
     inset: 0;
-    border: 3px solid #ef4444;
+    border: 3px solid var(--tone-bad);
     border-radius: 0.75rem;
     box-shadow:
       inset 0 0 0 1px rgba(255, 255, 255, 0.6),
@@ -478,18 +529,18 @@
 
   .dashboard-hero {
     @apply col-span-full flex flex-wrap items-center justify-between gap-6 rounded-2xl p-6 text-white shadow-lg;
-    background: linear-gradient(135deg, #050a1c 0%, #0a1535 60%, #1e1b4b 100%);
+    background: linear-gradient(135deg, var(--argus-navy-950) 0%, var(--argus-navy-800) 60%, var(--argus-indigo-900) 100%);
     border: 1px solid rgba(103, 232, 249, 0.25);
     box-shadow: 0 18px 40px -20px rgba(8, 47, 73, 0.7);
   }
 
   .dashboard-hero-title {
     @apply text-3xl font-bold md:text-4xl;
-    color: #e0f2fe;
+    color: var(--argus-text-bright);
   }
 
   .dashboard-hero-title span {
-    color: #67e8f9;
+    color: var(--argus-cyan-glow);
     text-shadow: 0 0 18px rgba(34, 211, 238, 0.6);
   }
 
@@ -504,7 +555,7 @@
 
   .stat-tile {
     @apply rounded-2xl border p-4 text-white;
-    background: linear-gradient(160deg, #0a1535 0%, #111c4a 100%);
+    background: linear-gradient(160deg, var(--argus-navy-800) 0%, var(--argus-navy-700) 100%);
     border-color: rgba(103, 232, 249, 0.2);
   }
 
@@ -532,7 +583,7 @@
 
   .stat-tile-value {
     @apply mt-1 text-3xl font-bold;
-    color: #f0f9ff;
+    color: var(--argus-text-white);
   }
 
   .stat-tile-hint {
@@ -566,15 +617,15 @@
   }
 
   .score-ring.tone-good .ring-progress {
-    stroke: #34d399;
+    stroke: var(--tone-good-bright);
     filter: drop-shadow(0 0 6px rgba(52, 211, 153, 0.55));
   }
   .score-ring.tone-medium .ring-progress {
-    stroke: #fbbf24;
+    stroke: var(--tone-medium-bright);
     filter: drop-shadow(0 0 6px rgba(251, 191, 36, 0.55));
   }
   .score-ring.tone-bad .ring-progress {
-    stroke: #f87171;
+    stroke: var(--tone-bad-soft);
     filter: drop-shadow(0 0 6px rgba(248, 113, 113, 0.55));
   }
 
@@ -584,7 +635,7 @@
 
   .score-ring-value {
     @apply text-2xl font-bold;
-    color: #e0f2fe;
+    color: var(--argus-text-bright);
   }
 
   .score-ring-label {
@@ -660,7 +711,7 @@
   }
 
   .sparkline polyline {
-    stroke: #38bdf8;
+    stroke: var(--argus-cyan);
     filter: drop-shadow(0 0 3px rgba(56, 189, 248, 0.45));
   }
 
@@ -922,7 +973,7 @@
   }
 
   .line-chart-line {
-    stroke: #38bdf8;
+    stroke: var(--argus-cyan);
     stroke-width: 2;
     filter: drop-shadow(0 0 3px rgba(56, 189, 248, 0.45));
     stroke-dasharray: 1000;
@@ -931,7 +982,7 @@
   }
 
   .line-chart-dot {
-    fill: #0ea5e9;
+    fill: var(--argus-cyan-dot);
     stroke: #fff;
     stroke-width: 1.5;
     filter: drop-shadow(0 0 4px rgba(56, 189, 248, 0.55));
@@ -944,7 +995,7 @@
 
   .line-chart-value {
     @apply text-[10px] font-bold;
-    fill: #0c4a6e;
+    fill: var(--argus-cyan-deep);
   }
 
   /* ========================================
@@ -990,15 +1041,15 @@
   }
 
   .scan-card-stripe.tone-good {
-    background: linear-gradient(180deg, #34d399, #10b981);
+    background: linear-gradient(180deg, var(--tone-good-bright), var(--tone-good));
     box-shadow: 0 0 8px rgba(52, 211, 153, 0.5);
   }
   .scan-card-stripe.tone-medium {
-    background: linear-gradient(180deg, #fbbf24, #f59e0b);
+    background: linear-gradient(180deg, var(--tone-medium-bright), var(--tone-medium));
     box-shadow: 0 0 8px rgba(251, 191, 36, 0.5);
   }
   .scan-card-stripe.tone-bad {
-    background: linear-gradient(180deg, #fb7185, #ef4444);
+    background: linear-gradient(180deg, var(--tone-bad-bright), var(--tone-bad));
     box-shadow: 0 0 8px rgba(251, 113, 133, 0.5);
   }
 
@@ -1087,15 +1138,15 @@
   }
 
   .quota-progress-fill.tone-good {
-    background: linear-gradient(90deg, #34d399, #10b981);
+    background: linear-gradient(90deg, var(--tone-good-bright), var(--tone-good));
     box-shadow: 0 0 8px rgba(52, 211, 153, 0.5);
   }
   .quota-progress-fill.tone-medium {
-    background: linear-gradient(90deg, #fbbf24, #f59e0b);
+    background: linear-gradient(90deg, var(--tone-medium-bright), var(--tone-medium));
     box-shadow: 0 0 8px rgba(251, 191, 36, 0.5);
   }
   .quota-progress-fill.tone-bad {
-    background: linear-gradient(90deg, #fb7185, #ef4444);
+    background: linear-gradient(90deg, var(--tone-bad-bright), var(--tone-bad));
     box-shadow: 0 0 8px rgba(251, 113, 133, 0.5);
   }
 
