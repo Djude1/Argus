@@ -338,7 +338,7 @@
   }
 
   .highlight-box {
-    @apply absolute border-2 border-amber-400 bg-amber-300/20 opacity-60;
+    @apply pointer-events-auto absolute cursor-pointer border-2 border-amber-400 bg-amber-300/20 opacity-60 transition-all hover:border-amber-500 hover:bg-amber-300/40 hover:opacity-100;
   }
 
   .highlight-box.active {
@@ -424,6 +424,18 @@
 
   .screenshot-caption {
     @apply mb-2 truncate text-xs font-mono text-slate-500;
+  }
+
+  .screenshot-caption-row {
+    @apply mb-2 flex items-center justify-between gap-3;
+  }
+
+  .screenshot-caption-row .screenshot-caption {
+    @apply mb-0 flex-1;
+  }
+
+  .screenshot-open-link {
+    @apply whitespace-nowrap rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-blue-700 transition-colors hover:border-blue-400 hover:bg-blue-50;
   }
 
   /* 站台層級 finding 在截圖頂部畫紅色 banner */

@@ -750,8 +750,9 @@ function FindingsGroupList({
     return map;
   }, [pages]);
 
-  // 自動展開包含目前 selectedFinding 的群組
+  // 自動展開包含目前 selectedFinding 的群組，並把該群組滾到視野中
   const [expanded, setExpanded] = useState(() => new Set());
+  const groupRefs = useRef({});
   useEffect(() => {
     if (!selectedFinding) return;
     const key = `${selectedFinding.category}::${selectedFinding.title}`;
@@ -761,15 +762,29 @@ function FindingsGroupList({
       next.add(key);
       return next;
     });
+    // 反向跳轉用：當截圖紅框被點時，selectedFinding 變化，把對應建議按鈕滾到視野中央
+    const el = groupRefs.current[key];
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
   }, [selectedFinding]);
 
   function toggle(key) {
+    const wasExpanded = expanded.has(key);
     setExpanded((prev) => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key);
       else next.add(key);
       return next;
     });
+    // 從關閉變展開時，同步選中該群組第一個 finding，
+    // 讓使用者點一次群組標題就能同時看到紅色高光框與右側內容，不必再點子項。
+    if (!wasExpanded) {
+      const group = groups.find((g) => g.key === key);
+      if (group && group.items.length > 0) {
+        onSelectFinding(group.items[0]);
+      }
+    }
   }
 
   if (!groups.length) {
@@ -795,6 +810,9 @@ function FindingsGroupList({
         return (
           <div
             key={group.key}
+            ref={(el) => {
+              if (el) groupRefs.current[group.key] = el;
+            }}
             className={`finding-group ${containsSelected ? "active" : ""}`}
           >
             <button
@@ -850,7 +868,7 @@ function FindingsGroupList({
 // 截圖畫布（接 selectedFinding 為 prop，以對應 URL 來源）
 // ============================================================
 
-function ScreenshotCanvas({ scan, targetPage, findings, selectedFinding }) {
+function ScreenshotCanvas({ scan, targetPage, findings, selectedFinding, onSelectFinding }) {
   const [imageUrl, setImageUrl] = useState("");
   const [scale, setScale] = useState(1);
   const imageRef = useRef(null);
@@ -913,9 +931,20 @@ function ScreenshotCanvas({ scan, targetPage, findings, selectedFinding }) {
   return (
     <div className="screenshot-shell">
       {targetPage && (
-        <p className="screenshot-caption">
-          📷 {targetPage.title || targetPage.url}
-        </p>
+        <div className="screenshot-caption-row">
+          <p className="screenshot-caption">
+            📷 {targetPage.title || targetPage.url}
+          </p>
+          <a
+            className="screenshot-open-link"
+            href={targetPage.final_url || targetPage.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="在新分頁開啟原網站（可實際互動，但會脫離 Argus 的紅框跳轉）"
+          >
+            🔗 在新分頁開啟原網站
+          </a>
+        </div>
       )}
       {!imageUrl && (
         <p className="hint-text">
@@ -955,10 +984,22 @@ function ScreenshotCanvas({ scan, targetPage, findings, selectedFinding }) {
             {overlayFindings.map((finding) => {
               const box = finding.bounding_box;
               const active = selectedFinding?.id === finding.id;
+              // 紅框變可點：點下去自動選中對應 finding，達成「截圖 → 建議按鈕」反向跳轉。
+              // 外層 div 保留 pointer-events-none 不擋截圖右鍵；個別 highlight-box 在 CSS 中設 pointer-events-auto。
               return (
                 <div
                   className={`highlight-box ${active ? "active" : ""}`}
                   key={finding.id}
+                  role="button"
+                  tabIndex={0}
+                  title={`${finding.severity.toUpperCase()} / ${finding.category.toUpperCase()}：${finding.title}（點擊跳到建議）`}
+                  onClick={() => onSelectFinding?.(finding)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      onSelectFinding?.(finding);
+                    }
+                  }}
                   style={{
                     left: `${box.x * scale}px`,
                     top: `${box.y * scale}px`,
@@ -1204,6 +1245,7 @@ function FindingsWorkspace({ scan }) {
           targetPage={targetPage}
           scan={scan}
           selectedFinding={selectedFinding}
+          onSelectFinding={selectFinding}
         />
         <div className="space-y-3">
           <div className="top-actions-box">
