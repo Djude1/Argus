@@ -1,6 +1,7 @@
 import asyncio
 
 from celery import shared_task
+from django.conf import settings
 from django.utils import timezone
 
 from apps.scans.crawler import crawl_site
@@ -80,11 +81,44 @@ def run_scan_job(self, scan_job_id: int) -> dict:
             Finding.objects.create(scan_job=scan_job, page=None, **finding)
         all_findings.extend(site_findings)
 
+        # Phase 2：可選的 Hermes-Agent 動態 UX 測試
+        # 預設 ARGUS_AGENT_ENABLED=False；只在使用者明確啟用時才跑，避免每次掃描都消耗 LLM token。
+        agent_meta = {}
+        if settings.ARGUS_AGENT_ENABLED:
+            scan_job.status = ScanJob.Status.AGENT_TESTING
+            scan_job.save(update_fields=["status", "updated_at"])
+            try:
+                from apps.agent.runner import run_agent_for_scan
+
+                agent_result = asyncio.run(run_agent_for_scan(scan_job))
+                if agent_result:
+                    agent_meta = {
+                        "status": agent_result.status,
+                        "steps": agent_result.steps,
+                        "tokens": agent_result.total_tokens,
+                        "issues_reported": len(agent_result.issues),
+                        "error": agent_result.error,
+                    }
+                    for issue in agent_result.issues:
+                        all_findings.append(
+                            {
+                                "category": "ux",
+                                "severity": issue.get("severity", "low"),
+                                "title": issue.get("title", ""),
+                            }
+                        )
+            except Exception as exc:  # noqa: BLE001 — agent 失敗不應讓整個掃描失敗
+                agent_meta = {"status": "error", "error": exc.__class__.__name__}
+
         overall_score, category_scores, top_actions = calculate_scores(all_findings)
         scan_job.status = ScanJob.Status.COMPLETED
         scan_job.overall_score = overall_score
         scan_job.category_scores = category_scores
         scan_job.top_actions = top_actions
+        if agent_meta:
+            warning_summary = dict(scan_job.warning_summary or {})
+            warning_summary["agent"] = agent_meta
+            scan_job.warning_summary = warning_summary
         scan_job.completed_at = timezone.now()
         scan_job.save(
             update_fields=[
@@ -92,6 +126,7 @@ def run_scan_job(self, scan_job_id: int) -> dict:
                 "overall_score",
                 "category_scores",
                 "top_actions",
+                "warning_summary",
                 "completed_at",
                 "updated_at",
             ]
@@ -100,6 +135,7 @@ def run_scan_job(self, scan_job_id: int) -> dict:
             "status": scan_job.status,
             "pages": len(crawled_pages),
             "findings": len(all_findings),
+            "agent": agent_meta,
         }
     except Exception as exc:
         scan_job.status = ScanJob.Status.FAILED

@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt",
     "apps.accounts",
     "apps.scans",
+    "apps.agent",
 ]
 
 MIDDLEWARE = [
@@ -144,6 +145,12 @@ ARGUS_ACTIVE_MAX_RPS = 2
 ARGUS_PASSIVE_MAX_RPS = 5
 ARGUS_SCANNER_USER_AGENT = "SiteSense-AI-Scanner/1.0 (authorized-audit)"
 ARGUS_AUTO_QUEUE_SCANS = env_bool("ARGUS_AUTO_QUEUE_SCANS", default=not DEBUG)
+
+# Phase 2 Hermes-Agent 上限（避免 token 失控與無限循環）
+ARGUS_AGENT_MAX_STEPS = int(os.getenv("ARGUS_AGENT_MAX_STEPS", "20"))
+ARGUS_AGENT_MAX_TOKENS = int(os.getenv("ARGUS_AGENT_MAX_TOKENS", "60000"))
+ARGUS_AGENT_STEP_TIMEOUT = int(os.getenv("ARGUS_AGENT_STEP_TIMEOUT", "30"))
+ARGUS_AGENT_ENABLED = env_bool("ARGUS_AGENT_ENABLED", default=False)
 
 # Google OAuth Client ID（從 Google Cloud Console > Credentials 取得）
 # 一般使用者透過 Google 帳號登入時用於驗證 ID Token；空字串代表未啟用
