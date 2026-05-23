@@ -1126,6 +1126,10 @@ function FindingsWorkspace({ scan }) {
         <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
           🔄 掃描進行中，畫面每 {SCAN_POLL_INTERVAL_MS / 1000} 秒自動更新。
           可以離開此頁、切換到其他掃描或登出，背景作業會繼續執行。
+          <p className="mt-1 text-xs">
+            ℹ️ 為避免無意義的建議，後台路徑（/admin、/wp-admin、/dashboard 等）會跳過 SEO/AEO/GEO 評分（安全頭部與 CSRF 仍會檢查）；
+            .apk、.zip、.pdf、圖片等下載連結不會列入頁面分析。
+          </p>
           {scan.warning_summary && scan.warning_summary.blocked_urls?.length > 0 && (
             <p className="mt-1 text-xs">
               已偵測到 {scan.warning_summary.blocked_urls.length} 個被阻擋的 URL（403/429/robots.txt）。

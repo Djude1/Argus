@@ -8,6 +8,72 @@ from apps.scans.models import Finding
 # HTML5 語意化區塊標籤，用於 GEO FAST 的 Structured 維度判斷
 SEMANTIC_LANDMARK_TAGS = {"main", "article", "header", "nav", "section", "footer", "aside"}
 
+# 不對外索引的後台/管理路徑前綴。這些頁面不需要 SEO/AEO/GEO 評分（補 H1、JSON-LD
+# 等對搜尋引擎曝光無意義），但安全性檢查（CSRF token、安全頭部）仍需照常進行。
+ADMIN_PATH_PREFIXES = (
+    "/admin",
+    "/wp-admin",
+    "/wp-login",
+    "/dashboard",
+    "/manage",
+    "/api/",
+)
+
+# 非 HTML 頁面的二進位/媒體檔案副檔名。這類資源沒有頁面內容，做 SEO/AEO/GEO
+# 分析會產生無意義的 finding（例如「APK 連結缺 meta description」）。
+NON_HTML_EXTENSIONS = (
+    ".apk", ".ipa", ".exe", ".msi", ".dmg", ".deb", ".rpm",
+    ".zip", ".tar", ".gz", ".tgz", ".rar", ".7z",
+    ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
+    ".mp3", ".mp4", ".mov", ".avi", ".wav", ".webm", ".m4a", ".m4v",
+    ".jpg", ".jpeg", ".png", ".gif", ".svg", ".webp", ".ico", ".bmp", ".tiff",
+    ".woff", ".woff2", ".ttf", ".otf", ".eot",
+    ".css", ".js", ".mjs", ".map",
+    ".xml", ".csv", ".json", ".rss", ".atom",
+)
+
+
+def is_admin_path(url: str) -> bool:
+    """判斷 URL 路徑是否屬於不對外索引的後台/管理頁面。
+
+    用於跳過 SEO/AEO/GEO 評分；安全性檢查仍照常執行，因為後台登入頁的
+    CSRF 防護與安全頭部反而更重要。
+    """
+    path = (urlparse(url).path or "").lower()
+    return any(path == prefix or path.startswith(prefix + "/") or path.startswith(prefix + ".")
+               for prefix in ADMIN_PATH_PREFIXES)
+
+
+def is_binary_resource(url: str) -> bool:
+    """判斷 URL 是否指向非 HTML 的二進位/媒體檔案。
+
+    這類資源沒有 HTML 內容，SEO/AEO/GEO 分析（例如 H1、meta description、
+    JSON-LD 建議）對其完全沒有意義；僅做安全頭部檢查即可。
+    """
+    path = (urlparse(url).path or "").lower()
+    return path.endswith(NON_HTML_EXTENSIONS)
+
+
+def detect_faq_structure(html: str, dl_count: int) -> bool:
+    """偵測頁面是否具備可被解讀為 FAQ 的結構訊號。
+
+    只有出現明確的 FAQ 結構（<dl>、<details>、faq/accordion class 等）時，
+    才適合建議補 FAQPage Schema；否則先建內容比較合理。
+    """
+    if dl_count >= 1:
+        return True
+    if not html:
+        return False
+    if re.search(r"<details\b", html, re.IGNORECASE):
+        return True
+    if re.search(
+        r'(?:class|id)=["\'][^"\']*\b(?:faq|qa-list|q-and-a|accordion|frequently-asked)\b',
+        html,
+        re.IGNORECASE,
+    ):
+        return True
+    return False
+
 
 @dataclass
 class PageAnalysisInput:
@@ -160,6 +226,21 @@ def parse_html_signals(html: str) -> HtmlSignalParser:
 def analyze_page(page_input: PageAnalysisInput) -> list[dict]:
     parser = parse_html_signals(page_input.html)
     findings: list[dict] = []
+
+    target_url = page_input.final_url or page_input.url
+
+    # 二進位/媒體資源（.apk、.pdf 等）沒有頁面內容，不做 SEO/AEO/GEO 分析；
+    # 安全頭部仍檢查，因為這些檔案的下載仍需 HSTS / X-Content-Type-Options 等保護。
+    if is_binary_resource(target_url):
+        findings.extend(analyze_security(page_input, parser))
+        return findings
+
+    # 管理後台/登入頁不對外索引，SEO/AEO/GEO 評分對其無意義；
+    # 但 SECURITY 檢查（CSRF token、安全頭部）對後台反而更關鍵，必須保留。
+    if is_admin_path(target_url):
+        findings.extend(analyze_security(page_input, parser))
+        return findings
+
     findings.extend(analyze_seo(page_input, parser))
     findings.extend(analyze_aeo(page_input, parser))
     findings.extend(analyze_geo(page_input, parser))
@@ -254,34 +335,53 @@ def analyze_aeo(page_input: PageAnalysisInput, parser: HtmlSignalParser) -> list
     findings: list[dict] = []
     json_ld_text = "\n".join(parser.json_ld_blocks).lower()
     has_faq_or_howto = "faqpage" in json_ld_text or "howto" in json_ld_text
-    question_like = len(re.findall(r"[？?]|什麼|如何|為何|怎麼", page_input.html or ""))
-    if not has_faq_or_howto and question_like >= 2:
+
+    # 問句訊號改從可見文字計算，避免 HTML 屬性、註解、tag 名稱中的字元
+    # 被誤算（例如 class="how-to-img" 被當成「如何」）。
+    visible_text = re.sub(r"<[^>]+>", " ", page_input.html or "")
+    question_like = len(re.findall(r"[？?]|什麼|如何|為何|怎麼", visible_text))
+
+    # 問句門檻必須夠高才視為真正的問答內容；單純內文出現「什麼」「如何」
+    # 等常用詞不應觸發 FAQPage 建議。
+    if question_like < 4:
+        return findings
+
+    has_faq_structure = detect_faq_structure(page_input.html, parser.dl_count)
+
+    if has_faq_structure and not has_faq_or_howto:
+        # 已有明確的 FAQ 結構卻沒有對應 Schema：補 Schema 才有意義。
         findings.append(
             make_finding(
                 category=Finding.Category.AEO,
                 severity=Finding.Severity.MEDIUM,
                 title="問答內容缺少 FAQPage 或 HowTo 結構化資料",
-                description="頁面含問答語氣但缺少對應 Schema，AI answer engine 較難穩定抽取答案。",
-                remediation=(
-                    "若頁面確實提供 FAQ 或教學步驟，加入符合內容的 FAQPage 或 HowTo Schema。"
+                description=(
+                    "頁面已有 FAQ 結構（dl/details/accordion）但缺少對應 Schema，"
+                    "AI answer engine 較難穩定抽取答案。"
                 ),
+                remediation="為現有 FAQ 內容加入符合主題的 FAQPage 或 HowTo Schema。",
                 evidence=(
                     f"question_like_count={question_like}, "
-                    f"json_ld_blocks={len(parser.json_ld_blocks)}"
+                    f"json_ld_blocks={len(parser.json_ld_blocks)}, "
+                    f"dl_count={parser.dl_count}"
                 ),
                 selector='script[type="application/ld+json"]',
                 impact_area="answer_engine",
                 priority_score=62,
             )
         )
-    if parser.dl_count == 0 and question_like >= 3:
+    elif not has_faq_structure:
+        # 出現大量問答語氣卻沒有任何 FAQ 結構：先整理內容比補 Schema 重要。
         findings.append(
             make_finding(
                 category=Finding.Category.AEO,
                 severity=Finding.Severity.LOW,
                 title="問答資訊缺少明確結構",
-                description="問答內容若沒有清楚的問題與答案區塊，AI 與使用者都較難快速理解。",
-                remediation="使用明確標題、FAQ 區塊或定義列表整理問答內容。",
+                description="頁面出現大量問句但沒有明確的問答區塊，AI 與使用者都較難快速擷取答案。",
+                remediation=(
+                    "使用 dl/details、明確的小標題或 FAQ 區塊整理問答內容，"
+                    "再考慮加上 Schema。"
+                ),
                 evidence=f"question_like_count={question_like}, dl_count={parser.dl_count}",
                 impact_area="content_structure",
                 priority_score=40,

@@ -12,10 +12,14 @@ from apps.scans.crawler import classify_blocked, compute_min_interval
 from apps.scans.models import AuthorizationConsent, Finding, Page, ScanJob, UserScanQuota
 from apps.scans.scanners import (
     PageAnalysisInput,
+    analyze_aeo,
     analyze_geo_fast,
     analyze_page,
     analyze_site_signals,
     calculate_scores,
+    detect_faq_structure,
+    is_admin_path,
+    is_binary_resource,
     parse_html_signals,
 )
 
@@ -417,3 +421,161 @@ class RerunScanCommandTests(APITestCase):
     def test_rerun_scan_raises_on_missing_scan_job(self):
         with self.assertRaises(CommandError):
             call_command("rerun_scan", 999999)
+
+
+class PageTypeRoutingTests(APITestCase):
+    """掃描器對 admin 後台與二進位資源的路由判斷：跳過索引面向、保留安全檢查。"""
+
+    def test_is_binary_resource_recognizes_common_downloadables(self):
+        self.assertTrue(is_binary_resource("https://example.com/media/app.apk"))
+        self.assertTrue(is_binary_resource("https://example.com/files/manual.pdf"))
+        self.assertTrue(is_binary_resource("https://example.com/release/build.zip"))
+        self.assertTrue(is_binary_resource("https://example.com/assets/logo.png"))
+
+    def test_is_binary_resource_treats_html_pages_as_non_binary(self):
+        self.assertFalse(is_binary_resource("https://example.com/"))
+        self.assertFalse(is_binary_resource("https://example.com/product/1"))
+        self.assertFalse(is_binary_resource("https://example.com/team"))
+
+    def test_is_admin_path_recognizes_common_backend_routes(self):
+        self.assertTrue(is_admin_path("https://example.com/admin"))
+        self.assertTrue(is_admin_path("https://example.com/admin/login"))
+        self.assertTrue(is_admin_path("https://example.com/wp-admin/users.php"))
+        self.assertTrue(is_admin_path("https://example.com/dashboard/reports"))
+
+    def test_is_admin_path_skips_frontend_routes(self):
+        self.assertFalse(is_admin_path("https://example.com/"))
+        self.assertFalse(is_admin_path("https://example.com/administrator-info"))  # 非 admin 前綴
+        self.assertFalse(is_admin_path("https://example.com/team"))
+
+    def test_analyze_page_skips_seo_findings_for_admin_login(self):
+        # admin/login 缺 H1、缺 description、缺 JSON-LD 都不該被列為 SEO/GEO/AEO 問題
+        page_input = PageAnalysisInput(
+            url="https://example.com/admin/login",
+            final_url="https://example.com/admin/login",
+            title="Login",
+            html="<html><body><form><input name='user'></form></body></html>",
+            headers={},
+            element_boxes={},
+        )
+
+        findings = analyze_page(page_input)
+        categories = {finding["category"] for finding in findings}
+
+        self.assertNotIn("seo", categories)
+        self.assertNotIn("aeo", categories)
+        self.assertNotIn("geo", categories)
+
+    def test_analyze_page_keeps_security_findings_for_admin_login(self):
+        # 後台登入的 CSRF/安全頭部反而更需要被檢查，不可被跳過
+        page_input = PageAnalysisInput(
+            url="https://example.com/admin/login",
+            final_url="https://example.com/admin/login",
+            title="Login",
+            html="<html><body><form><input name='user'></form></body></html>",
+            headers={},
+            element_boxes={},
+        )
+
+        findings = analyze_page(page_input)
+        security_titles = {f["title"] for f in findings if f["category"] == "security"}
+
+        self.assertIn("表單可能缺少 CSRF token", security_titles)
+
+    def test_analyze_page_only_runs_security_for_binary_resource(self):
+        # APK 連結沒有 HTML 內容，不該被加上 H1/JSON-LD/FAQPage 等建議
+        page_input = PageAnalysisInput(
+            url="https://example.com/downloads/app.apk",
+            final_url="https://example.com/downloads/app.apk",
+            title="",
+            html="",
+            headers={},
+            element_boxes={},
+        )
+
+        findings = analyze_page(page_input)
+        categories = {finding["category"] for finding in findings}
+
+        self.assertNotIn("seo", categories)
+        self.assertNotIn("aeo", categories)
+        self.assertNotIn("geo", categories)
+        # HSTS/CSP 等安全頭部對檔案下載仍有效益，因此 security 仍會出現
+        self.assertIn("security", categories)
+
+
+class AeoFaqHeuristicTests(APITestCase):
+    """FAQPage 建議邏輯：必須真有 FAQ 結構訊號才建議補 Schema，避免機械化誤判。"""
+
+    def _page_input(self, html: str) -> PageAnalysisInput:
+        return PageAnalysisInput(
+            url="https://example.com/",
+            final_url="https://example.com/",
+            title="範例頁",
+            html=html,
+            headers={},
+            element_boxes={},
+        )
+
+    def test_detect_faq_structure_recognizes_dl(self):
+        self.assertTrue(detect_faq_structure("<dl><dt>Q</dt><dd>A</dd></dl>", dl_count=1))
+
+    def test_detect_faq_structure_recognizes_details_tag(self):
+        self.assertTrue(detect_faq_structure("<details><summary>Q</summary>A</details>", 0))
+
+    def test_detect_faq_structure_recognizes_faq_class(self):
+        self.assertTrue(detect_faq_structure("<section class='faq'>Q&A</section>", 0))
+
+    def test_detect_faq_structure_returns_false_for_plain_content(self):
+        self.assertFalse(detect_faq_structure("<p>產品介紹</p>", 0))
+
+    def test_analyze_aeo_does_not_flag_pure_question_tone_without_faq_structure(self):
+        # 報告中產品描述常用「能幫你做什麼」「如何使用」等問句，但沒有 FAQ 結構，
+        # 此時建議補 FAQPage Schema 是機械化誤判，應改提示「先整理結構」。
+        html = (
+            "<html><body>"
+            "<p>AI 智慧眼鏡能幫你做什麼？我們提供視障導航。</p>"
+            "<p>如何使用？戴上即可。</p>"
+            "<p>為何選擇我們？因為穩定。</p>"
+            "<p>怎麼購買？至產品頁。</p>"
+            "</body></html>"
+        )
+        findings = analyze_aeo(self._page_input(html), parse_html_signals(html))
+        titles = {finding["title"] for finding in findings}
+
+        self.assertNotIn("問答內容缺少 FAQPage 或 HowTo 結構化資料", titles)
+
+    def test_analyze_aeo_flags_real_faq_section_without_schema(self):
+        # 真正有 FAQ 結構（dl）但沒 Schema 時才該建議補 FAQPage/HowTo
+        html = (
+            "<html><body>"
+            "<dl>"
+            "<dt>什麼是視障導航？</dt><dd>用 AI 辨識環境引導視障者。</dd>"
+            "<dt>如何配戴？</dt><dd>像一般眼鏡戴上即可。</dd>"
+            "<dt>為何選 Argus？</dt><dd>準確度高。</dd>"
+            "<dt>怎麼充電？</dt><dd>Type-C 充電。</dd>"
+            "</dl>"
+            "</body></html>"
+        )
+        findings = analyze_aeo(self._page_input(html), parse_html_signals(html))
+        titles = {finding["title"] for finding in findings}
+
+        self.assertIn("問答內容缺少 FAQPage 或 HowTo 結構化資料", titles)
+
+    def test_analyze_aeo_ignores_low_question_density_text(self):
+        # 內文只出現 1-2 個常用字（什麼/如何），不應觸發任何 AEO finding
+        html = "<html><body><p>了解產品是什麼，並如何運作。</p></body></html>"
+        findings = analyze_aeo(self._page_input(html), parse_html_signals(html))
+
+        self.assertEqual(findings, [])
+
+    def test_analyze_aeo_ignores_question_text_in_html_attributes(self):
+        # 問句訊號只計算可見文字；HTML 屬性或 tag 中的字串不該被計入
+        html = (
+            "<html><body>"
+            "<div class='how-to-image' data-tip='如何 什麼 為何 怎麼 ?'>"
+            "<p>純粹的內容，不是問答。</p>"
+            "</div></body></html>"
+        )
+        findings = analyze_aeo(self._page_input(html), parse_html_signals(html))
+
+        self.assertEqual(findings, [])

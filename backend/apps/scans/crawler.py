@@ -9,6 +9,8 @@ from django.conf import settings
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from playwright.async_api import async_playwright
 
+from apps.scans.scanners import is_binary_resource
+
 # 會被視為「被阻擋」的 HTTP 狀態碼與對應的中文原因
 BLOCKED_STATUS_REASONS = {
     401: "需要登入才能存取",
@@ -99,8 +101,13 @@ async def extract_links(page, base_url: str, origin: str) -> list[str]:
     links: list[str] = []
     for href in hrefs:
         normalized = normalize_crawl_url(urljoin(base_url, href))
-        if normalized and same_origin(normalized, origin):
-            links.append(normalized)
+        if not normalized or not same_origin(normalized, origin):
+            continue
+        # 二進位/媒體檔案（.apk、.pdf、字型、圖片等）不是 HTML 頁面，
+        # 加進爬蟲 queue 只會浪費請求並產生無意義的 finding。
+        if is_binary_resource(normalized):
+            continue
+        links.append(normalized)
     return sorted(set(links))
 
 
