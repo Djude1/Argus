@@ -345,10 +345,42 @@ const CRAWL_PHASES = [
   { key: "agent_testing", label: "Agent", emoji: "🤖" },
 ];
 
-function CrawlingAnimation({ status, hint, compact = false }) {
+function formatMMSS(totalSec) {
+  const sec = Math.max(0, Math.floor(totalSec));
+  const mm = String(Math.floor(sec / 60)).padStart(2, "0");
+  const ss = String(sec % 60).padStart(2, "0");
+  return `${mm}:${ss}`;
+}
+
+function CrawlingAnimation({ status, hint, compact = false, progress, startedAt }) {
+  // 每秒重繪，讓「已執行 / 剩餘」會走動
+  const [, force] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => force((x) => x + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+
   const currentIdx = CRAWL_PHASES.findIndex((p) => p.key === status);
   const safeIdx = currentIdx >= 0 ? currentIdx : 0;
   const current = CRAWL_PHASES[safeIdx] || CRAWL_PHASES[0];
+
+  // progress 結構：{pages_done, pages_total, phase, phase_started_at}
+  const total = progress?.pages_total || 0;
+  const done = progress?.pages_done || 0;
+  const hasProgress = total > 0;
+  const pct = hasProgress ? Math.min(100, Math.round((done / total) * 100)) : null;
+
+  // 已執行時間（從整個 scan 的 started_at 起算）
+  const scanStart = startedAt ? new Date(startedAt).getTime() : null;
+  const elapsedSec = scanStart ? Math.floor((Date.now() - scanStart) / 1000) : null;
+
+  // ETA：基於當前 phase 的 elapsed × (total / done - 1)
+  let etaSec = null;
+  if (hasProgress && done > 0 && done < total && progress?.phase_started_at) {
+    const phaseStart = new Date(progress.phase_started_at).getTime();
+    const phaseElapsed = Math.max(1, Math.floor((Date.now() - phaseStart) / 1000));
+    etaSec = Math.max(0, Math.round(phaseElapsed * (total / done - 1)));
+  }
 
   return (
     <div className={`crawl-anim ${compact ? "is-compact" : ""}`}>
@@ -360,9 +392,42 @@ function CrawlingAnimation({ status, hint, compact = false }) {
         </div>
         <span className="crawl-anim-spinner" aria-hidden="true" />
       </div>
-      <div className="crawl-progress" role="progressbar" aria-label="掃描進度">
-        <div className="crawl-progress-bar" />
+
+      {(elapsedSec !== null || hasProgress) && (
+        <div className="crawl-anim-meta">
+          {elapsedSec !== null ? (
+            <span className="crawl-meta-chip">
+              已執行 <strong>{formatMMSS(elapsedSec)}</strong>
+            </span>
+          ) : null}
+          {hasProgress ? (
+            <span className="crawl-meta-chip">
+              進度 <strong>{done}/{total}</strong> · {pct}%
+            </span>
+          ) : null}
+          {etaSec !== null ? (
+            <span className="crawl-meta-chip is-eta">
+              剩餘約 <strong>{formatMMSS(etaSec)}</strong>
+            </span>
+          ) : null}
+        </div>
+      )}
+
+      <div
+        className={`crawl-progress ${hasProgress ? "is-determinate" : ""}`}
+        role="progressbar"
+        aria-label="掃描進度"
+        aria-valuenow={pct ?? undefined}
+        aria-valuemin={0}
+        aria-valuemax={100}
+      >
+        {hasProgress ? (
+          <div className="crawl-progress-fill" style={{ width: `${pct}%` }} />
+        ) : (
+          <div className="crawl-progress-bar" />
+        )}
       </div>
+
       <ol className="crawl-phases">
         {CRAWL_PHASES.map((phase, idx) => {
           let cls = "phase-pending";
@@ -1019,7 +1084,13 @@ function ScreenshotCanvas({ scan, targetPage, findings, selectedFinding, onSelec
       )}
       {!imageUrl && (
         isInProgress(scan?.status) ? (
-          <CrawlingAnimation status={scan.status} hint="截圖完成後會自動顯示在此" compact />
+          <CrawlingAnimation
+            status={scan.status}
+            progress={scan.progress}
+            startedAt={scan.started_at}
+            hint="截圖完成後會自動顯示在此"
+            compact
+          />
         ) : (
           <p className="hint-text">
             {targetPage
@@ -1240,6 +1311,8 @@ function FindingsWorkspace({ scan }) {
         <div className="mb-4 space-y-2">
           <CrawlingAnimation
             status={scan.status}
+            progress={scan.progress}
+            startedAt={scan.started_at}
             hint={`畫面每 ${SCAN_POLL_INTERVAL_MS / 1000} 秒自動更新；可離開此頁，背景會繼續執行`}
           />
           <p className="text-xs text-slate-500">

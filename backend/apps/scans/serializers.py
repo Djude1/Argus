@@ -105,6 +105,7 @@ class ScanJobSerializer(serializers.ModelSerializer):
             "category_scores",
             "top_actions",
             "warning_summary",
+            "progress",
             "error_message",
             "created_at",
             "updated_at",
@@ -125,7 +126,9 @@ class ScanJobStatusSerializer(serializers.ModelSerializer):
             "overall_score",
             "category_scores",
             "warning_summary",
+            "progress",
             "error_message",
+            "started_at",
             "updated_at",
         ]
 

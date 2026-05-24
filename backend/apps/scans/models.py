@@ -47,6 +47,10 @@ class ScanJob(models.Model):
     top_actions = models.JSONField(default=list, blank=True)
     crawl_checkpoint = models.JSONField(default=dict, blank=True)
     warning_summary = models.JSONField(default=dict, blank=True)
+    # 即時進度（worker 寫入；前端輪詢顯示）
+    # {pages_done: int, pages_total: int, phase: "crawling"|"scanning"|"agent_testing",
+    #  phase_started_at: ISO8601 str}
+    progress = models.JSONField(default=dict, blank=True)
     error_message = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)

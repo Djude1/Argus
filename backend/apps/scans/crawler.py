@@ -142,7 +142,15 @@ async def crawl_site(
     max_depth: int,
     max_pages: int,
     respect_robots: bool,
+    progress_callback=None,
 ) -> tuple[list[dict], dict, dict]:
+    """爬整站。
+
+    progress_callback：可選的 async callable，每爬完一頁（含失敗/被擋）就會呼叫
+    `await progress_callback(pages_done, pages_total_estimated)`，
+    讓上層即時寫進 ScanJob.progress 供前端輪詢顯示百分比與 ETA。
+    callback 失敗不影響爬蟲本身。
+    """
     warnings: dict = {"blocked_urls": [], "failed_urls": []}
     visited: set[str] = set()
     queue: deque[tuple[str, int]] = deque([(start_url, 0)])
@@ -234,6 +242,14 @@ async def crawl_site(
                     warnings["failed_urls"].append({"url": url, "reason": exc.__class__.__name__})
                 finally:
                     await page.close()
+                    if progress_callback is not None:
+                        done = len(visited)
+                        total = min(len(visited) + len(queue), max_pages)
+                        try:
+                            await progress_callback(done, total)
+                        except Exception:
+                            # callback 失敗不影響爬蟲本身
+                            pass
         finally:
             await context.close()
             await browser.close()
