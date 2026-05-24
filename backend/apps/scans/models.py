@@ -12,6 +12,7 @@ class ScanJob(models.Model):
         AGENT_TESTING = "agent_testing", "Agent 測試中"
         COMPLETED = "completed", "已完成"
         FAILED = "failed", "失敗"
+        CANCELLED = "cancelled", "已終止"
 
     class ScanMode(models.TextChoices):
         PASSIVE = "passive", "被動偵測"

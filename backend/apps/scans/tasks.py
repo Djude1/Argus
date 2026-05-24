@@ -6,6 +6,7 @@ from django.conf import settings
 from django.utils import timezone
 
 from apps.scans.active_probes import run_active_probes
+from apps.scans.cancellation import ScanCancelled, is_cancelled, raise_if_cancelled
 from apps.scans.crawler import crawl_site
 from apps.scans.models import Finding, Page, ScanJob
 from apps.scans.scanners import (
@@ -46,12 +47,16 @@ def run_scan_job(self, scan_job_id: int) -> dict:
     scan_job.save(update_fields=["status", "started_at", "progress", "updated_at"])
 
     try:
-        # crawler callback：在 async loop 內透過 sync_to_async 寫 DB，每爬完一頁就更新
+        # crawler callback：在 async loop 內透過 sync_to_async 寫 DB；
+        # 同時是合作式 cancel 的檢查點，若已被使用者終止就 raise ScanCancelled
         async def _crawl_progress(done: int, total: int) -> None:
             await sync_to_async(_write_progress, thread_sensitive=True)(
                 scan_job_id, phase="crawling", done=done, total=total,
                 phase_started_at=crawl_phase_started,
             )
+            cancelled = await sync_to_async(is_cancelled, thread_sensitive=True)(scan_job_id)
+            if cancelled:
+                raise ScanCancelled()
 
         crawled_pages, warnings, site_signals = asyncio.run(
             crawl_site(
@@ -65,6 +70,8 @@ def run_scan_job(self, scan_job_id: int) -> dict:
                 progress_callback=_crawl_progress,
             )
         )
+        # 進入 scanning 前再檢查一次：避免使用者剛 cancel 就被 worker 覆蓋回 SCANNING
+        raise_if_cancelled(scan_job_id)
         scan_phase_started = timezone.now().isoformat()
         scan_job.status = ScanJob.Status.SCANNING
         scan_job.warning_summary = warnings
@@ -113,7 +120,7 @@ def run_scan_job(self, scan_job_id: int) -> dict:
                 all_findings.extend(page_findings)
                 for finding in page_findings:
                     Finding.objects.create(scan_job=scan_job, page=page, **finding)
-            # 不論是否被阻擋，已處理一頁就更新 progress
+            # 不論是否被阻擋，已處理一頁就更新 progress；同時當作 cancel 檢查點
             _write_progress(
                 scan_job.id,
                 phase="scanning",
@@ -121,6 +128,7 @@ def run_scan_job(self, scan_job_id: int) -> dict:
                 total=scanning_total,
                 phase_started_at=scan_phase_started,
             )
+            raise_if_cancelled(scan_job_id)
 
         # 站台層級的 GEO FAST 檢查（llms.txt、AI 爬蟲可存取性）
         site_findings = analyze_site_signals(site_signals)
@@ -145,6 +153,7 @@ def run_scan_job(self, scan_job_id: int) -> dict:
         # 預設 ARGUS_AGENT_ENABLED=False；只在使用者明確啟用時才跑，避免每次掃描都消耗 LLM token。
         agent_meta = {}
         if settings.ARGUS_AGENT_ENABLED:
+            raise_if_cancelled(scan_job_id)
             agent_phase_started = timezone.now().isoformat()
             scan_job.status = ScanJob.Status.AGENT_TESTING
             scan_job.progress = {
@@ -213,6 +222,16 @@ def run_scan_job(self, scan_job_id: int) -> dict:
             "findings": len(all_findings),
             "agent": agent_meta,
         }
+    except ScanCancelled:
+        # 使用者主動終止：API 已經把 status 設為 CANCELLED，這裡只補上 completed_at
+        # 與清空 progress；不算失敗，不再 raise（避免 Celery 把它標為 task 失敗）。
+        ScanJob.objects.filter(id=scan_job_id).update(
+            status=ScanJob.Status.CANCELLED,
+            completed_at=timezone.now(),
+            progress={},
+            error_message="使用者已終止掃描",
+        )
+        return {"status": "cancelled"}
     except Exception as exc:
         scan_job.status = ScanJob.Status.FAILED
         # 只存類別名（"Error"）會讓使用者在 UI 看到「掃描失敗：Error」，無法診斷。
@@ -221,5 +240,10 @@ def run_scan_job(self, scan_job_id: int) -> dict:
         class_name = exc.__class__.__name__
         scan_job.error_message = f"{class_name}: {detail}" if detail else class_name
         scan_job.completed_at = timezone.now()
-        scan_job.save(update_fields=["status", "error_message", "completed_at", "updated_at"])
+        scan_job.progress = {}
+        scan_job.save(
+            update_fields=[
+                "status", "error_message", "completed_at", "progress", "updated_at",
+            ]
+        )
         raise

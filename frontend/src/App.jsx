@@ -53,6 +53,7 @@ const STATUS_LABELS = {
   agent_testing: { label: "Agent 測試中", tone: "blue", emoji: "🤖" },
   completed: { label: "完成", tone: "emerald", emoji: "✓" },
   failed: { label: "失敗", tone: "red", emoji: "✗" },
+  cancelled: { label: "已終止", tone: "slate", emoji: "✖" },
 };
 
 const IN_PROGRESS_STATUSES = ["queued", "crawling", "scanning", "agent_testing"];
@@ -352,7 +353,15 @@ function formatMMSS(totalSec) {
   return `${mm}:${ss}`;
 }
 
-function CrawlingAnimation({ status, hint, compact = false, progress, startedAt }) {
+function CrawlingAnimation({
+  status,
+  hint,
+  compact = false,
+  progress,
+  startedAt,
+  onCancel,
+  cancelBusy = false,
+}) {
   // 每秒重繪，讓「已執行 / 剩餘」會走動
   const [, force] = useState(0);
   useEffect(() => {
@@ -444,6 +453,19 @@ function CrawlingAnimation({ status, hint, compact = false, progress, startedAt 
           );
         })}
       </ol>
+
+      {onCancel ? (
+        <div className="crawl-anim-actions">
+          <button
+            type="button"
+            className="crawl-cancel-button"
+            onClick={onCancel}
+            disabled={cancelBusy}
+          >
+            {cancelBusy ? "終止中..." : "✖ 終止掃描"}
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1170,6 +1192,21 @@ function FindingsWorkspace({ scan }) {
   const [pages, setPages] = useState([]);
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [severityFilter, setSeverityFilter] = useState("all");
+  const [cancelBusy, setCancelBusy] = useState(false);
+
+  async function handleCancel() {
+    if (!window.confirm("確定要終止此掃描嗎？已收集的部分仍會保留。")) return;
+    setCancelBusy(true);
+    try {
+      await api.post(`/scans/${scan.id}/cancel/`);
+      // 等下次 polling 拿到新 status 切換 UI
+    } catch (err) {
+      const detail = err?.response?.data?.detail || err?.message || "未知錯誤";
+      alert("終止失敗：" + detail);
+    } finally {
+      setCancelBusy(false);
+    }
+  }
 
   // findings 與 pages 在 scan 物件更新時跟著刷新（polling 改變 scan 後 findings_count 變動會觸發）
   useEffect(() => {
@@ -1313,6 +1350,8 @@ function FindingsWorkspace({ scan }) {
             status={scan.status}
             progress={scan.progress}
             startedAt={scan.started_at}
+            onCancel={handleCancel}
+            cancelBusy={cancelBusy}
             hint={`畫面每 ${SCAN_POLL_INTERVAL_MS / 1000} 秒自動更新；可離開此頁，背景會繼續執行`}
           />
           <p className="text-xs text-slate-500">
@@ -1330,6 +1369,12 @@ function FindingsWorkspace({ scan }) {
       {scan.status === "failed" && (
         <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">
           ✗ 掃描失敗：{scan.error_message || "未知錯誤"}
+        </div>
+      )}
+
+      {scan.status === "cancelled" && (
+        <div className="mb-4 rounded-xl border border-slate-300 bg-slate-50 p-3 text-sm text-slate-700">
+          ✖ 掃描已終止。已收集到的頁面與 finding 仍保留在下方。
         </div>
       )}
 

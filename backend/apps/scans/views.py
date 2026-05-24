@@ -111,6 +111,29 @@ class ScanJobViewSet(viewsets.ModelViewSet):
             content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         )
 
+    @action(detail=True, methods=["post"])
+    def cancel(self, request, pk=None):
+        """使用者主動終止進行中的掃描。
+
+        合作式 cancel：只設 status=CANCELLED，worker 會在下次檢查點自動停下。
+        非進行中狀態（已完成 / 失敗 / 已終止）回 400。
+        """
+        scan_job = self.get_object()
+        in_progress_statuses = {
+            ScanJob.Status.QUEUED,
+            ScanJob.Status.CRAWLING,
+            ScanJob.Status.SCANNING,
+            ScanJob.Status.AGENT_TESTING,
+        }
+        if scan_job.status not in in_progress_statuses:
+            return Response(
+                {"detail": f"掃描已結束（{scan_job.get_status_display()}），無法終止。"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        scan_job.status = ScanJob.Status.CANCELLED
+        scan_job.save(update_fields=["status", "updated_at"])
+        return Response(ScanJobSerializer(scan_job).data)
+
     @action(detail=True, methods=["get"])
     def topology(self, request, pk=None):
         """回傳該掃描的頁面拓撲：nodes（pages）+ edges（page-to-page links）。

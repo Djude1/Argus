@@ -9,6 +9,7 @@ from django.conf import settings
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from playwright.async_api import async_playwright
 
+from apps.scans.cancellation import ScanCancelled
 from apps.scans.scanners import is_binary_resource
 
 # 會被視為「被阻擋」的 HTTP 狀態碼與對應的中文原因
@@ -247,8 +248,11 @@ async def crawl_site(
                         total = min(len(visited) + len(queue), max_pages)
                         try:
                             await progress_callback(done, total)
+                        except ScanCancelled:
+                            # 使用者按終止：立刻往上 propagate，不要被吞
+                            raise
                         except Exception:
-                            # callback 失敗不影響爬蟲本身
+                            # 其他 callback 錯誤不影響爬蟲本身
                             pass
         finally:
             await context.close()
