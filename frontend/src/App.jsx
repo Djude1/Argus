@@ -11,7 +11,14 @@ import {
   useParams,
   useSearchParams,
 } from "react-router-dom";
-import ReactFlow, { Background, Controls } from "reactflow";
+import ReactFlow, {
+  Background,
+  Controls,
+  Handle,
+  MarkerType,
+  MiniMap,
+  Position,
+} from "reactflow";
 import "reactflow/dist/style.css";
 
 import { api } from "./api";
@@ -1484,6 +1491,137 @@ function shortenUrl(url) {
   }
 }
 
+function hostnameOf(url) {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return "";
+  }
+}
+
+// 從首頁出發做 BFS 樹狀 layout。
+// root = depth=0 的節點（爬蟲入口），找不到就用 id 最小者。
+// children = 從 outgoing_links 第一次抵達的下游節點（避免迴圈）。
+// 每個 subtree 預先算 leaf 數，父節點 y = 子節點群中心，得到對稱不重疊的樹。
+// 走不到的孤島塞到樹下方獨立區。
+function buildTreeLayout(apiNodes, apiEdges) {
+  const COL_W = 280;
+  const ROW_H = 96;
+  if (apiNodes.length === 0) return { positions: {}, rootId: null, orphanIds: [] };
+
+  const sorted = [...apiNodes].sort(
+    (a, b) => (a.depth ?? 99) - (b.depth ?? 99) || a.id - b.id,
+  );
+  const root = sorted[0];
+
+  const adj = {};
+  apiNodes.forEach((n) => { adj[n.id] = []; });
+  apiEdges.forEach((e) => {
+    if (adj[e.source] && !adj[e.source].includes(e.target)) {
+      adj[e.source].push(e.target);
+    }
+  });
+
+  const parent = { [root.id]: null };
+  const visited = new Set([root.id]);
+  const queue = [root.id];
+  while (queue.length) {
+    const cur = queue.shift();
+    for (const child of adj[cur] || []) {
+      if (!visited.has(child)) {
+        visited.add(child);
+        parent[child] = cur;
+        queue.push(child);
+      }
+    }
+  }
+
+  const children = {};
+  apiNodes.forEach((n) => { children[n.id] = []; });
+  Object.keys(parent).forEach((id) => {
+    const p = parent[Number(id)];
+    if (p != null) children[p].push(Number(id));
+  });
+  Object.values(children).forEach((arr) => arr.sort((a, b) => a - b));
+
+  const leafCount = {};
+  function calcLeaves(id) {
+    if (!children[id] || children[id].length === 0) {
+      leafCount[id] = 1;
+      return 1;
+    }
+    let s = 0;
+    for (const c of children[id]) s += calcLeaves(c);
+    leafCount[id] = s;
+    return s;
+  }
+  calcLeaves(root.id);
+
+  const positions = {};
+  function assign(id, depth, yStart) {
+    const span = leafCount[id] * ROW_H;
+    positions[id] = { x: depth * COL_W, y: yStart + span / 2 };
+    let curY = yStart;
+    for (const c of children[id]) {
+      const cSpan = leafCount[c] * ROW_H;
+      assign(c, depth + 1, curY);
+      curY += cSpan;
+    }
+  }
+  assign(root.id, 0, 0);
+
+  const treeMaxY = Math.max(...Object.values(positions).map((p) => p.y), 0);
+  const orphans = apiNodes.filter((n) => !visited.has(n.id));
+  const ORPHAN_TOP = treeMaxY + 160;
+  const ORPHANS_PER_ROW = 4;
+  orphans.forEach((n, i) => {
+    positions[n.id] = {
+      x: (i % ORPHANS_PER_ROW) * COL_W,
+      y: ORPHAN_TOP + Math.floor(i / ORPHANS_PER_ROW) * (ROW_H + 24),
+    };
+  });
+
+  return { positions, rootId: root.id, orphanIds: orphans.map((n) => n.id) };
+}
+
+function TopologyCustomNode({ data }) {
+  const toneClass = `tone-${data.tone}`;
+  let icon = "\u{1F4C4}"; // 📄
+  if (data.isRoot) icon = "\u{1F3E0}"; // 🏠
+  else if (data.blocked) icon = "\u{26D4}"; // ⛔
+  else if (data.isOrphan) icon = "\u{1F4CD}"; // 📍
+
+  let statusText = "無問題";
+  if (data.blocked) statusText = "被阻擋";
+  else if (data.finding_count > 0) statusText = `${data.finding_count} 個問題`;
+
+  const rootClass = data.isRoot ? "is-root" : "";
+  const orphanClass = data.isOrphan ? "is-orphan" : "";
+
+  return (
+    <div className={`topology-card ${toneClass} ${rootClass} ${orphanClass}`}>
+      <Handle type="target" position={Position.Left} className="topology-handle" />
+      <div className="topology-card-icon" aria-hidden="true">{icon}</div>
+      <div className="topology-card-body">
+        <div className="topology-card-title" title={data.url}>
+          {data.isRoot ? "首頁" : data.shortUrl}
+        </div>
+        <div className="topology-card-host">{data.hostname}</div>
+        <div className="topology-card-meta">
+          <span className={`topology-status-dot ${toneClass}`} />
+          <span>{statusText}</span>
+          {data.max_severity && !data.blocked ? (
+            <span className="topology-sev-chip">{data.max_severity}</span>
+          ) : null}
+        </div>
+      </div>
+      <Handle type="source" position={Position.Right} className="topology-handle" />
+    </div>
+  );
+}
+
+const TOPOLOGY_NODE_TYPES = { topology: TopologyCustomNode };
+
 function TopologyPage() {
   const { scanId } = useParams();
   const navigate = useNavigate();
@@ -1505,50 +1643,52 @@ function TopologyPage() {
     };
   }, [scanId]);
 
-  const { nodes, edges } = useMemo(() => {
-    if (!data) return { nodes: [], edges: [] };
-    const byDepth = {};
-    data.nodes.forEach((n) => {
-      const d = n.depth ?? 0;
-      if (!byDepth[d]) byDepth[d] = [];
-      byDepth[d].push(n);
+  const { nodes, edges, stats } = useMemo(() => {
+    if (!data) return { nodes: [], edges: [], stats: null };
+
+    const { positions, rootId, orphanIds = [] } = buildTreeLayout(data.nodes, data.edges);
+    const orphanSet = new Set(orphanIds);
+
+    const rfNodes = data.nodes.map((n) => {
+      const pos = positions[n.id] || { x: 0, y: 0 };
+      return {
+        id: String(n.id),
+        type: "topology",
+        position: pos,
+        data: {
+          url: n.url,
+          hostname: hostnameOf(n.url),
+          shortUrl: shortenUrl(n.url),
+          tone: n.tone,
+          finding_count: n.finding_count,
+          max_severity: n.max_severity,
+          blocked: n.blocked,
+          isRoot: n.id === rootId,
+          isOrphan: orphanSet.has(n.id),
+        },
+        sourcePosition: Position.Right,
+        targetPosition: Position.Left,
+      };
     });
-    const depths = Object.keys(byDepth).map(Number).sort((a, b) => a - b);
-    const rfNodes = [];
-    depths.forEach((d) => {
-      const layer = byDepth[d];
-      layer.forEach((n, i) => {
-        rfNodes.push({
-          id: String(n.id),
-          position: { x: d * 260, y: i * 110 - ((layer.length - 1) * 110) / 2 },
-          data: {
-            label: (
-              <div className={`topology-node tone-${n.tone}`}>
-                <div className="topology-node-url" title={n.url}>
-                  {shortenUrl(n.url)}
-                </div>
-                <div className="topology-node-meta">
-                  {n.blocked
-                    ? "⛔ 被阻擋"
-                    : n.finding_count > 0
-                      ? `${n.finding_count} 個 finding · ${n.max_severity}`
-                      : "✓ 無 finding"}
-                </div>
-              </div>
-            ),
-          },
-          className: `topology-rf-node tone-${n.tone}`,
-        });
-      });
-    });
+
     const rfEdges = data.edges.map((e, i) => ({
       id: `e${i}-${e.source}-${e.target}`,
       source: String(e.source),
       target: String(e.target),
       type: "smoothstep",
       animated: false,
+      markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16, color: "rgba(56,189,248,0.7)" },
+      style: { stroke: "rgba(56, 189, 248, 0.55)", strokeWidth: 1.6 },
     }));
-    return { nodes: rfNodes, edges: rfEdges };
+
+    const summary = {
+      total: data.nodes.length,
+      with_findings: data.nodes.filter((n) => n.finding_count > 0).length,
+      blocked: data.nodes.filter((n) => n.blocked).length,
+      orphans: orphanIds.length,
+    };
+
+    return { nodes: rfNodes, edges: rfEdges, stats: summary };
   }, [data]);
 
   function handleNodeClick(_, node) {
@@ -1580,30 +1720,60 @@ function TopologyPage() {
   return (
     <section className="topology-panel">
       <header className="topology-header">
-        <h2>掃描拓撲圖</h2>
+        <div className="topology-title-row">
+          <h2>網站拓撲圖</h2>
+          <span className="topology-host-pill">{hostnameOf(data.nodes[0]?.url || "")}</span>
+        </div>
         <p className="hint-text">
-          節點 = 頁面（顏色按該頁 finding 嚴重度），邊 = 頁面間連結。
-          點任一節點可跳回詳情報告該頁。
+          以首頁為根節點，沿著實際連結往外分支。節點顏色代表該頁問題嚴重度；點任一節點跳回詳情報告該頁。
         </p>
+        {stats ? (
+          <div className="topology-stats">
+            <span className="topology-stat-chip"><strong>{stats.total}</strong> 頁</span>
+            <span className="topology-stat-chip tone-bad"><strong>{stats.with_findings}</strong> 頁有問題</span>
+            <span className="topology-stat-chip tone-medium"><strong>{stats.blocked}</strong> 被阻擋</span>
+            {stats.orphans > 0 ? (
+              <span className="topology-stat-chip"><strong>{stats.orphans}</strong> 孤立頁（無入口連結）</span>
+            ) : null}
+          </div>
+        ) : null}
         <div className="topology-legend">
           <span className="legend-chip tone-good">✓ 無問題</span>
           <span className="legend-chip tone-medium">中度問題</span>
           <span className="legend-chip tone-bad">高/嚴重問題</span>
+          <span className="legend-chip">🏠 首頁（根）</span>
+          <span className="legend-chip">📍 孤立頁</span>
         </div>
       </header>
       <div className="topology-canvas">
         <ReactFlow
           nodes={nodes}
           edges={edges}
+          nodeTypes={TOPOLOGY_NODE_TYPES}
           onNodeClick={handleNodeClick}
           fitView
+          fitViewOptions={{ padding: 0.2 }}
           nodesDraggable
+          nodesConnectable={false}
           minZoom={0.2}
           maxZoom={1.5}
           proOptions={{ hideAttribution: true }}
+          defaultEdgeOptions={{ type: "smoothstep" }}
         >
-          <Controls />
-          <Background gap={24} size={1} />
+          <Controls showInteractive={false} />
+          <MiniMap
+            zoomable
+            pannable
+            nodeColor={(n) => {
+              const tone = n.data?.tone;
+              if (tone === "bad") return "#fda4af";
+              if (tone === "medium") return "#fcd34d";
+              return "#86efac";
+            }}
+            nodeStrokeWidth={2}
+            maskColor="rgba(15, 23, 42, 0.08)"
+          />
+          <Background gap={24} size={1} color="rgba(148, 163, 184, 0.35)" />
         </ReactFlow>
       </div>
     </section>
