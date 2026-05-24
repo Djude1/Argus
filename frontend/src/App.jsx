@@ -337,6 +337,52 @@ function ScanStatusBadge({ status }) {
   );
 }
 
+// 四階段進度條：等待 → 爬取 → 掃描 → Agent 測試 → 完成
+const CRAWL_PHASES = [
+  { key: "queued", label: "等待", emoji: "⏳" },
+  { key: "crawling", label: "爬取", emoji: "🕷️" },
+  { key: "scanning", label: "掃描", emoji: "🔍" },
+  { key: "agent_testing", label: "Agent", emoji: "🤖" },
+];
+
+function CrawlingAnimation({ status, hint, compact = false }) {
+  const currentIdx = CRAWL_PHASES.findIndex((p) => p.key === status);
+  const safeIdx = currentIdx >= 0 ? currentIdx : 0;
+  const current = CRAWL_PHASES[safeIdx] || CRAWL_PHASES[0];
+
+  return (
+    <div className={`crawl-anim ${compact ? "is-compact" : ""}`}>
+      <div className="crawl-anim-header">
+        <span className="crawl-anim-spider" aria-hidden="true">{current.emoji}</span>
+        <div className="crawl-anim-text">
+          <div className="crawl-anim-title">{current.label}中...</div>
+          {hint ? <div className="crawl-anim-hint">{hint}</div> : null}
+        </div>
+        <span className="crawl-anim-spinner" aria-hidden="true" />
+      </div>
+      <div className="crawl-progress" role="progressbar" aria-label="掃描進度">
+        <div className="crawl-progress-bar" />
+      </div>
+      <ol className="crawl-phases">
+        {CRAWL_PHASES.map((phase, idx) => {
+          let cls = "phase-pending";
+          if (idx < safeIdx) cls = "phase-done";
+          else if (idx === safeIdx) cls = "phase-active";
+          return (
+            <li key={phase.key} className={`crawl-phase ${cls}`}>
+              <span className="crawl-phase-dot" />
+              <span className="crawl-phase-emoji" aria-hidden="true">
+                {idx < safeIdx ? "✓" : phase.emoji}
+              </span>
+              <span className="crawl-phase-label">{phase.label}</span>
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
+}
+
 function ScoreBadge({ score }) {
   if (score === null || score === undefined) {
     return <span className="score-badge muted">尚無分數</span>;
@@ -684,12 +730,17 @@ function ScanList({ scans, onRefresh }) {
               : null;
           return (
             <button
-              className={`scan-card tone-${tone} ${activeId === scan.id ? "active" : ""}`}
+              className={`scan-card tone-${tone} ${activeId === scan.id ? "active" : ""} ${
+                isInProgress(scan.status) ? "is-in-progress" : ""
+              }`}
               key={scan.id}
               type="button"
               onClick={() => navigate(`/scans/${scan.id}`)}
             >
               <span className={`scan-card-stripe tone-${tone}`} aria-hidden="true" />
+              {isInProgress(scan.status) && (
+                <span className="scan-card-progress-shimmer" aria-hidden="true" />
+              )}
               <div className="scan-card-body">
                 <p className="scan-card-origin" title={scan.origin}>
                   {scan.origin.replace(/^https?:\/\//, "")}
@@ -967,13 +1018,15 @@ function ScreenshotCanvas({ scan, targetPage, findings, selectedFinding, onSelec
         </div>
       )}
       {!imageUrl && (
-        <p className="hint-text">
-          {isInProgress(scan?.status)
-            ? "正在爬取頁面...截圖完成後會顯示在此。"
-            : targetPage
+        isInProgress(scan?.status) ? (
+          <CrawlingAnimation status={scan.status} hint="截圖完成後會自動顯示在此" compact />
+        ) : (
+          <p className="hint-text">
+            {targetPage
               ? "此頁面沒有可用截圖（可能被 robots.txt 阻擋或回 4xx/5xx）。"
               : "掃描完成並產生截圖後會顯示在此。"}
-        </p>
+          </p>
+        )
       )}
       {imageUrl && (
         <div className="relative inline-block">
@@ -1184,15 +1237,17 @@ function FindingsWorkspace({ scan }) {
       </div>
 
       {isInProgress(scan.status) && (
-        <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
-          🔄 掃描進行中，畫面每 {SCAN_POLL_INTERVAL_MS / 1000} 秒自動更新。
-          可以離開此頁、切換到其他掃描或登出，背景作業會繼續執行。
-          <p className="mt-1 text-xs">
-            ℹ️ 為避免無意義的建議，後台路徑（/admin、/wp-admin、/dashboard 等）會跳過 SEO/AEO/GEO 評分（安全頭部與 CSRF 仍會檢查）；
-            .apk、.zip、.pdf、圖片等下載連結不會列入頁面分析。
+        <div className="mb-4 space-y-2">
+          <CrawlingAnimation
+            status={scan.status}
+            hint={`畫面每 ${SCAN_POLL_INTERVAL_MS / 1000} 秒自動更新；可離開此頁，背景會繼續執行`}
+          />
+          <p className="text-xs text-slate-500">
+            ℹ️ 為避免無意義的建議，後台路徑（/admin、/wp-admin、/dashboard 等）會跳過 SEO/AEO/GEO
+            評分（安全頭部與 CSRF 仍會檢查）；.apk、.zip、.pdf、圖片等下載連結不會列入頁面分析。
           </p>
           {scan.warning_summary && scan.warning_summary.blocked_urls?.length > 0 && (
-            <p className="mt-1 text-xs">
+            <p className="text-xs text-amber-700">
               已偵測到 {scan.warning_summary.blocked_urls.length} 個被阻擋的 URL（403/429/robots.txt）。
             </p>
           )}
