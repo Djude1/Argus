@@ -4,6 +4,7 @@ from celery import shared_task
 from django.conf import settings
 from django.utils import timezone
 
+from apps.scans.active_probes import run_active_probes
 from apps.scans.crawler import crawl_site
 from apps.scans.models import Finding, Page, ScanJob
 from apps.scans.scanners import (
@@ -80,6 +81,19 @@ def run_scan_job(self, scan_job_id: int) -> dict:
         for finding in site_findings:
             Finding.objects.create(scan_job=scan_job, page=None, **finding)
         all_findings.extend(site_findings)
+
+        # T14 主動式資安：只在 active 模式 + 額外授權下執行；RPS 限制由 RateLimitedClient 強制
+        if (
+            scan_job.scan_mode == ScanJob.ScanMode.ACTIVE
+            and scan_job.active_testing_authorized
+        ):
+            active_findings = run_active_probes(
+                origin=scan_job.origin,
+                pages=scan_job.pages.all(),
+            )
+            for finding in active_findings:
+                Finding.objects.create(scan_job=scan_job, page=None, **finding)
+            all_findings.extend(active_findings)
 
         # Phase 2：可選的 Hermes-Agent 動態 UX 測試
         # 預設 ARGUS_AGENT_ENABLED=False；只在使用者明確啟用時才跑，避免每次掃描都消耗 LLM token。
