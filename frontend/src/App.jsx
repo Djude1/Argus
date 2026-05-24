@@ -650,6 +650,16 @@ function ScanList({ scans, onRefresh }) {
               🔄 {inProgressCount} 個進行中，畫面每 {LIST_POLL_INTERVAL_MS / 1000} 秒自動更新
             </p>
           )}
+          <p className="mt-1 text-[11px] text-slate-500">
+            同網址僅顯示最新一次掃描。
+            <button
+              type="button"
+              className="ml-1 underline hover:text-blue-600"
+              onClick={() => navigate("/history")}
+            >
+              查看歷史 →
+            </button>
+          </p>
         </div>
         <button className="secondary-button" type="button" onClick={onRefresh}>
           重新整理
@@ -2229,13 +2239,18 @@ function HistoryPage() {
                 </div>
               )}
               <ul className="history-list">
-                {origin.scans.slice(0, 5).map((s) => (
+                {origin.scans.slice(0, 5).map((s, idx) => (
                   <li key={s.id}>
                     <button
-                      className="history-row"
+                      className={`history-row ${idx === 0 ? "is-latest" : "is-older"}`}
                       type="button"
                       onClick={() => navigate(`/scans/${s.id}`)}
                     >
+                      {idx === 0 ? (
+                        <span className="history-latest-chip" aria-label="最新">
+                          ✨ 最新
+                        </span>
+                      ) : null}
                       <span className="text-xs text-slate-500">
                         {new Date(s.created_at).toLocaleString("zh-Hant")}
                       </span>

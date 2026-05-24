@@ -2,7 +2,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 from django.conf import settings
-from django.db.models import Avg, Count
+from django.db.models import Avg, Count, Max
 from django.http import FileResponse, Http404
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
@@ -28,11 +28,18 @@ from apps.scans.services import get_client_ip
 from apps.scans.tasks import run_scan_job
 
 
+def _truthy(value):
+    """寬鬆判斷 query string 真值。"""
+    if value is None:
+        return False
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 class ScanJobViewSet(viewsets.ModelViewSet):
     http_method_names = ["get", "post", "head", "options"]
 
     def get_queryset(self):
-        return (
+        qs = (
             ScanJob.objects.filter(user=self.request.user)
             .annotate(
                 findings_count=Count("findings", distinct=True),
@@ -40,6 +47,20 @@ class ScanJobViewSet(viewsets.ModelViewSet):
             )
             .order_by("-created_at")
         )
+        # 列表預設「每個 origin 只回最新一筆」；舊掃描透過 /api/history/ 取得。
+        # detail / status / topology / report / screenshot 等動作仍走 self.queryset 不受影響。
+        # 加 ?include_history=true 可覆寫，給歷史頁或 admin 使用。
+        if self.action == "list" and not _truthy(
+            self.request.query_params.get("include_history")
+        ):
+            latest_ids = (
+                ScanJob.objects.filter(user=self.request.user)
+                .values("origin")
+                .annotate(latest_id=Max("id"))
+                .values_list("latest_id", flat=True)
+            )
+            qs = qs.filter(id__in=list(latest_ids))
+        return qs
 
     def get_serializer_class(self):
         if self.action == "create":
