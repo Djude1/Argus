@@ -6,10 +6,13 @@ import {
   Outlet,
   Route,
   Routes,
+  useLocation,
   useNavigate,
   useParams,
   useSearchParams,
 } from "react-router-dom";
+import ReactFlow, { Background, Controls } from "reactflow";
+import "reactflow/dist/style.css";
 
 import { api } from "./api";
 import { useArgusStore } from "./store";
@@ -1355,8 +1358,10 @@ function RequireAuth({ children }) {
 //   detail-mode（/scans/:id）：sidebar 縮為 drawer overlay，主內容拿到全寬讓截圖變大。
 function ScanLayout() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { scanId } = useParams();
   const isDetailPage = Boolean(scanId);
+  const isTopologyPage = isDetailPage && location.pathname.endsWith("/topology");
   const [scans, setScans] = useState([]);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -1429,6 +1434,23 @@ function ScanLayout() {
             >
               ← 回到掃描列表
             </button>
+            {isTopologyPage ? (
+              <button
+                type="button"
+                className="back-to-list-button"
+                onClick={() => navigate(`/scans/${scanId}`)}
+              >
+                📋 回詳情報告
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="back-to-list-button"
+                onClick={() => navigate(`/scans/${scanId}/topology`)}
+              >
+                🌐 拓撲圖
+              </button>
+            )}
           </div>
         )}
         <Outlet />
@@ -1449,6 +1471,142 @@ function LoginPage() {
     <div className="mx-auto max-w-md">
       <LoginForm />
     </div>
+  );
+}
+
+function shortenUrl(url) {
+  try {
+    const u = new URL(url);
+    const tail = (u.pathname + u.search) || "/";
+    return tail.length > 28 ? `${tail.slice(0, 25)}...` : tail;
+  } catch {
+    return url.slice(0, 28);
+  }
+}
+
+function TopologyPage() {
+  const { scanId } = useParams();
+  const navigate = useNavigate();
+  const [data, setData] = useState(null);
+  const [loadError, setLoadError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .get(`/scans/${scanId}/topology/`)
+      .then((r) => {
+        if (!cancelled) setData(r.data);
+      })
+      .catch(() => {
+        if (!cancelled) setLoadError("無法載入拓撲資料，可能掃描尚未完成或無權限。");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [scanId]);
+
+  const { nodes, edges } = useMemo(() => {
+    if (!data) return { nodes: [], edges: [] };
+    const byDepth = {};
+    data.nodes.forEach((n) => {
+      const d = n.depth ?? 0;
+      if (!byDepth[d]) byDepth[d] = [];
+      byDepth[d].push(n);
+    });
+    const depths = Object.keys(byDepth).map(Number).sort((a, b) => a - b);
+    const rfNodes = [];
+    depths.forEach((d) => {
+      const layer = byDepth[d];
+      layer.forEach((n, i) => {
+        rfNodes.push({
+          id: String(n.id),
+          position: { x: d * 260, y: i * 110 - ((layer.length - 1) * 110) / 2 },
+          data: {
+            label: (
+              <div className={`topology-node tone-${n.tone}`}>
+                <div className="topology-node-url" title={n.url}>
+                  {shortenUrl(n.url)}
+                </div>
+                <div className="topology-node-meta">
+                  {n.blocked
+                    ? "⛔ 被阻擋"
+                    : n.finding_count > 0
+                      ? `${n.finding_count} 個 finding · ${n.max_severity}`
+                      : "✓ 無 finding"}
+                </div>
+              </div>
+            ),
+          },
+          className: `topology-rf-node tone-${n.tone}`,
+        });
+      });
+    });
+    const rfEdges = data.edges.map((e, i) => ({
+      id: `e${i}-${e.source}-${e.target}`,
+      source: String(e.source),
+      target: String(e.target),
+      type: "smoothstep",
+      animated: false,
+    }));
+    return { nodes: rfNodes, edges: rfEdges };
+  }, [data]);
+
+  function handleNodeClick(_, node) {
+    navigate(`/scans/${scanId}?page=${node.id}`);
+  }
+
+  if (loadError) {
+    return (
+      <section className="panel">
+        <p className="error-text">{loadError}</p>
+      </section>
+    );
+  }
+  if (!data) {
+    return (
+      <section className="panel">
+        <p className="hint-text">載入拓撲資料中...</p>
+      </section>
+    );
+  }
+  if (data.nodes.length === 0) {
+    return (
+      <section className="panel">
+        <p className="hint-text">本次掃描沒有可顯示的頁面節點（爬蟲未產生任何 Page）。</p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="topology-panel">
+      <header className="topology-header">
+        <h2>掃描拓撲圖</h2>
+        <p className="hint-text">
+          節點 = 頁面（顏色按該頁 finding 嚴重度），邊 = 頁面間連結。
+          點任一節點可跳回詳情報告該頁。
+        </p>
+        <div className="topology-legend">
+          <span className="legend-chip tone-good">✓ 無問題</span>
+          <span className="legend-chip tone-medium">中度問題</span>
+          <span className="legend-chip tone-bad">高/嚴重問題</span>
+        </div>
+      </header>
+      <div className="topology-canvas">
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          onNodeClick={handleNodeClick}
+          fitView
+          nodesDraggable
+          minZoom={0.2}
+          maxZoom={1.5}
+          proOptions={{ hideAttribution: true }}
+        >
+          <Controls />
+          <Background gap={24} size={1} />
+        </ReactFlow>
+      </div>
+    </section>
   );
 }
 
@@ -2191,6 +2349,7 @@ export default function App() {
           >
             <Route path="/scans" element={<ScansPlaceholder />} />
             <Route path="/scans/:scanId" element={<ScanDetailPage />} />
+            <Route path="/scans/:scanId/topology" element={<TopologyPage />} />
           </Route>
           <Route
             path="/history"

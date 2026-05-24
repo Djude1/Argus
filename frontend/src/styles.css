@@ -1215,4 +1215,97 @@
   .stat-tile {
     animation: fade-up 0.4s ease-out;
   }
+
+  /* ========================================
+     T15 拓撲圖頁面（React Flow）
+     ======================================== */
+
+  .topology-panel {
+    @apply flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4;
+  }
+
+  .topology-header {
+    @apply space-y-2;
+  }
+
+  .topology-header h2 {
+    @apply text-lg font-bold text-slate-900;
+  }
+
+  .topology-legend {
+    @apply flex flex-wrap gap-2;
+  }
+
+  .legend-chip {
+    @apply rounded-full px-3 py-1 text-xs font-semibold;
+  }
+
+  .legend-chip.tone-good {
+    @apply bg-emerald-100 text-emerald-700;
+  }
+
+  .legend-chip.tone-medium {
+    @apply bg-amber-100 text-amber-800;
+  }
+
+  .legend-chip.tone-bad {
+    @apply bg-red-100 text-red-700;
+  }
+
+  .topology-canvas {
+    @apply rounded-xl border border-slate-200 bg-slate-50;
+    height: 70vh;
+    min-height: 480px;
+  }
+
+  /* React Flow 節點外殼：tone 配色透過 className 注入 */
+  .topology-rf-node .react-flow__node-default,
+  .topology-rf-node > div {
+    @apply rounded-xl border-2 px-3 py-2 text-xs shadow-sm transition;
+    min-width: 180px;
+    background: #fff;
+  }
+
+  .topology-rf-node.tone-good .react-flow__node-default,
+  .topology-rf-node.tone-good {
+    border-color: var(--tone-good);
+    box-shadow: 0 0 8px rgba(52, 211, 153, 0.25);
+  }
+
+  .topology-rf-node.tone-medium .react-flow__node-default,
+  .topology-rf-node.tone-medium {
+    border-color: var(--tone-medium);
+    box-shadow: 0 0 8px rgba(251, 191, 36, 0.3);
+  }
+
+  .topology-rf-node.tone-bad .react-flow__node-default,
+  .topology-rf-node.tone-bad {
+    border-color: var(--tone-bad);
+    box-shadow: 0 0 10px rgba(251, 113, 133, 0.35);
+  }
+
+  .topology-rf-node:hover {
+    transform: translateY(-1px);
+  }
+
+  .topology-node {
+    @apply flex flex-col gap-1;
+  }
+
+  .topology-node-url {
+    @apply truncate font-mono text-xs font-semibold text-slate-900;
+    max-width: 200px;
+  }
+
+  .topology-node-meta {
+    @apply text-[10px] text-slate-500;
+  }
+
+  .topology-node.tone-bad .topology-node-meta {
+    @apply text-red-600;
+  }
+
+  .topology-node.tone-medium .topology-node-meta {
+    @apply text-amber-700;
+  }
 }
