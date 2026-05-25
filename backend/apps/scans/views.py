@@ -9,12 +9,12 @@ from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from apps.billing.services import get_or_create_wallet, refund_full_for_scan
 from apps.scans.models import (
     AuthorizationConsent,
     Finding,
     Page,
     ScanJob,
-    UserScanQuota,
 )
 from apps.scans.reports import build_scan_report
 from apps.scans.serializers import (
@@ -132,6 +132,8 @@ class ScanJobViewSet(viewsets.ModelViewSet):
             )
         scan_job.status = ScanJob.Status.CANCELLED
         scan_job.save(update_fields=["status", "updated_at"])
+        # 立即退回該 scan 預扣的 coin（worker 那邊也會再做一次，refund 函式本身冪等）
+        refund_full_for_scan(scan_job.user, scan_job, reason="取消")
         return Response(ScanJobSerializer(scan_job).data)
 
     @action(detail=True, methods=["get"])
@@ -280,8 +282,7 @@ def dashboard_summary(request):
         for s in scans.order_by("-created_at")[:5]
     ]
 
-    quota, _ = UserScanQuota.objects.get_or_create(user=user)
-    quota_used = quota.consumed_this_month()
+    wallet = get_or_create_wallet(user)
 
     severity_count = (
         Finding.objects.filter(scan_job__user=user)
@@ -299,10 +300,10 @@ def dashboard_summary(request):
             "category_averages": category_avg,
             "severity_totals": severity_totals,
             "recent_scans": recent,
-            "quota": {
-                "monthly_limit": quota.monthly_limit,
-                "used_this_month": quota_used,
-                "remaining": max(quota.monthly_limit - quota_used, 0),
+            "wallet": {
+                "balance": wallet.balance,
+                "total_purchased_ntd": wallet.total_purchased_ntd,
+                "total_scans_used": wallet.total_scans_used,
             },
         }
     )

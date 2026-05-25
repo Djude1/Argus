@@ -2,11 +2,14 @@ import os
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token
 from rest_framework import permissions, status, views
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
+
+from apps.billing.services import grant_monthly_bonus_if_needed
 
 
 class GoogleLoginView(views.APIView):
@@ -62,6 +65,10 @@ class GoogleLoginView(views.APIView):
                 "last_name": (info.get("family_name") or "")[:150],
             },
         )
+        # 每次登入：更新最後登入時間 + 本月若未領則自動補發 200 coin
+        user.last_login = timezone.now()
+        user.save(update_fields=["last_login"])
+        grant_monthly_bonus_if_needed(user)
         refresh = RefreshToken.for_user(user)
         return Response(
             {"access": str(refresh.access_token), "refresh": str(refresh)},

@@ -38,6 +38,8 @@ DEBUG = env_bool("DJANGO_DEBUG", default=False)
 ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1")
 
 INSTALLED_APPS = [
+    # jazzmin 必須在 django.contrib.admin 之前才能套用主題
+    "jazzmin",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -50,6 +52,9 @@ INSTALLED_APPS = [
     "apps.accounts",
     "apps.scans",
     "apps.agent",
+    "apps.billing",
+    "apps.reviews",
+    "apps.admin_api",
 ]
 
 MIDDLEWARE = [
@@ -155,3 +160,96 @@ ARGUS_AGENT_ENABLED = env_bool("ARGUS_AGENT_ENABLED", default=False)
 # Google OAuth Client ID（從 Google Cloud Console > Credentials 取得）
 # 一般使用者透過 Google 帳號登入時用於驗證 ID Token；空字串代表未啟用
 GOOGLE_OAUTH_CLIENT_ID = os.getenv("GOOGLE_OAUTH_CLIENT_ID", "")
+
+# 點數制度（取代舊的 UserScanQuota 月次數配額）
+# - 每月自動發放給所有使用者的贈點
+# - 每爬一個頁面的單價（建立掃描時以 max_pages × 此值預扣，完成後依實際頁數退差）
+ARGUS_MONTHLY_BONUS_COINS = int(os.getenv("ARGUS_MONTHLY_BONUS_COINS", "200"))
+ARGUS_COIN_PER_PAGE = int(os.getenv("ARGUS_COIN_PER_PAGE", "10"))
+
+# ============================================================
+# django-jazzmin 後台主題：把 Django Admin 變漂亮（深色側邊欄、icon、卡片化）
+# ============================================================
+JAZZMIN_SETTINGS = {
+    "site_title": "Argus 後台",
+    "site_header": "Argus 管理後台",
+    "site_brand": "Argus",
+    "site_logo": None,
+    "site_icon": None,
+    "welcome_sign": "歡迎來到 Argus 管理後台",
+    "copyright": "Argus AI 網站健檢平台",
+    "search_model": [
+        "accounts.User",
+        "scans.ScanJob",
+        "reviews.PlatformReview",
+    ],
+    "topmenu_links": [
+        {"name": "首頁", "url": "admin:index"},
+        {"name": "錢包", "url": "admin:billing_coinwallet_changelist"},
+        {"name": "交易紀錄", "url": "admin:billing_cointransaction_changelist"},
+        {"name": "評論", "url": "admin:reviews_platformreview_changelist"},
+        {"name": "掃描", "url": "admin:scans_scanjob_changelist"},
+    ],
+    "show_sidebar": True,
+    "navigation_expanded": True,
+    "icons": {
+        "auth": "fas fa-users-cog",
+        "auth.user": "fas fa-user",
+        "auth.Group": "fas fa-users",
+        "accounts.User": "fas fa-user-shield",
+        "billing": "fas fa-coins",
+        "billing.CoinWallet": "fas fa-wallet",
+        "billing.CoinTransaction": "fas fa-exchange-alt",
+        "billing.PricingPlan": "fas fa-tags",
+        "reviews": "fas fa-star-half-alt",
+        "reviews.PlatformReview": "fas fa-star",
+        "scans": "fas fa-search",
+        "scans.ScanJob": "fas fa-spider",
+        "scans.Finding": "fas fa-bug",
+        "scans.Page": "fas fa-file-alt",
+        "scans.AuthorizationConsent": "fas fa-shield-alt",
+        "scans.AgentSession": "fas fa-robot",
+        "scans.AgentStep": "fas fa-shoe-prints",
+    },
+    "default_icon_parents": "fas fa-chevron-circle-right",
+    "default_icon_children": "fas fa-circle",
+    "related_modal_active": True,
+    "changeform_format": "horizontal_tabs",
+    "changeform_format_overrides": {
+        "accounts.user": "collapsible",
+    },
+    "show_ui_builder": False,
+    "language_chooser": False,
+}
+
+JAZZMIN_UI_TWEAKS = {
+    "navbar_small_text": False,
+    "footer_small_text": False,
+    "body_small_text": False,
+    "brand_small_text": False,
+    "brand_colour": "navbar-indigo",
+    "accent": "accent-info",
+    "navbar": "navbar-indigo navbar-dark",
+    "no_navbar_border": False,
+    "navbar_fixed": True,
+    "layout_boxed": False,
+    "footer_fixed": False,
+    "sidebar_fixed": True,
+    "sidebar": "sidebar-dark-indigo",
+    "sidebar_nav_small_text": False,
+    "sidebar_disable_expand": False,
+    "sidebar_nav_child_indent": True,
+    "sidebar_nav_compact_style": False,
+    "sidebar_nav_legacy_style": False,
+    "sidebar_nav_flat_style": False,
+    "theme": "flatly",
+    "default_theme_mode": "auto",
+    "button_classes": {
+        "primary": "btn-primary",
+        "secondary": "btn-secondary",
+        "info": "btn-info",
+        "warning": "btn-warning",
+        "danger": "btn-danger",
+        "success": "btn-success",
+    },
+}

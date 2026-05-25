@@ -1,0 +1,119 @@
+from django.conf import settings
+from django.core.exceptions import ValidationError
+from django.db import models
+
+
+class CoinWallet(models.Model):
+    """使用者點數錢包（一對一綁定 User）。
+
+    `balance` 為當前可用點數；`total_purchased_ntd` 為累積實際花費新台幣金額；
+    `total_scans_used` 為累積完成的掃描次數；`last_bonus_year/month` 用於每月贈點冪等。
+    """
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="coin_wallet",
+    )
+    balance = models.PositiveIntegerField(default=0)
+    total_purchased_ntd = models.PositiveIntegerField(default=0)
+    total_scans_used = models.PositiveIntegerField(default=0)
+    # 月贈點冪等用：記錄最近一次發放的年份與月份，避免同月重複發放
+    last_bonus_year = models.PositiveSmallIntegerField(null=True, blank=True)
+    last_bonus_month = models.PositiveSmallIntegerField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["user__username"]
+
+    def __str__(self) -> str:
+        return f"{self.user.username} wallet={self.balance}c"
+
+
+class PricingPlan(models.Model):
+    """購點方案（4 個固定方案）。"""
+
+    code = models.SlugField(max_length=32, unique=True)
+    name = models.CharField(max_length=64)
+    price_ntd = models.PositiveIntegerField()
+    coin_amount = models.PositiveIntegerField()
+    # 用於前端顯示的標籤，例如「最熱門」「-32%」；不影響邏輯
+    badge = models.CharField(max_length=32, blank=True)
+    description = models.CharField(max_length=255, blank=True)
+    sort_order = models.PositiveSmallIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["sort_order", "price_ntd"]
+
+    def clean(self) -> None:
+        if self.coin_amount < 1:
+            raise ValidationError("coin_amount 必須大於 0")
+        if self.price_ntd < 1:
+            raise ValidationError("price_ntd 必須大於 0")
+
+    def __str__(self) -> str:
+        return f"{self.name} (NT${self.price_ntd}={self.coin_amount}c)"
+
+
+class CoinTransaction(models.Model):
+    """每一筆 coin 異動的審計紀錄（不可竄改）。
+
+    `amount` 為正負整數（正 = 加點、負 = 扣點）；`balance_after` 是異動後餘額快照，
+    供前後台直接顯示對帳，不用每次重算。
+    """
+
+    class Kind(models.TextChoices):
+        MONTHLY_BONUS = "monthly_bonus", "每月贈點"
+        PURCHASE = "purchase", "購買"
+        SCAN_HOLD = "scan_hold", "掃描預扣"
+        SCAN_REFUND = "scan_refund", "掃描退款"
+        ADMIN_ADJUST = "admin_adjust", "管理員調整"
+
+    wallet = models.ForeignKey(
+        CoinWallet,
+        on_delete=models.CASCADE,
+        related_name="transactions",
+    )
+    amount = models.IntegerField()  # 正 = 入帳；負 = 扣款
+    kind = models.CharField(max_length=32, choices=Kind.choices, db_index=True)
+    balance_after = models.PositiveIntegerField()
+    scan_job = models.ForeignKey(
+        "scans.ScanJob",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="coin_transactions",
+    )
+    plan = models.ForeignKey(
+        PricingPlan,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="transactions",
+    )
+    admin_actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="admin_coin_actions",
+    )
+    note = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["wallet", "created_at"]),
+            models.Index(fields=["kind", "created_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"{self.wallet.user.username} {self.kind} "
+            f"{self.amount:+d} -> {self.balance_after}"
+        )

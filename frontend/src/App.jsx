@@ -578,8 +578,17 @@ function LoginForm() {
 }
 
 function AccountBar() {
-  const { accessToken, setToken } = useArgusStore();
+  const { accessToken, setToken, wallet, fetchWallet, me, fetchMe } = useArgusStore();
   const navigate = useNavigate();
+  // 登入後立刻載入錢包與 me；其他頁面更新（購點、扣 coin）會另外觸發 fetchWallet
+  useEffect(() => {
+    if (accessToken && !wallet) {
+      fetchWallet();
+    }
+    if (accessToken && !me) {
+      fetchMe();
+    }
+  }, [accessToken, wallet, fetchWallet, me, fetchMe]);
   if (!accessToken) {
     return null;
   }
@@ -587,9 +596,32 @@ function AccountBar() {
     setToken(null);
     navigate("/login");
   }
+  const balance = wallet?.balance;
   return (
     <div className="account-bar">
-      <span className="text-sm text-slate-600">已登入</span>
+      {me?.is_staff && (
+        <button
+          className="admin-entry-chip"
+          type="button"
+          onClick={() => navigate("/admin/overview")}
+          title="進入管理後台"
+        >
+          <span aria-hidden="true">🛡️</span>
+          <span>後台</span>
+        </button>
+      )}
+      <button
+        className="coin-chip"
+        type="button"
+        onClick={() => navigate("/billing")}
+        title="前往購點"
+      >
+        <span className="coin-chip-icon" aria-hidden="true">💎</span>
+        <span className="coin-chip-value">
+          {balance === undefined ? "—" : balance.toLocaleString()}
+        </span>
+        <span className="coin-chip-unit">coin</span>
+      </button>
       <button className="secondary-button" type="button" onClick={handleLogout}>
         登出
       </button>
@@ -634,8 +666,17 @@ function ScanJobForm({ onCreated }) {
   );
   const [activeMode, setActiveMode] = useState(initial.activeMode || false);
   const [activeAuthorized, setActiveAuthorized] = useState(initial.activeAuthorized || false);
+  const [maxPages, setMaxPages] = useState(initial.maxPages || 50);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const navigate = useNavigate();
+  const wallet = useArgusStore((s) => s.wallet);
+  const fetchWallet = useArgusStore((s) => s.fetchWallet);
+
+  const coinPerPage = wallet?.coin_per_page ?? 10;
+  const estimatedCost = Math.max(1, Number(maxPages) || 0) * coinPerPage;
+  const balance = wallet?.balance ?? 0;
+  const insufficient = balance < estimatedCost;
 
   // 任何欄位改變都即時存草稿，使用者真的不小心 F5 也不會白打
   useEffect(() => {
@@ -645,8 +686,9 @@ function ScanJobForm({ onCreated }) {
       thirdPartyReconfirmed,
       activeMode,
       activeAuthorized,
+      maxPages,
     });
-  }, [url, authorizationConfirmed, thirdPartyReconfirmed, activeMode, activeAuthorized]);
+  }, [url, authorizationConfirmed, thirdPartyReconfirmed, activeMode, activeAuthorized, maxPages]);
 
   // 提交中時，瀏覽器原生攔截 F5 / 關閉分頁
   useEffect(() => {
@@ -670,6 +712,7 @@ function ScanJobForm({ onCreated }) {
         third_party_reconfirmed: thirdPartyReconfirmed,
         scan_mode: activeMode ? "active" : "passive",
         active_testing_authorized: activeMode && activeAuthorized,
+        max_pages: Math.max(1, Number(maxPages) || 50),
       });
       // 成功後清空欄位與草稿
       setUrl("");
@@ -677,10 +720,17 @@ function ScanJobForm({ onCreated }) {
       setThirdPartyReconfirmed(false);
       setActiveMode(false);
       setActiveAuthorized(false);
+      setMaxPages(50);
       clearScanDraft();
+      // 預扣已發生，更新錢包餘額
+      fetchWallet();
       onCreated(response.data);
     } catch (errorResponse) {
-      setError(JSON.stringify(errorResponse.response?.data || "建立掃描失敗。"));
+      const data = errorResponse.response?.data;
+      // 後端 coin 不足會回 {coin: "..."}；其他情境保留 JSON
+      setError(
+        (data && (data.coin || data.detail)) || JSON.stringify(data || "建立掃描失敗。"),
+      );
     } finally {
       setSubmitting(false);
     }
@@ -701,6 +751,42 @@ function ScanJobForm({ onCreated }) {
         value={url}
         onChange={(event) => setUrl(event.target.value)}
       />
+      <div>
+        <label className="text-xs text-slate-500" htmlFor="scan-max-pages">
+          最大頁數（影響預扣 coin）
+        </label>
+        <input
+          id="scan-max-pages"
+          className="input"
+          type="number"
+          min="1"
+          max="200"
+          value={maxPages}
+          onChange={(event) => setMaxPages(Number(event.target.value) || 1)}
+        />
+      </div>
+      <div className={`coin-estimate ${insufficient ? "is-insufficient" : ""}`}>
+        <div className="coin-estimate-row">
+          <span>本次掃描預扣</span>
+          <strong>{estimatedCost.toLocaleString()} coin</strong>
+        </div>
+        <div className="coin-estimate-row sub">
+          <span>目前餘額</span>
+          <span>{balance.toLocaleString()} coin</span>
+        </div>
+        {insufficient && (
+          <button
+            className="coin-estimate-cta"
+            type="button"
+            onClick={() => navigate("/billing")}
+          >
+            點數不足，前往購點 →
+          </button>
+        )}
+        <p className="coin-estimate-hint">
+          完成後依實際爬到的頁數退回未使用的 coin；失敗或取消全額退回。
+        </p>
+      </div>
       <label className="checkbox-row">
         <input
           type="checkbox"
@@ -2046,12 +2132,17 @@ const NAV_ITEMS = [
   { to: "/history", label: "歷史", emoji: "📈" },
   { to: "/audit", label: "活動", emoji: "🧾" },
   { to: "/categories", label: "分類", emoji: "🗂️" },
+  { to: "/billing", label: "購點", emoji: "💎" },
+  { to: "/reviews", label: "評論", emoji: "⭐" },
   { to: "/settings", label: "設定", emoji: "⚙️" },
 ];
 
 function TopNav() {
   const accessToken = useArgusStore((state) => state.accessToken);
+  const location = useLocation();
   if (!accessToken) return null;
+  // /admin/* 走獨立 dark sidebar 版面，不顯示前台 TopNav
+  if (location.pathname.startsWith("/admin")) return null;
   return (
     <nav className="argus-nav">
       <div className="argus-nav-inner">
@@ -2182,11 +2273,7 @@ function DashboardPage() {
     );
   }
 
-  const { quota } = data;
-  const quotaPct =
-    quota.monthly_limit > 0
-      ? Math.min(100, (quota.used_this_month / quota.monthly_limit) * 100)
-      : 0;
+  const { wallet } = data;
   const totalFindings = Object.values(data.severity_totals || {}).reduce(
     (sum, n) => sum + n,
     0,
@@ -2201,8 +2288,8 @@ function DashboardPage() {
             你已執行 <span>{data.total_scans}</span> 次健檢
           </h2>
           <p className="dashboard-hero-sub">
-            完成 {data.completed_scans}・失敗 {data.failed_scans}・本月剩餘配額{" "}
-            {quota.remaining}/{quota.monthly_limit}
+            完成 {data.completed_scans}・失敗 {data.failed_scans}・點數餘額{" "}
+            <strong>{wallet?.balance ?? 0}</strong> coin
           </p>
         </div>
         <ScoreRing value={data.average_score} label="平均分" size={120} />
@@ -2216,9 +2303,9 @@ function DashboardPage() {
           tone="cyan"
         />
         <StatTile
-          label="本月已用"
-          value={`${quota.used_this_month} / ${quota.monthly_limit}`}
-          hint={`使用率 ${Math.round(quotaPct)}%`}
+          label="點數餘額"
+          animateValue={wallet?.balance || 0}
+          hint={`累積購買 NT$ ${(wallet?.total_purchased_ntd || 0).toLocaleString()}`}
           tone="violet"
         />
         <StatTile
@@ -2577,20 +2664,368 @@ function CategoriesPage() {
 }
 
 // ============================================================
+// Billing 頁（4 個方案 + 模擬付款）
+// ============================================================
+
+function BillingPage() {
+  const [plans, setPlans] = useState([]);
+  const [busyCode, setBusyCode] = useState("");
+  const [feedback, setFeedback] = useState(null); // {tone, message}
+  const wallet = useArgusStore((s) => s.wallet);
+  const fetchWallet = useArgusStore((s) => s.fetchWallet);
+
+  useEffect(() => {
+    api.get("/billing/plans/").then((r) => setPlans(r.data.plans || [])).catch(() => {});
+    if (!wallet) fetchWallet();
+  }, [wallet, fetchWallet]);
+
+  async function handlePurchase(plan) {
+    setBusyCode(plan.code);
+    setFeedback(null);
+    try {
+      await api.post("/billing/purchase/", { plan_code: plan.code });
+      const updated = await fetchWallet();
+      setFeedback({
+        tone: "good",
+        message: `購買成功！已加入 ${plan.coin_amount} coin，當前餘額 ${
+          updated?.balance ?? "—"
+        } coin`,
+      });
+    } catch (err) {
+      const detail = err?.response?.data?.detail || "購買失敗，請稍後再試。";
+      setFeedback({ tone: "bad", message: detail });
+    } finally {
+      setBusyCode("");
+    }
+  }
+
+  return (
+    <section className="panel space-y-4">
+      <div>
+        <p className="eyebrow">點數商店</p>
+        <h2 className="section-title">購買 Argus 點數</h2>
+        <p className="mt-1 text-sm text-slate-600">
+          點數用於建立掃描；每爬一頁需 {wallet?.coin_per_page ?? 10} coin。
+          建立時依「最大頁數」預扣，完成後依實際頁數退回未使用的點數。
+          每月 1 日自動贈送 200 coin（不需登入也會補發）。
+        </p>
+      </div>
+
+      <div className="billing-balance-card">
+        <div>
+          <div className="text-xs text-slate-500">目前餘額</div>
+          <div className="billing-balance-value">
+            {wallet?.balance?.toLocaleString() ?? "—"} <span>coin</span>
+          </div>
+        </div>
+        <div className="billing-balance-meta">
+          <span>累積購買 NT$ {(wallet?.total_purchased_ntd || 0).toLocaleString()}</span>
+          <span>累計掃描 {wallet?.total_scans_used || 0} 次</span>
+        </div>
+      </div>
+
+      {feedback && (
+        <div className={`billing-feedback tone-${feedback.tone}`}>
+          {feedback.message}
+        </div>
+      )}
+
+      <div className="billing-plan-grid">
+        {plans.map((plan, idx) => {
+          // 將「進階方案」標記為推薦（idx===2）
+          const isRecommended = plan.code === "advanced";
+          return (
+            <div
+              key={plan.code}
+              className={`billing-plan-card ${isRecommended ? "is-recommended" : ""}`}
+            >
+              {plan.badge && (
+                <span className="billing-plan-badge">{plan.badge}</span>
+              )}
+              {isRecommended && (
+                <span className="billing-plan-recommend">★ 推薦</span>
+              )}
+              <h3 className="billing-plan-name">{plan.name}</h3>
+              <p className="billing-plan-coin">
+                {plan.coin_amount.toLocaleString()} <span>coin</span>
+              </p>
+              <p className="billing-plan-price">
+                NT$ {plan.price_ntd.toLocaleString()}
+              </p>
+              <p className="billing-plan-rate">
+                {plan.coin_per_ntd?.toFixed(2)} coin / NT$
+              </p>
+              {plan.description && (
+                <p className="billing-plan-desc">{plan.description}</p>
+              )}
+              <button
+                className="billing-plan-button"
+                type="button"
+                disabled={busyCode === plan.code}
+                onClick={() => handlePurchase(plan)}
+              >
+                {busyCode === plan.code ? "處理中..." : "立即購買"}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      <p className="text-xs text-slate-500">
+        ※ 本系統目前為「模擬付款」模式：點選方案即立即加入點數，不會實際扣款。
+        正式上線後將串接金流。
+      </p>
+
+      <div>
+        <h3 className="text-base font-bold text-slate-900">最近交易</h3>
+        <table className="billing-tx-table">
+          <thead>
+            <tr>
+              <th>時間</th>
+              <th>類型</th>
+              <th>變動</th>
+              <th>餘額</th>
+              <th>備註</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(wallet?.recent_transactions || []).map((tx) => (
+              <tr key={tx.id}>
+                <td>{new Date(tx.created_at).toLocaleString("zh-Hant")}</td>
+                <td>{tx.kind_label}</td>
+                <td className={tx.amount > 0 ? "tx-pos" : "tx-neg"}>
+                  {tx.amount > 0 ? "+" : ""}
+                  {tx.amount}
+                </td>
+                <td>{tx.balance_after}</td>
+                <td className="text-xs text-slate-500">{tx.note}</td>
+              </tr>
+            ))}
+            {!wallet?.recent_transactions?.length && (
+              <tr>
+                <td colSpan="5" className="text-center text-slate-400">
+                  尚無交易紀錄
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+// ============================================================
+// Reviews 頁（Trustpilot 風格：所有人看得到，自己可寫/改）
+// ============================================================
+
+function StarRating({ value, onChange, readOnly = false, size = 24 }) {
+  const stars = [1, 2, 3, 4, 5];
+  return (
+    <div className={`star-rating ${readOnly ? "is-read" : ""}`} role="radiogroup">
+      {stars.map((n) => (
+        <button
+          key={n}
+          type="button"
+          className={`star ${n <= (value || 0) ? "filled" : ""}`}
+          style={{ fontSize: size }}
+          onClick={readOnly ? undefined : () => onChange?.(n)}
+          aria-label={`${n} 星`}
+          disabled={readOnly}
+        >
+          ★
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function ReviewsPage() {
+  const [reviews, setReviews] = useState([]);
+  const [mine, setMine] = useState(null);
+  const [rating, setRating] = useState(0);
+  const [comment, setComment] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [feedback, setFeedback] = useState(null);
+  const accessToken = useArgusStore((s) => s.accessToken);
+
+  async function loadAll() {
+    const list = await api.get("/reviews/").catch(() => null);
+    if (list) setReviews(list.data.reviews || []);
+    if (accessToken) {
+      try {
+        const me = await api.get("/reviews/mine/");
+        setMine(me.data);
+        setRating(me.data.rating);
+        setComment(me.data.comment || "");
+      } catch {
+        setMine(null);
+      }
+    }
+  }
+
+  useEffect(() => {
+    loadAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessToken]);
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    if (!rating) {
+      setFeedback({ tone: "bad", message: "請選擇 1-5 星" });
+      return;
+    }
+    setSubmitting(true);
+    setFeedback(null);
+    try {
+      const response = await api.post("/reviews/mine/", { rating, comment });
+      setMine(response.data);
+      setFeedback({
+        tone: "good",
+        message: response.status === 201 ? "評論已送出，感謝你！" : "評論已更新",
+      });
+      // 重新拉列表
+      const list = await api.get("/reviews/");
+      setReviews(list.data.reviews || []);
+    } catch (err) {
+      const detail =
+        err?.response?.data?.detail ||
+        err?.response?.data?.rating?.[0] ||
+        "送出失敗，請稍後再試。";
+      setFeedback({ tone: "bad", message: detail });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  // 統計：平均星數
+  const total = reviews.length;
+  const avg = total
+    ? (reviews.reduce((s, r) => s + r.rating, 0) / total).toFixed(2)
+    : null;
+  const distribution = [5, 4, 3, 2, 1].map((star) => ({
+    star,
+    count: reviews.filter((r) => r.rating === star).length,
+  }));
+
+  return (
+    <section className="panel space-y-4">
+      <div>
+        <p className="eyebrow">使用者評論</p>
+        <h2 className="section-title">大家對 Argus 的評價</h2>
+      </div>
+
+      <div className="reviews-stats">
+        <div className="reviews-avg">
+          <div className="reviews-avg-value">{avg ?? "—"}</div>
+          <StarRating value={avg ? Math.round(avg) : 0} readOnly size={20} />
+          <p className="reviews-avg-meta">共 {total} 則評論</p>
+        </div>
+        <div className="reviews-distribution">
+          {distribution.map((d) => {
+            const pct = total ? (d.count / total) * 100 : 0;
+            return (
+              <div key={d.star} className="reviews-dist-row">
+                <span className="reviews-dist-label">{d.star} ★</span>
+                <div className="reviews-dist-track">
+                  <div
+                    className="reviews-dist-fill"
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+                <span className="reviews-dist-count">{d.count}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {accessToken && (
+        <form className="reviews-form" onSubmit={handleSubmit}>
+          <p className="reviews-form-title">
+            {mine ? "更新你的評論" : "寫下你對 Argus 的評價"}
+          </p>
+          <StarRating value={rating} onChange={setRating} size={32} />
+          <textarea
+            className="input reviews-textarea"
+            placeholder="（選填）你最喜歡的功能、改進建議..."
+            rows={4}
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+          />
+          {feedback && (
+            <p
+              className={`reviews-feedback tone-${feedback.tone}`}
+            >
+              {feedback.message}
+            </p>
+          )}
+          <button className="primary-button" type="submit" disabled={submitting}>
+            {submitting ? "送出中..." : mine ? "更新評論" : "送出評論"}
+          </button>
+        </form>
+      )}
+
+      <div className="reviews-list">
+        {reviews.length === 0 && (
+          <p className="hint-text">尚未有評論。第一個寫下評價吧！</p>
+        )}
+        {reviews.map((review) => (
+          <article
+            key={review.id}
+            className={`review-card ${review.is_mine ? "is-mine" : ""}`}
+          >
+            <div className="review-card-head">
+              <div>
+                <div className="review-card-author">
+                  {review.user_display}
+                  {review.is_mine && <span className="review-mine-chip">我</span>}
+                </div>
+                <div className="review-card-time">
+                  {new Date(review.created_at).toLocaleDateString("zh-Hant")}
+                </div>
+              </div>
+              <StarRating value={review.rating} readOnly size={18} />
+            </div>
+            {review.comment && (
+              <p className="review-card-body">{review.comment}</p>
+            )}
+            {review.admin_reply && (
+              <div className="review-admin-reply">
+                <div className="review-admin-reply-head">
+                  <span>🛡️ Argus 官方回覆</span>
+                  {review.admin_replied_at && (
+                    <span className="text-xs text-slate-500">
+                      {new Date(review.admin_replied_at).toLocaleDateString("zh-Hant")}
+                    </span>
+                  )}
+                </div>
+                <p>{review.admin_reply}</p>
+              </div>
+            )}
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+// ============================================================
 // Settings 頁
 // ============================================================
 
 function SettingsPage() {
+  const navigate = useNavigate();
   const [data, setData] = useState(null);
+  const wallet = useArgusStore((s) => s.wallet);
 
   useEffect(() => {
     api.get("/dashboard/").then((r) => setData(r.data)).catch(() => {});
   }, []);
 
-  const quotaUsed = data?.quota?.used_this_month || 0;
-  const quotaLimit = data?.quota?.monthly_limit || 1;
-  const quotaPct = Math.min(100, (quotaUsed / quotaLimit) * 100);
-  const quotaTone = quotaPct >= 80 ? "bad" : quotaPct >= 50 ? "medium" : "good";
+  const balance = wallet?.balance ?? 0;
+  const purchased = wallet?.total_purchased_ntd ?? 0;
+  const scansUsed = wallet?.total_scans_used ?? 0;
 
   const totalFindings = data
     ? Object.values(data.severity_totals || {}).reduce((sum, n) => sum + n, 0)
@@ -2603,35 +3038,29 @@ function SettingsPage() {
         <h2 className="section-title">帳號與系統</h2>
       </div>
 
-      {/* 本月配額：大塊進度條 */}
+      {/* 點數錢包總覽 */}
       <div className="quota-panel">
         <div className="quota-panel-head">
           <div>
-            <p className="quota-label">本月配額使用率</p>
-            {data ? (
-              <p className="quota-value">
-                <span className="quota-used">
-                  <CountUp value={quotaUsed} />
-                </span>
-                <span className="quota-divider">/</span>
-                <span className="quota-limit">{quotaLimit}</span>
-                <span className="quota-unit">次</span>
-              </p>
-            ) : (
-              <p className="text-sm text-slate-400">載入中...</p>
-            )}
+            <p className="quota-label">點數餘額</p>
+            <p className="quota-value">
+              <span className="quota-used">
+                <CountUp value={balance} />
+              </span>
+              <span className="quota-unit">coin</span>
+            </p>
           </div>
-          <span className={`quota-tone-badge tone-${quotaTone}`}>
-            {Math.round(quotaPct)}%
-          </span>
+          <button
+            className="primary-button"
+            type="button"
+            onClick={() => navigate("/billing")}
+          >
+            💎 前往購點
+          </button>
         </div>
-        <div className="quota-progress">
-          <div
-            className={`quota-progress-fill tone-${quotaTone}`}
-            style={{ width: `${quotaPct}%` }}
-          />
-        </div>
-        <p className="settings-card-hint">每月 1 日重設</p>
+        <p className="settings-card-hint">
+          累積購買 NT$ {purchased.toLocaleString()}・累計完成 {scansUsed} 次掃描・每月 1 日自動發放 200 coin 贈點
+        </p>
       </div>
 
       <div className="settings-grid">
@@ -2682,12 +3111,804 @@ function SettingsPage() {
   );
 }
 
-export default function App() {
-  const accessToken = useArgusStore((state) => state.accessToken);
+// ============================================================
+// /admin React 後台（精簡 5 大分類 + dark cyan 主題）
+// 走獨立 layout，不顯示前台 TopNav；只有 is_staff 可進入。
+// ============================================================
+
+const ADMIN_NAV_ITEMS = [
+  { to: "/admin/overview", label: "概覽", emoji: "📊" },
+  { to: "/admin/users", label: "使用者", emoji: "👥" },
+  { to: "/admin/transactions", label: "交易", emoji: "💎" },
+  { to: "/admin/reviews", label: "評論", emoji: "⭐" },
+  { to: "/admin/scans", label: "掃描", emoji: "🔍" },
+];
+
+function RequireAdmin({ children }) {
+  const accessToken = useArgusStore((s) => s.accessToken);
+  const me = useArgusStore((s) => s.me);
+  const fetchMe = useArgusStore((s) => s.fetchMe);
+  useEffect(() => {
+    if (accessToken && me === null) fetchMe();
+  }, [accessToken, me, fetchMe]);
+  if (!accessToken) {
+    const next = encodeURIComponent(window.location.pathname + window.location.search);
+    return <Navigate to={`/login?next=${next}`} replace />;
+  }
+  if (me === null) {
+    return <div className="admin-loading">驗證權限中…</div>;
+  }
+  if (!me.is_staff) {
+    return (
+      <div className="admin-forbidden">
+        <h2>沒有後台權限</h2>
+        <p>此帳號（{me.username}）不是管理員。如需後台存取，請聯絡 superuser。</p>
+        <NavLink className="primary-button mt-3 inline-block" to="/dashboard">
+          回到 Dashboard
+        </NavLink>
+      </div>
+    );
+  }
+  return children;
+}
+
+function AdminLayout() {
+  const { setToken } = useArgusStore();
+  const navigate = useNavigate();
+  function handleLogout() {
+    setToken(null);
+    navigate("/login");
+  }
   return (
-    <div className="argus-app">
+    <div className="admin-shell">
+      <aside className="admin-sidebar">
+        <div className="admin-brand">
+          <span className="admin-brand-glyph">⟡</span>
+          <div>
+            <div className="admin-brand-title">ARGUS</div>
+            <div className="admin-brand-sub">管理後台</div>
+          </div>
+        </div>
+        <nav className="admin-nav">
+          {ADMIN_NAV_ITEMS.map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              className={({ isActive }) =>
+                `admin-nav-link ${isActive ? "active" : ""}`
+              }
+            >
+              <span className="admin-nav-emoji" aria-hidden="true">{item.emoji}</span>
+              <span>{item.label}</span>
+            </NavLink>
+          ))}
+        </nav>
+        <div className="admin-sidebar-footer">
+          <NavLink to="/dashboard" className="admin-side-link">
+            ← 回前台
+          </NavLink>
+          <button
+            type="button"
+            className="admin-side-link"
+            onClick={handleLogout}
+          >
+            登出
+          </button>
+        </div>
+      </aside>
+      <main className="admin-main">
+        <Outlet />
+      </main>
+    </div>
+  );
+}
+
+function AdminStatCard({ label, value, hint, tone = "cyan" }) {
+  return (
+    <div className={`admin-stat-card tone-${tone}`}>
+      <div className="admin-stat-label">{label}</div>
+      <div className="admin-stat-value">{value}</div>
+      {hint && <div className="admin-stat-hint">{hint}</div>}
+    </div>
+  );
+}
+
+function AdminOverviewPage() {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    api.get("/admin/overview/")
+      .then((r) => setData(r.data))
+      .catch(() => setError("無法載入概覽。"));
+  }, []);
+  if (error) return <div className="admin-error">{error}</div>;
+  if (!data) return <div className="admin-loading">載入中…</div>;
+  const t = data.totals;
+  return (
+    <div className="admin-page">
+      <header className="admin-page-head">
+        <h1>概覽</h1>
+        <p>系統整體狀態</p>
+      </header>
+
+      <div className="admin-stat-grid">
+        <AdminStatCard
+          label="使用者總數"
+          value={t.users.toLocaleString()}
+          hint={`錢包 ${t.wallets.toLocaleString()} 個`}
+          tone="cyan"
+        />
+        <AdminStatCard
+          label="累計營收"
+          value={`NT$ ${t.revenue_ntd.toLocaleString()}`}
+          hint={`流通 coin ${t.coin_balance_total.toLocaleString()}`}
+          tone="violet"
+        />
+        <AdminStatCard
+          label="掃描總數"
+          value={t.scans.toLocaleString()}
+          hint={`本月 ${t.scans_this_month.toLocaleString()}`}
+          tone="amber"
+        />
+        <AdminStatCard
+          label="評論"
+          value={`${t.avg_rating ?? "—"} ★`}
+          hint={`共 ${t.reviews} 則 / 待回覆 ${t.reviews_pending}`}
+          tone={t.reviews_pending > 0 ? "rose" : "good"}
+        />
+      </div>
+
+      <div className="admin-grid-2col">
+        <section className="admin-panel">
+          <h3>最近購買</h3>
+          {data.recent_purchases.length === 0 ? (
+            <p className="admin-empty">尚無購買紀錄</p>
+          ) : (
+            <table className="admin-table compact">
+              <thead><tr><th>時間</th><th>方案</th><th>金額</th></tr></thead>
+              <tbody>
+                {data.recent_purchases.map((tx) => (
+                  <tr key={tx.id}>
+                    <td>{new Date(tx.created_at).toLocaleString("zh-Hant")}</td>
+                    <td>{tx.plan_name || "—"}</td>
+                    <td className="num">+{tx.amount} coin</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </section>
+
+        <section className="admin-panel">
+          <h3>最近掃描</h3>
+          {data.recent_scans.length === 0 ? (
+            <p className="admin-empty">尚無掃描</p>
+          ) : (
+            <table className="admin-table compact">
+              <thead><tr><th>時間</th><th>使用者</th><th>網址</th><th>狀態</th></tr></thead>
+              <tbody>
+                {data.recent_scans.map((s) => (
+                  <tr key={s.id}>
+                    <td>{new Date(s.created_at).toLocaleString("zh-Hant")}</td>
+                    <td>{s.username}</td>
+                    <td className="truncate" title={s.origin}>{s.origin}</td>
+                    <td><span className={`admin-status ${s.status}`}>{STATUS_LABELS[s.status]?.label || s.status}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function AdminPagination({ page, totalPages, onChange }) {
+  if (totalPages <= 1) return null;
+  return (
+    <div className="admin-pagination">
+      <button
+        type="button"
+        disabled={page <= 1}
+        onClick={() => onChange(page - 1)}
+      >← 上一頁</button>
+      <span>{page} / {totalPages}</span>
+      <button
+        type="button"
+        disabled={page >= totalPages}
+        onClick={() => onChange(page + 1)}
+      >下一頁 →</button>
+    </div>
+  );
+}
+
+function AdminUsersPage() {
+  const navigate = useNavigate();
+  const [data, setData] = useState(null);
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+
+  async function load() {
+    const response = await api.get("/admin/users/", {
+      params: { q: search, page },
+    });
+    setData(response.data);
+  }
+
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [page]);
+
+  function handleSearchSubmit(e) {
+    e.preventDefault();
+    setPage(1);
+    load();
+  }
+
+  return (
+    <div className="admin-page">
+      <header className="admin-page-head">
+        <h1>使用者</h1>
+        <p>所有註冊帳號與其點數狀態</p>
+      </header>
+
+      <form className="admin-search-bar" onSubmit={handleSearchSubmit}>
+        <input
+          className="admin-input"
+          placeholder="搜尋 email、姓名或帳號"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <button className="admin-btn" type="submit">搜尋</button>
+      </form>
+
+      {!data && <div className="admin-loading">載入中…</div>}
+      {data && (
+        <>
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th>使用者</th>
+                <th>email</th>
+                <th className="num">餘額</th>
+                <th className="num">累積購買</th>
+                <th className="num">掃描數</th>
+                <th>最近登入</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.users.map((u) => (
+                <tr
+                  key={u.id}
+                  className="clickable"
+                  onClick={() => navigate(`/admin/users/${u.id}`)}
+                >
+                  <td>
+                    <div className="admin-cell-primary">{u.full_name}</div>
+                    <div className="admin-cell-secondary">@{u.username} {u.is_staff && <span className="admin-staff-chip">staff</span>}</div>
+                  </td>
+                  <td>{u.email}</td>
+                  <td className="num"><span className="admin-coin">{u.balance.toLocaleString()}</span></td>
+                  <td className="num">{u.total_purchased_ntd > 0 ? `NT$ ${u.total_purchased_ntd.toLocaleString()}` : "—"}</td>
+                  <td className="num">{u.total_scans_used}</td>
+                  <td>{u.last_login ? new Date(u.last_login).toLocaleString("zh-Hant") : "從未"}</td>
+                </tr>
+              ))}
+              {data.users.length === 0 && (
+                <tr><td colSpan="6" className="admin-empty">沒有符合的使用者</td></tr>
+              )}
+            </tbody>
+          </table>
+          <AdminPagination page={data.page} totalPages={data.total_pages} onChange={setPage} />
+        </>
+      )}
+    </div>
+  );
+}
+
+function AdminUserDetailPage() {
+  const { userId } = useParams();
+  const navigate = useNavigate();
+  const [user, setUser] = useState(null);
+  const [error, setError] = useState("");
+  const [delta, setDelta] = useState("");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [feedback, setFeedback] = useState(null);
+
+  async function load() {
+    try {
+      const response = await api.get(`/admin/users/${userId}/`);
+      setUser(response.data);
+    } catch {
+      setError("找不到此使用者");
+    }
+  }
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [userId]);
+
+  async function handleAdjust(e) {
+    e.preventDefault();
+    const value = parseInt(delta, 10);
+    if (!value) {
+      setFeedback({ tone: "bad", message: "請輸入非 0 的整數" });
+      return;
+    }
+    setBusy(true);
+    setFeedback(null);
+    try {
+      const response = await api.post(`/admin/users/${userId}/adjust-coin/`, {
+        delta: value,
+        note: note || "管理員手動調整",
+      });
+      setFeedback({
+        tone: "good",
+        message: `已${value > 0 ? "補" : "扣"} ${Math.abs(response.data.transaction.amount)} coin，當前餘額 ${response.data.wallet_balance}`,
+      });
+      setDelta("");
+      setNote("");
+      await load();
+    } catch (err) {
+      setFeedback({ tone: "bad", message: err?.response?.data?.detail || "調整失敗" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (error) return <div className="admin-error">{error}</div>;
+  if (!user) return <div className="admin-loading">載入中…</div>;
+  const w = user.wallet;
+
+  return (
+    <div className="admin-page">
+      <button
+        type="button"
+        className="admin-back-link"
+        onClick={() => navigate("/admin/users")}
+      >← 回使用者列表</button>
+
+      <header className="admin-page-head">
+        <h1>{user.full_name}</h1>
+        <p>@{user.username} · {user.email}</p>
+      </header>
+
+      <div className="admin-grid-2col">
+        <section className="admin-panel">
+          <h3>基本資料</h3>
+          <dl className="admin-dl">
+            <dt>狀態</dt><dd>{user.is_active ? "啟用" : "停用"} {user.is_staff && <span className="admin-staff-chip">staff</span>} {user.is_superuser && <span className="admin-super-chip">superuser</span>}</dd>
+            <dt>註冊時間</dt><dd>{new Date(user.date_joined).toLocaleString("zh-Hant")}</dd>
+            <dt>最後登入</dt><dd>{user.last_login ? new Date(user.last_login).toLocaleString("zh-Hant") : "從未"}</dd>
+          </dl>
+        </section>
+
+        <section className="admin-panel">
+          <h3>點數錢包</h3>
+          {w ? (
+            <>
+              <div className="admin-balance-big">
+                {w.balance.toLocaleString()}<span> coin</span>
+              </div>
+              <dl className="admin-dl">
+                <dt>累積購買</dt><dd>NT$ {w.total_purchased_ntd.toLocaleString()}</dd>
+                <dt>累積掃描</dt><dd>{w.total_scans_used} 次</dd>
+                <dt>最近月贈點</dt><dd>{w.last_bonus_year ? `${w.last_bonus_year}-${String(w.last_bonus_month).padStart(2,"0")}` : "—"}</dd>
+              </dl>
+            </>
+          ) : <p className="admin-empty">尚未建立錢包</p>}
+        </section>
+      </div>
+
+      <section className="admin-panel">
+        <h3>調整點數</h3>
+        <form className="admin-adjust-form" onSubmit={handleAdjust}>
+          <div className="admin-adjust-row">
+            <input
+              className="admin-input"
+              type="number"
+              placeholder="變動金額（正=補、負=扣）"
+              value={delta}
+              onChange={(e) => setDelta(e.target.value)}
+            />
+            <input
+              className="admin-input wide"
+              placeholder="備註（將寫入交易紀錄）"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+            />
+            <button className="admin-btn primary" type="submit" disabled={busy}>
+              {busy ? "處理中…" : "送出"}
+            </button>
+          </div>
+          <div className="admin-quick-row">
+            {[100, 500, 1000, -100, -500].map((v) => (
+              <button key={v} type="button" className="admin-quick-btn" onClick={() => setDelta(String(v))}>
+                {v > 0 ? `+${v}` : v}
+              </button>
+            ))}
+          </div>
+          {feedback && (
+            <div className={`admin-feedback tone-${feedback.tone}`}>{feedback.message}</div>
+          )}
+        </form>
+      </section>
+
+      <section className="admin-panel">
+        <h3>最近 30 筆交易</h3>
+        <table className="admin-table compact">
+          <thead>
+            <tr><th>時間</th><th>類型</th><th className="num">變動</th><th className="num">餘額</th><th>備註</th></tr>
+          </thead>
+          <tbody>
+            {user.recent_transactions.map((tx) => (
+              <tr key={tx.id}>
+                <td>{new Date(tx.created_at).toLocaleString("zh-Hant")}</td>
+                <td>{tx.kind_label}</td>
+                <td className={`num ${tx.amount > 0 ? "tx-pos" : "tx-neg"}`}>{tx.amount > 0 ? "+" : ""}{tx.amount}</td>
+                <td className="num">{tx.balance_after}</td>
+                <td className="admin-cell-secondary">{tx.note}</td>
+              </tr>
+            ))}
+            {user.recent_transactions.length === 0 && (
+              <tr><td colSpan="5" className="admin-empty">尚無交易紀錄</td></tr>
+            )}
+          </tbody>
+        </table>
+      </section>
+    </div>
+  );
+}
+
+function AdminTransactionsPage() {
+  const [data, setData] = useState(null);
+  const [page, setPage] = useState(1);
+  const [kind, setKind] = useState("");
+
+  async function load() {
+    const response = await api.get("/admin/transactions/", {
+      params: { page, kind: kind || undefined },
+    });
+    setData(response.data);
+  }
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [page, kind]);
+
+  const KIND_OPTIONS = [
+    { v: "", label: "全部類型" },
+    { v: "monthly_bonus", label: "每月贈點" },
+    { v: "purchase", label: "購買" },
+    { v: "scan_hold", label: "掃描預扣" },
+    { v: "scan_refund", label: "掃描退款" },
+    { v: "admin_adjust", label: "管理員調整" },
+  ];
+
+  return (
+    <div className="admin-page">
+      <header className="admin-page-head">
+        <h1>交易紀錄</h1>
+        <p>所有 coin 異動的審計紀錄</p>
+      </header>
+
+      <div className="admin-filter-bar">
+        <select
+          className="admin-input"
+          value={kind}
+          onChange={(e) => { setKind(e.target.value); setPage(1); }}
+        >
+          {KIND_OPTIONS.map((o) => (
+            <option key={o.v} value={o.v}>{o.label}</option>
+          ))}
+        </select>
+      </div>
+
+      {!data && <div className="admin-loading">載入中…</div>}
+      {data && (
+        <>
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th>時間</th><th>使用者</th><th>類型</th>
+                <th className="num">變動</th><th className="num">餘額</th>
+                <th>來源</th><th>備註</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.transactions.map((tx) => (
+                <tr key={tx.id}>
+                  <td>{new Date(tx.created_at).toLocaleString("zh-Hant")}</td>
+                  <td>{tx.scan_origin || (tx.plan_name ? `購買 ${tx.plan_name}` : "—")}</td>
+                  <td>{tx.kind_label}</td>
+                  <td className={`num ${tx.amount > 0 ? "tx-pos" : "tx-neg"}`}>{tx.amount > 0 ? "+" : ""}{tx.amount}</td>
+                  <td className="num">{tx.balance_after}</td>
+                  <td>{tx.admin_actor_username ? `admin: ${tx.admin_actor_username}` : (tx.plan_name || tx.scan_origin || "—")}</td>
+                  <td className="admin-cell-secondary">{tx.note}</td>
+                </tr>
+              ))}
+              {data.transactions.length === 0 && (
+                <tr><td colSpan="7" className="admin-empty">沒有符合的交易</td></tr>
+              )}
+            </tbody>
+          </table>
+          <AdminPagination page={data.page} totalPages={data.total_pages} onChange={setPage} />
+        </>
+      )}
+    </div>
+  );
+}
+
+function AdminReviewsPage() {
+  const [data, setData] = useState(null);
+  const [page, setPage] = useState(1);
+  const [onlyPending, setOnlyPending] = useState(false);
+  const [draftReplies, setDraftReplies] = useState({});
+
+  async function load() {
+    const response = await api.get("/admin/reviews/", {
+      params: { page, pending: onlyPending ? "1" : undefined },
+    });
+    setData(response.data);
+    // 初始化每則的回覆草稿
+    const initial = {};
+    for (const r of response.data.reviews) {
+      initial[r.id] = r.admin_reply || "";
+    }
+    setDraftReplies(initial);
+  }
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [page, onlyPending]);
+
+  async function handleReply(reviewId) {
+    try {
+      await api.post(`/admin/reviews/${reviewId}/reply/`, {
+        reply: draftReplies[reviewId] || "",
+      });
+      await load();
+    } catch {
+      alert("回覆失敗");
+    }
+  }
+
+  return (
+    <div className="admin-page">
+      <header className="admin-page-head">
+        <h1>評論</h1>
+        <p>{data ? `共 ${data.total} 則，待回覆 ${data.pending_count}` : "載入中…"}</p>
+      </header>
+
+      <div className="admin-filter-bar">
+        <label className="admin-checkbox">
+          <input
+            type="checkbox"
+            checked={onlyPending}
+            onChange={(e) => { setOnlyPending(e.target.checked); setPage(1); }}
+          />
+          只看待回覆
+        </label>
+      </div>
+
+      {data && data.reviews.map((review) => (
+        <article key={review.id} className={`admin-review ${review.is_pending ? "is-pending" : ""}`}>
+          <header className="admin-review-head">
+            <div>
+              <div className="admin-review-user">
+                {review.full_name}
+                <span className="admin-cell-secondary"> @{review.username}</span>
+              </div>
+              <div className="admin-review-time">
+                {new Date(review.created_at).toLocaleString("zh-Hant")}
+              </div>
+            </div>
+            <div className="admin-review-rating">
+              {"★".repeat(review.rating)}{"☆".repeat(5 - review.rating)}
+              <span className="admin-cell-secondary"> ({review.rating})</span>
+            </div>
+          </header>
+          {review.comment && (
+            <p className="admin-review-body">{review.comment}</p>
+          )}
+          <div className="admin-review-reply-section">
+            <textarea
+              className="admin-input admin-reply-input"
+              placeholder="回覆使用者…（清空則移除回覆）"
+              rows={2}
+              value={draftReplies[review.id] ?? ""}
+              onChange={(e) => setDraftReplies({ ...draftReplies, [review.id]: e.target.value })}
+            />
+            <button
+              type="button"
+              className="admin-btn primary"
+              onClick={() => handleReply(review.id)}
+            >
+              {review.admin_reply ? "更新回覆" : "送出回覆"}
+            </button>
+          </div>
+          {review.admin_reply && (
+            <div className="admin-review-existing-reply">
+              ✓ 已回覆 ({review.admin_replied_at ? new Date(review.admin_replied_at).toLocaleString("zh-Hant") : ""})
+              {review.admin_replied_by_username ? ` by ${review.admin_replied_by_username}` : ""}
+            </div>
+          )}
+        </article>
+      ))}
+      {data && data.reviews.length === 0 && (
+        <div className="admin-empty admin-panel">沒有符合的評論</div>
+      )}
+      {data && <AdminPagination page={data.page} totalPages={data.total_pages} onChange={setPage} />}
+    </div>
+  );
+}
+
+function AdminScansPage() {
+  const navigate = useNavigate();
+  const [data, setData] = useState(null);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [page, setPage] = useState(1);
+
+  async function load() {
+    const response = await api.get("/admin/scans/", {
+      params: { q: search, status: statusFilter || undefined, page },
+    });
+    setData(response.data);
+  }
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [page, statusFilter]);
+
+  function handleSearchSubmit(e) {
+    e.preventDefault();
+    setPage(1);
+    load();
+  }
+
+  return (
+    <div className="admin-page">
+      <header className="admin-page-head">
+        <h1>掃描</h1>
+        <p>所有使用者的掃描任務</p>
+      </header>
+
+      <form className="admin-search-bar" onSubmit={handleSearchSubmit}>
+        <input
+          className="admin-input"
+          placeholder="搜尋網址或使用者"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <select
+          className="admin-input"
+          value={statusFilter}
+          onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
+        >
+          <option value="">全部狀態</option>
+          {Object.entries(STATUS_LABELS).map(([k, v]) => (
+            <option key={k} value={k}>{v.label}</option>
+          ))}
+        </select>
+        <button className="admin-btn" type="submit">搜尋</button>
+      </form>
+
+      {!data && <div className="admin-loading">載入中…</div>}
+      {data && (
+        <>
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th>時間</th><th>使用者</th><th>網址</th>
+                <th>狀態</th><th>模式</th>
+                <th className="num">分數</th><th className="num">頁數</th><th className="num">問題</th>
+                <th className="num">耗時</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.scans.map((s) => (
+                <tr key={s.id} className="clickable" onClick={() => navigate(`/admin/scans/${s.id}`)}>
+                  <td>{new Date(s.created_at).toLocaleString("zh-Hant")}</td>
+                  <td>{s.username}</td>
+                  <td className="truncate" title={s.origin}>{s.origin}</td>
+                  <td><span className={`admin-status ${s.status}`}>{STATUS_LABELS[s.status]?.label || s.status}</span></td>
+                  <td>{s.scan_mode === "active" ? "主動" : "被動"}</td>
+                  <td className="num">{s.overall_score ?? "—"}</td>
+                  <td className="num">{s.pages_count}</td>
+                  <td className="num">{s.findings_count}</td>
+                  <td className="num">{s.duration_sec ? `${s.duration_sec}s` : "—"}</td>
+                </tr>
+              ))}
+              {data.scans.length === 0 && (
+                <tr><td colSpan="9" className="admin-empty">沒有符合的掃描</td></tr>
+              )}
+            </tbody>
+          </table>
+          <AdminPagination page={data.page} totalPages={data.total_pages} onChange={setPage} />
+        </>
+      )}
+    </div>
+  );
+}
+
+function AdminScanDetailPage() {
+  const { scanId } = useParams();
+  const navigate = useNavigate();
+  const [data, setData] = useState(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    api.get(`/admin/scans/${scanId}/`)
+      .then((r) => setData(r.data))
+      .catch(() => setError("找不到此掃描"));
+  }, [scanId]);
+
+  if (error) return <div className="admin-error">{error}</div>;
+  if (!data) return <div className="admin-loading">載入中…</div>;
+  const s = data.scan;
+
+  return (
+    <div className="admin-page">
+      <button type="button" className="admin-back-link" onClick={() => navigate("/admin/scans")}>← 回掃描列表</button>
+      <header className="admin-page-head">
+        <h1>掃描 #{s.id}</h1>
+        <p>{s.origin} · {s.username}</p>
+      </header>
+
+      <div className="admin-grid-2col">
+        <section className="admin-panel">
+          <h3>狀態</h3>
+          <dl className="admin-dl">
+            <dt>狀態</dt><dd><span className={`admin-status ${s.status}`}>{STATUS_LABELS[s.status]?.label || s.status}</span></dd>
+            <dt>模式</dt><dd>{s.scan_mode === "active" ? "主動測試" : "被動偵測"}</dd>
+            <dt>建立時間</dt><dd>{new Date(s.created_at).toLocaleString("zh-Hant")}</dd>
+            <dt>完成時間</dt><dd>{s.completed_at ? new Date(s.completed_at).toLocaleString("zh-Hant") : "—"}</dd>
+            <dt>耗時</dt><dd>{s.duration_sec ? `${s.duration_sec} 秒` : "—"}</dd>
+          </dl>
+        </section>
+
+        <section className="admin-panel">
+          <h3>結果摘要</h3>
+          <dl className="admin-dl">
+            <dt>總分</dt><dd>{s.overall_score ?? "—"}</dd>
+            <dt>頁數</dt><dd>{s.pages_count}</dd>
+            <dt>問題數</dt><dd>{s.findings_count}</dd>
+            <dt>最大頁數設定</dt><dd>{s.max_pages}</dd>
+          </dl>
+        </section>
+      </div>
+
+      {data.category_scores && Object.keys(data.category_scores).length > 0 && (
+        <section className="admin-panel">
+          <h3>各類別分數</h3>
+          <div className="admin-cat-scores">
+            {Object.entries(data.category_scores).map(([cat, score]) => (
+              <div key={cat} className="admin-cat-score-item">
+                <div className="admin-cat-score-label">{cat.toUpperCase()}</div>
+                <div className="admin-cat-score-value">{Math.round(score)}</div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {data.error_message && (
+        <section className="admin-panel admin-panel-danger">
+          <h3>錯誤訊息</h3>
+          <pre className="admin-error-pre">{data.error_message}</pre>
+        </section>
+      )}
+
+      <div className="admin-link-row">
+        <NavLink to={`/scans/${s.id}`} className="admin-btn">
+          以使用者視角查看詳情報告 →
+        </NavLink>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// 根 App + Routes
+// ============================================================
+
+function AppShell() {
+  const accessToken = useArgusStore((state) => state.accessToken);
+  const location = useLocation();
+  const isAdmin = location.pathname.startsWith("/admin");
+  return (
+    <div className={`argus-app ${isAdmin ? "is-admin-mode" : ""}`}>
       <TopNav />
-      <main className={`argus-main ${accessToken ? "with-nav" : ""}`}>
+      <main className={`argus-main ${accessToken && !isAdmin ? "with-nav" : ""} ${isAdmin ? "is-admin" : ""}`}>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route
@@ -2734,6 +3955,15 @@ export default function App() {
             }
           />
           <Route
+            path="/billing"
+            element={
+              <RequireAuth>
+                <BillingPage />
+              </RequireAuth>
+            }
+          />
+          <Route path="/reviews" element={<ReviewsPage />} />
+          <Route
             path="/settings"
             element={
               <RequireAuth>
@@ -2741,9 +3971,29 @@ export default function App() {
               </RequireAuth>
             }
           />
+          <Route
+            element={
+              <RequireAdmin>
+                <AdminLayout />
+              </RequireAdmin>
+            }
+          >
+            <Route path="/admin" element={<Navigate to="/admin/overview" replace />} />
+            <Route path="/admin/overview" element={<AdminOverviewPage />} />
+            <Route path="/admin/users" element={<AdminUsersPage />} />
+            <Route path="/admin/users/:userId" element={<AdminUserDetailPage />} />
+            <Route path="/admin/transactions" element={<AdminTransactionsPage />} />
+            <Route path="/admin/reviews" element={<AdminReviewsPage />} />
+            <Route path="/admin/scans" element={<AdminScansPage />} />
+            <Route path="/admin/scans/:scanId" element={<AdminScanDetailPage />} />
+          </Route>
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </main>
     </div>
   );
+}
+
+export default function App() {
+  return <AppShell />;
 }

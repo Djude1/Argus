@@ -114,8 +114,19 @@ SaaS 級網站健檢工具。使用者輸入單一網址 → 系統執行:
 - **AI Prompt 複製**:單一 Finding 一鍵複製其 `ai_handoff_prompt`
 
 ### M5. 前台 / 後台分離
-- **前台(User Portal)**:註冊/登入、新建掃描任務、查看互動報告、匯出
-- **後台(Admin)**:Django admin 客製化,可監控 Celery queue、使用者配額、Agent token 消耗
+- **前台(User Portal)**:Google OAuth 登入、新建掃描任務、查看互動報告、匯出、購買點數、撰寫評論
+- **後台(Admin)**:Django admin + django-jazzmin 客製化,可監控 Celery queue、使用者點數錢包、交易紀錄、評論回覆、Agent token 消耗
+
+### M6. 點數制度（取代月配額）
+- **錢包**：每使用者一個 `CoinWallet`（balance、累積購買、累積掃描）；建立帳號自動發 200 coin，之後每月登入時自動補發
+- **掃描扣點**：建立時預扣 `max_pages × 10`，完成依實際頁數退回未使用部分；失敗或被取消全額退回
+- **購點**：4 個方案（入門 NT$100/100c、標準 NT$450/500c、進階 NT$800/1000c、旗艦 NT$1500/2200c），目前為模擬付款（直接加 coin），未來可接金流
+- **退費**：僅 admin 在後台手動加減 coin（CoinWalletAdmin 自訂 adjust 頁面，可輸入任意金額 + 備註）
+
+### M7. 平台評論
+- **一人一則**：`PlatformReview`（rating 1-5、comment、admin_reply）
+- **公開列表**：未登入也能讀；登入後可寫/更新自己的評論
+- **管理員回覆**：後台編輯 admin_reply 自動填入回覆時間與回覆者，前台公開顯示
 
 ---
 

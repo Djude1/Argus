@@ -1,7 +1,6 @@
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
-from django.utils import timezone
 
 
 class ScanJob(models.Model):
@@ -266,36 +265,4 @@ class AgentStep(models.Model):
         return f"{self.session_id} step {self.step_number}"
 
 
-class UserScanQuota(models.Model):
-    """使用者掃描配額：每月最多可建立的 ScanJob 數量。
-
-    沒有對應紀錄時視為「使用預設配額」，預設值由 `monthly_limit` 欄位的 default 提供。
-    """
-
-    user = models.OneToOneField(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name="scan_quota",
-    )
-    monthly_limit = models.PositiveIntegerField(default=20)
-    notes = models.TextField(blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        ordering = ["user__username"]
-
-    def consumed_this_month(self) -> int:
-        """計算本自然月內已建立的 ScanJob 數量。"""
-        now = timezone.now()
-        return self.user.scan_jobs.filter(
-            created_at__year=now.year,
-            created_at__month=now.month,
-        ).count()
-
-    def has_quota_remaining(self) -> bool:
-        return self.consumed_this_month() < self.monthly_limit
-
-    def __str__(self) -> str:
-        return f"{self.user.username} quota={self.monthly_limit}/月"
 

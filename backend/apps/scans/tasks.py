@@ -5,6 +5,7 @@ from celery import shared_task
 from django.conf import settings
 from django.utils import timezone
 
+from apps.billing.services import refund_full_for_scan, settle_scan_actual
 from apps.scans.active_probes import run_active_probes
 from apps.scans.cancellation import ScanCancelled, is_cancelled, raise_if_cancelled
 from apps.scans.crawler import crawl_site
@@ -216,6 +217,11 @@ def run_scan_job(self, scan_job_id: int) -> dict:
                 "updated_at",
             ]
         )
+        # 點數結算：依實際爬到的頁數退回未使用的 coin（max_pages - actual_pages）× 單價
+        try:
+            settle_scan_actual(scan_job.user, scan_job, len(crawled_pages))
+        except Exception:  # noqa: BLE001 — 退款失敗不應讓掃描結果消失，僅紀錄
+            pass
         return {
             "status": scan_job.status,
             "pages": len(crawled_pages),
@@ -223,14 +229,19 @@ def run_scan_job(self, scan_job_id: int) -> dict:
             "agent": agent_meta,
         }
     except ScanCancelled:
-        # 使用者主動終止：API 已經把 status 設為 CANCELLED，這裡只補上 completed_at
+        # 使用者主動終止：API 已經把 status 設為 CANCELLED，這裡補上 completed_at
         # 與清空 progress；不算失敗，不再 raise（避免 Celery 把它標為 task 失敗）。
+        # cancel 的退款由 API 端在使用者按下時即時執行（避免 worker 還沒走到 except）。
         ScanJob.objects.filter(id=scan_job_id).update(
             status=ScanJob.Status.CANCELLED,
             completed_at=timezone.now(),
             progress={},
             error_message="使用者已終止掃描",
         )
+        try:
+            refund_full_for_scan(scan_job.user, scan_job, reason="取消")
+        except Exception:  # noqa: BLE001
+            pass
         return {"status": "cancelled"}
     except Exception as exc:
         scan_job.status = ScanJob.Status.FAILED
@@ -246,4 +257,9 @@ def run_scan_job(self, scan_job_id: int) -> dict:
                 "status", "error_message", "completed_at", "progress", "updated_at",
             ]
         )
+        # 失敗時全額退回預扣的 coin
+        try:
+            refund_full_for_scan(scan_job.user, scan_job, reason="失敗")
+        except Exception:  # noqa: BLE001
+            pass
         raise

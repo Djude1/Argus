@@ -8,8 +8,9 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from apps.billing.models import CoinWallet
 from apps.scans.crawler import classify_blocked, compute_min_interval
-from apps.scans.models import AuthorizationConsent, Finding, Page, ScanJob, UserScanQuota
+from apps.scans.models import AuthorizationConsent, Finding, Page, ScanJob
 from apps.scans.scanners import (
     PageAnalysisInput,
     analyze_aeo,
@@ -112,6 +113,8 @@ class ScanJobApiTests(APITestCase):
             email="api@example.com",
             password="safe-test-password",
         )
+        # 預先把測試使用者的 coin 加滿，避免 coin 不足干擾建立掃描的行為測試
+        CoinWallet.objects.filter(user=self.user).update(balance=10000)
         self.client.force_authenticate(self.user)
         self.url = reverse("scan-list")
 
@@ -326,63 +329,16 @@ class ScanAdminTests(APITestCase):
         self.client.force_login(self.admin)
 
     def test_scanjob_changelist_shows_summary(self):
-        response = self.client.get("/admin/scans/scanjob/")
+        response = self.client.get("/django-admin/scans/scanjob/")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertContains(response, "掃描總覽")
 
     def test_authorization_consent_admin_is_view_only(self):
         # 授權同意書是法律證據，不允許透過 Admin 新增
-        response = self.client.get("/admin/scans/authorizationconsent/add/")
+        response = self.client.get("/django-admin/scans/authorizationconsent/add/")
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-
-
-@override_settings(ARGUS_AUTO_QUEUE_SCANS=False)
-class UserScanQuotaTests(APITestCase):
-    def setUp(self):
-        self.user = get_user_model().objects.create_user(
-            username="quota-user",
-            email="quota@example.com",
-            password="safe-test-password",
-        )
-        self.client.force_authenticate(self.user)
-        self.url = reverse("scan-list")
-
-    def test_quota_auto_created_with_default_limit(self):
-        response = self.client.post(
-            self.url,
-            {"url": "https://example.com/", "authorization_confirmed": True},
-            format="json",
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        quota = UserScanQuota.objects.get(user=self.user)
-        self.assertEqual(quota.monthly_limit, 20)
-
-    def test_quota_blocks_when_exhausted(self):
-        UserScanQuota.objects.create(user=self.user, monthly_limit=1)
-        first = self.client.post(
-            self.url,
-            {"url": "https://example.com/", "authorization_confirmed": True},
-            format="json",
-        )
-        self.assertEqual(first.status_code, status.HTTP_201_CREATED)
-
-        second = self.client.post(
-            self.url,
-            {"url": "https://example.com/foo", "authorization_confirmed": True},
-            format="json",
-        )
-
-        self.assertEqual(second.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("quota", second.data)
-
-    def test_has_quota_remaining_with_no_scans(self):
-        quota = UserScanQuota.objects.create(user=self.user, monthly_limit=5)
-
-        self.assertTrue(quota.has_quota_remaining())
-        self.assertEqual(quota.consumed_this_month(), 0)
 
 
 class RerunScanCommandTests(APITestCase):

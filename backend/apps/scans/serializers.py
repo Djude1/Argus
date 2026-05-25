@@ -2,7 +2,13 @@ from django.conf import settings
 from django.db import transaction
 from rest_framework import serializers
 
-from apps.scans.models import AuthorizationConsent, Finding, Page, ScanJob, UserScanQuota
+from apps.billing.services import (
+    InsufficientCoinError,
+    estimate_scan_cost,
+    get_or_create_wallet,
+    hold_for_scan,
+)
+from apps.scans.models import AuthorizationConsent, Finding, Page, ScanJob
 from apps.scans.services import get_hostname, get_origin, is_obvious_third_party, normalize_url
 
 
@@ -25,12 +31,19 @@ class ScanJobCreateSerializer(serializers.Serializer):
                 {"authorization_confirmed": "送出掃描前必須確認擁有網站或已取得書面授權。"}
             )
 
-        # 配額檢查：每使用者每自然月可建立的 ScanJob 數量上限
+        # 點數檢查（取代舊的月次數配額）：以 max_pages × coin_per_page 預估
         request = self.context["request"]
-        quota, _ = UserScanQuota.objects.get_or_create(user=request.user)
-        if not quota.has_quota_remaining():
+        wallet = get_or_create_wallet(request.user)
+        estimated = estimate_scan_cost(attrs["max_pages"])
+        if wallet.balance < estimated:
             raise serializers.ValidationError(
-                {"quota": f"本月掃描配額已用完（上限 {quota.monthly_limit} 次）。"}
+                {
+                    "coin": (
+                        f"coin 不足：此次掃描需 {estimated} coin（{attrs['max_pages']} 頁 × "
+                        f"{settings.ARGUS_COIN_PER_PAGE}），目前餘額 {wallet.balance}。"
+                        f"請前往購點頁面儲值。"
+                    )
+                }
             )
 
         try:
@@ -82,6 +95,12 @@ class ScanJobCreateSerializer(serializers.Serializer):
             active_testing_authorized=validated_data["active_testing_authorized"],
             statement="使用者確認擁有此網站或已取得書面授權進行掃描。",
         )
+        # 預扣 coin；select_for_update 二次驗證避免並發超扣
+        try:
+            hold_for_scan(request.user, scan_job)
+        except InsufficientCoinError as exc:
+            # 從 validate 走到這裡之間若有並發購點/扣款導致不夠，回滾整個 create
+            raise serializers.ValidationError({"coin": str(exc)}) from exc
         return scan_job
 
 
@@ -171,4 +190,3 @@ class FindingSerializer(serializers.ModelSerializer):
             "ai_handoff_prompt",
             "created_at",
         ]
-

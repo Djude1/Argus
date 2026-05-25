@@ -8,7 +8,6 @@ from apps.scans.models import (
     Finding,
     Page,
     ScanJob,
-    UserScanQuota,
 )
 
 # ScanJob 的時間戳、評分與系統產生欄位於 Admin 設為唯讀，避免人為竄改紀錄
@@ -181,13 +180,3 @@ class AgentStepAdmin(admin.ModelAdmin):
     list_select_related = ["session"]
 
 
-@admin.register(UserScanQuota)
-class UserScanQuotaAdmin(admin.ModelAdmin):
-    list_display = ["id", "user", "monthly_limit", "consumed_display", "updated_at"]
-    search_fields = ["user__username", "user__email"]
-    list_select_related = ["user"]
-    readonly_fields = ["created_at", "updated_at"]
-
-    @admin.display(description="本月已用")
-    def consumed_display(self, obj):
-        return obj.consumed_this_month()
