@@ -185,22 +185,149 @@ class BillingAPITests(APITestCase):
         codes = [p["code"] for p in response.data["plans"]]
         self.assertEqual(codes, ["starter", "standard", "advanced", "flagship"])
 
+    def _valid_purchase_payload(self, **overrides):
+        payload = {
+            "plan_code": "starter",
+            "buyer_name": "王小明",
+            "buyer_email": "buyer@example.com",
+            "invoice_type": "personal",
+            "agree_terms": True,
+        }
+        payload.update(overrides)
+        return payload
+
     def test_purchase_endpoint_adds_coins(self):
         response = self.client.post(
             reverse("billing-purchase"),
-            {"plan_code": "starter"},
+            self._valid_purchase_payload(),
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(response.data["balance"], 300)  # 200 + 100
+        # 3 步驟結帳：回傳 wallet + order，餘額在 wallet 物件內
+        self.assertEqual(response.data["wallet"]["balance"], 300)  # 200 + 100
+        self.assertEqual(response.data["order"]["status"], "paid")
+        self.assertEqual(response.data["order"]["coin_amount"], 100)
 
     def test_purchase_endpoint_rejects_unknown_plan(self):
         response = self.client.post(
             reverse("billing-purchase"),
-            {"plan_code": "non_existent"},
+            self._valid_purchase_payload(plan_code="non_existent"),
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+@override_settings(ARGUS_AUTO_QUEUE_SCANS=False)
+class PurchaseOrderTests(APITestCase):
+    """3 步驟結帳 wizard 對應的 PurchaseOrder 行為。"""
+
+    def setUp(self):
+        self.user = _make_user("orderer")
+        self.client.force_authenticate(self.user)
+
+    def _payload(self, **overrides):
+        payload = {
+            "plan_code": "standard",
+            "buyer_name": "陳大文",
+            "buyer_email": "chen@example.com",
+            "invoice_type": "personal",
+            "agree_terms": True,
+        }
+        payload.update(overrides)
+        return payload
+
+    def test_personal_invoice_creates_paid_order_with_snapshot(self):
+        from apps.billing.models import PurchaseOrder
+        response = self.client.post(
+            reverse("billing-purchase"), self._payload(), format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        order = PurchaseOrder.objects.get(user=self.user)
+        # 價格與 coin 快照寫入訂單，後續方案改動不會影響此訂單
+        self.assertEqual(order.price_ntd, 450)
+        self.assertEqual(order.coin_amount, 500)
+        self.assertEqual(order.status, PurchaseOrder.Status.PAID)
+        self.assertEqual(order.invoice_type, PurchaseOrder.InvoiceType.PERSONAL)
+        # 個人發票不應留下公司資訊
+        self.assertEqual(order.company_name, "")
+        self.assertEqual(order.tax_id, "")
+        # 訂單連結到入帳交易
+        self.assertIsNotNone(order.transaction)
+        self.assertEqual(order.transaction.amount, 500)
+        self.assertIsNotNone(order.paid_at)
+
+    def test_company_invoice_requires_company_name(self):
+        response = self.client.post(
+            reverse("billing-purchase"),
+            self._payload(
+                invoice_type="company",
+                company_name="",
+                tax_id="12345678",
+            ),
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("company_name", response.data)
+
+    def test_company_invoice_requires_8_digit_tax_id(self):
+        response = self.client.post(
+            reverse("billing-purchase"),
+            self._payload(
+                invoice_type="company",
+                company_name="Acme Co.",
+                tax_id="ABC123",  # 不是 8 碼數字
+            ),
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("tax_id", response.data)
+
+    def test_company_invoice_with_valid_data_stored(self):
+        from apps.billing.models import PurchaseOrder
+        response = self.client.post(
+            reverse("billing-purchase"),
+            self._payload(
+                invoice_type="company",
+                company_name="Acme 有限公司",
+                tax_id="12345678",
+            ),
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        order = PurchaseOrder.objects.get(user=self.user)
+        self.assertEqual(order.invoice_type, PurchaseOrder.InvoiceType.COMPANY)
+        self.assertEqual(order.company_name, "Acme 有限公司")
+        self.assertEqual(order.tax_id, "12345678")
+
+    def test_agree_terms_must_be_true(self):
+        response = self.client.post(
+            reverse("billing-purchase"),
+            self._payload(agree_terms=False),
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("agree_terms", response.data)
+
+    def test_my_orders_returns_user_orders(self):
+        # 建兩單
+        self.client.post(reverse("billing-purchase"), self._payload(), format="json")
+        self.client.post(
+            reverse("billing-purchase"),
+            self._payload(plan_code="starter"),
+            format="json",
+        )
+        response = self.client.get(reverse("billing-orders"))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data["orders"]), 2)
+
+    def test_my_orders_does_not_leak_other_users(self):
+        other = _make_user("other")
+        self.client.force_authenticate(other)
+        self.client.post(reverse("billing-purchase"), self._payload(), format="json")
+        # 切回 self.user，應該看不到 other 的訂單
+        self.client.force_authenticate(self.user)
+        response = self.client.get(reverse("billing-orders"))
+        self.assertEqual(len(response.data["orders"]), 0)
 
 
 @override_settings(ARGUS_AUTO_QUEUE_SCANS=False)

@@ -201,6 +201,7 @@ JAZZMIN_SETTINGS = {
         "billing.CoinWallet": "fas fa-wallet",
         "billing.CoinTransaction": "fas fa-exchange-alt",
         "billing.PricingPlan": "fas fa-tags",
+        "billing.PurchaseOrder": "fas fa-receipt",
         "reviews": "fas fa-star-half-alt",
         "reviews.PlatformReview": "fas fa-star",
         "scans": "fas fa-search",

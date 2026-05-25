@@ -3,7 +3,7 @@ from django.shortcuts import redirect, render
 from django.urls import path
 from django.utils.html import format_html
 
-from apps.billing.models import CoinTransaction, CoinWallet, PricingPlan
+from apps.billing.models import CoinTransaction, CoinWallet, PricingPlan, PurchaseOrder
 from apps.billing.services import admin_adjust
 
 
@@ -216,3 +216,78 @@ class CoinTransactionAdmin(admin.ModelAdmin):
     @admin.display(description="備註")
     def note_short(self, obj: CoinTransaction) -> str:
         return (obj.note or "")[:60]
+
+
+@admin.register(PurchaseOrder)
+class PurchaseOrderAdmin(admin.ModelAdmin):
+    """購點訂單（含買家資料/發票）。為帳務正確性禁止 add/change/delete。"""
+
+    list_display = [
+        "id",
+        "created_at",
+        "user_username",
+        "plan_name",
+        "buyer_name",
+        "buyer_email",
+        "invoice_display",
+        "price_display",
+        "coin_amount",
+        "status_display",
+    ]
+    list_filter = ["status", "invoice_type", "created_at", "plan"]
+    search_fields = [
+        "buyer_email",
+        "buyer_name",
+        "user__username",
+        "user__email",
+        "tax_id",
+        "company_name",
+    ]
+    date_hierarchy = "created_at"
+    list_select_related = ["user", "plan", "transaction"]
+    readonly_fields = [
+        "user", "plan", "price_ntd", "coin_amount",
+        "buyer_name", "buyer_email",
+        "invoice_type", "company_name", "tax_id",
+        "status", "transaction", "note",
+        "created_at", "paid_at",
+    ]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    @admin.display(description="使用者", ordering="user__username")
+    def user_username(self, obj: PurchaseOrder) -> str:
+        return obj.user.username
+
+    @admin.display(description="方案", ordering="plan__name")
+    def plan_name(self, obj: PurchaseOrder) -> str:
+        return obj.plan.name
+
+    @admin.display(description="發票")
+    def invoice_display(self, obj: PurchaseOrder) -> str:
+        if obj.invoice_type == PurchaseOrder.InvoiceType.COMPANY:
+            return f"公司 {obj.company_name}（{obj.tax_id}）"
+        return "個人"
+
+    @admin.display(description="金額", ordering="price_ntd")
+    def price_display(self, obj: PurchaseOrder) -> str:
+        return f"NT$ {obj.price_ntd:,}"
+
+    @admin.display(description="狀態", ordering="status")
+    def status_display(self, obj: PurchaseOrder):
+        colour = {
+            PurchaseOrder.Status.PAID: "#198754",
+            PurchaseOrder.Status.PENDING: "#fd7e14",
+            PurchaseOrder.Status.CANCELLED: "#6c757d",
+        }.get(obj.status, "#6c757d")
+        return format_html(
+            '<span style="color:{};font-weight:600;">{}</span>',
+            colour, obj.get_status_display(),
+        )

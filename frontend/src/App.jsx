@@ -2667,36 +2667,164 @@ function CategoriesPage() {
 // Billing 頁（4 個方案 + 模擬付款）
 // ============================================================
 
+// ----- BillingPage 3 步驟 wizard -----
+
+const WIZARD_STEPS = [
+  { id: 1, label: "選擇商品" },
+  { id: 2, label: "填寫資料" },
+  { id: 3, label: "確認訂購" },
+];
+
+function WizardStepper({ current }) {
+  return (
+    <ol className="wizard-stepper" aria-label="購買流程">
+      {WIZARD_STEPS.map((step, idx) => {
+        const state = step.id < current ? "done" : step.id === current ? "active" : "pending";
+        return (
+          <li key={step.id} className={`wizard-step ${state}`}>
+            <span className="wizard-step-circle">
+              {state === "done" ? "✓" : step.id}
+            </span>
+            <span className="wizard-step-label">{step.label}</span>
+            {idx < WIZARD_STEPS.length - 1 && <span className="wizard-step-bar" />}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
 function BillingPage() {
   const [plans, setPlans] = useState([]);
-  const [busyCode, setBusyCode] = useState("");
-  const [feedback, setFeedback] = useState(null); // {tone, message}
+  const [step, setStep] = useState(1);
+  const [selectedPlan, setSelectedPlan] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [errors, setErrors] = useState({});
+  const [completedOrder, setCompletedOrder] = useState(null);
   const wallet = useArgusStore((s) => s.wallet);
   const fetchWallet = useArgusStore((s) => s.fetchWallet);
+  const me = useArgusStore((s) => s.me);
+  const fetchMe = useArgusStore((s) => s.fetchMe);
+  const navigate = useNavigate();
+
+  const [buyer, setBuyer] = useState({
+    buyer_name: "",
+    buyer_email: "",
+    invoice_type: "personal",
+    company_name: "",
+    tax_id: "",
+    agree_terms: false,
+  });
 
   useEffect(() => {
     api.get("/billing/plans/").then((r) => setPlans(r.data.plans || [])).catch(() => {});
     if (!wallet) fetchWallet();
-  }, [wallet, fetchWallet]);
+    if (!me) fetchMe();
+  }, [wallet, fetchWallet, me, fetchMe]);
 
-  async function handlePurchase(plan) {
-    setBusyCode(plan.code);
-    setFeedback(null);
-    try {
-      await api.post("/billing/purchase/", { plan_code: plan.code });
-      const updated = await fetchWallet();
-      setFeedback({
-        tone: "good",
-        message: `購買成功！已加入 ${plan.coin_amount} coin，當前餘額 ${
-          updated?.balance ?? "—"
-        } coin`,
-      });
-    } catch (err) {
-      const detail = err?.response?.data?.detail || "購買失敗，請稍後再試。";
-      setFeedback({ tone: "bad", message: detail });
-    } finally {
-      setBusyCode("");
+  // 初次拉到 me 時自動填入 email 作為預設
+  useEffect(() => {
+    if (!me) return;
+    setBuyer((prev) => ({
+      ...prev,
+      buyer_email: prev.buyer_email || me.email || "",
+    }));
+  }, [me]);
+
+  function pickPlan(plan) {
+    setSelectedPlan(plan);
+    setStep(2);
+    setErrors({});
+  }
+
+  function validateStep2() {
+    const errs = {};
+    if (!buyer.buyer_name.trim()) errs.buyer_name = "請填寫姓名";
+    if (!buyer.buyer_email.trim()) errs.buyer_email = "請填寫 email";
+    else if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(buyer.buyer_email)) {
+      errs.buyer_email = "email 格式不正確";
     }
+    if (buyer.invoice_type === "company") {
+      if (!buyer.company_name.trim()) errs.company_name = "公司發票須填公司抬頭";
+      if (!/^\d{8}$/.test(buyer.tax_id)) errs.tax_id = "統一編號需為 8 碼數字";
+    }
+    if (!buyer.agree_terms) errs.agree_terms = "請勾選同意購買條款";
+    return errs;
+  }
+
+  function goToConfirm() {
+    const errs = validateStep2();
+    setErrors(errs);
+    if (Object.keys(errs).length === 0) {
+      setStep(3);
+    }
+  }
+
+  async function submitOrder() {
+    setSubmitting(true);
+    setErrors({});
+    try {
+      const response = await api.post("/billing/purchase/", {
+        plan_code: selectedPlan.code,
+        buyer_name: buyer.buyer_name.trim(),
+        buyer_email: buyer.buyer_email.trim(),
+        invoice_type: buyer.invoice_type,
+        company_name: buyer.invoice_type === "company" ? buyer.company_name.trim() : "",
+        tax_id: buyer.invoice_type === "company" ? buyer.tax_id.trim() : "",
+        agree_terms: buyer.agree_terms,
+      });
+      await fetchWallet();
+      setCompletedOrder(response.data.order);
+    } catch (err) {
+      const data = err?.response?.data || {};
+      const flat = {};
+      for (const [k, v] of Object.entries(data)) {
+        flat[k] = Array.isArray(v) ? v[0] : String(v);
+      }
+      setErrors(flat);
+      if (data.buyer_name || data.buyer_email || data.company_name || data.tax_id || data.agree_terms) {
+        setStep(2);
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function startNewPurchase() {
+    setSelectedPlan(null);
+    setStep(1);
+    setCompletedOrder(null);
+    setErrors({});
+    setBuyer((b) => ({ ...b, agree_terms: false }));
+  }
+
+  if (completedOrder) {
+    return (
+      <section className="panel space-y-4">
+        <div className="wizard-success">
+          <div className="wizard-success-emoji" aria-hidden="true">🎉</div>
+          <h2 className="wizard-success-title">訂購完成</h2>
+          <p className="wizard-success-sub">已成功購買 {completedOrder.plan_name}</p>
+          <dl className="wizard-success-dl">
+            <dt>訂單編號</dt><dd>#{completedOrder.id}</dd>
+            <dt>方案</dt><dd>{completedOrder.plan_name}</dd>
+            <dt>金額</dt><dd>NT$ {completedOrder.price_ntd.toLocaleString()}</dd>
+            <dt>入帳點數</dt><dd>+{completedOrder.coin_amount.toLocaleString()} coin</dd>
+            <dt>當前餘額</dt><dd className="hl-balance">{wallet?.balance?.toLocaleString()} coin</dd>
+            <dt>發票類型</dt><dd>{completedOrder.invoice_type_label}{completedOrder.invoice_type === "company" ? `（${completedOrder.company_name} / ${completedOrder.tax_id}）` : ""}</dd>
+            <dt>收據寄送</dt><dd>{completedOrder.buyer_email}</dd>
+          </dl>
+          <div className="wizard-success-actions">
+            <button className="primary-button" type="button" onClick={startNewPurchase}>
+              再買一次
+            </button>
+            <button className="secondary-button" type="button" onClick={() => navigate("/scans")}>
+              開始掃描
+            </button>
+          </div>
+        </div>
+      </section>
+    );
   }
 
   return (
@@ -2705,112 +2833,210 @@ function BillingPage() {
         <p className="eyebrow">點數商店</p>
         <h2 className="section-title">購買 Argus 點數</h2>
         <p className="mt-1 text-sm text-slate-600">
-          點數用於建立掃描；每爬一頁需 {wallet?.coin_per_page ?? 10} coin。
-          建立時依「最大頁數」預扣，完成後依實際頁數退回未使用的點數。
-          每月 1 日自動贈送 200 coin（不需登入也會補發）。
+          每爬一頁需 {wallet?.coin_per_page ?? 10} coin；目前餘額 <strong>{wallet?.balance?.toLocaleString() ?? "—"}</strong> coin。
         </p>
       </div>
 
-      <div className="billing-balance-card">
-        <div>
-          <div className="text-xs text-slate-500">目前餘額</div>
-          <div className="billing-balance-value">
-            {wallet?.balance?.toLocaleString() ?? "—"} <span>coin</span>
-          </div>
-        </div>
-        <div className="billing-balance-meta">
-          <span>累積購買 NT$ {(wallet?.total_purchased_ntd || 0).toLocaleString()}</span>
-          <span>累計掃描 {wallet?.total_scans_used || 0} 次</span>
-        </div>
-      </div>
+      <WizardStepper current={step} />
 
-      {feedback && (
-        <div className={`billing-feedback tone-${feedback.tone}`}>
-          {feedback.message}
+      {step === 1 && (
+        <div className="billing-plan-grid">
+          {plans.map((plan) => {
+            const isRecommended = plan.code === "advanced";
+            return (
+              <div
+                key={plan.code}
+                className={`billing-plan-card ${isRecommended ? "is-recommended" : ""}`}
+              >
+                {plan.badge && <span className="billing-plan-badge">{plan.badge}</span>}
+                {isRecommended && <span className="billing-plan-recommend">★ 推薦</span>}
+                <h3 className="billing-plan-name">{plan.name}</h3>
+                <p className="billing-plan-coin">
+                  {plan.coin_amount.toLocaleString()} <span>coin</span>
+                </p>
+                <p className="billing-plan-price">NT$ {plan.price_ntd.toLocaleString()}</p>
+                <p className="billing-plan-rate">{plan.coin_per_ntd?.toFixed(2)} coin / NT$</p>
+                {plan.description && <p className="billing-plan-desc">{plan.description}</p>}
+                <button
+                  className="billing-plan-button"
+                  type="button"
+                  onClick={() => pickPlan(plan)}
+                >
+                  選擇此方案 →
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
 
-      <div className="billing-plan-grid">
-        {plans.map((plan, idx) => {
-          // 將「進階方案」標記為推薦（idx===2）
-          const isRecommended = plan.code === "advanced";
-          return (
-            <div
-              key={plan.code}
-              className={`billing-plan-card ${isRecommended ? "is-recommended" : ""}`}
-            >
-              {plan.badge && (
-                <span className="billing-plan-badge">{plan.badge}</span>
-              )}
-              {isRecommended && (
-                <span className="billing-plan-recommend">★ 推薦</span>
-              )}
-              <h3 className="billing-plan-name">{plan.name}</h3>
-              <p className="billing-plan-coin">
-                {plan.coin_amount.toLocaleString()} <span>coin</span>
-              </p>
-              <p className="billing-plan-price">
-                NT$ {plan.price_ntd.toLocaleString()}
-              </p>
-              <p className="billing-plan-rate">
-                {plan.coin_per_ntd?.toFixed(2)} coin / NT$
-              </p>
-              {plan.description && (
-                <p className="billing-plan-desc">{plan.description}</p>
-              )}
-              <button
-                className="billing-plan-button"
-                type="button"
-                disabled={busyCode === plan.code}
-                onClick={() => handlePurchase(plan)}
-              >
-                {busyCode === plan.code ? "處理中..." : "立即購買"}
-              </button>
+      {step === 2 && selectedPlan && (
+        <div className="wizard-form-wrap">
+          <div className="wizard-summary-mini">
+            <span>已選方案</span>
+            <strong>{selectedPlan.name}</strong>
+            <span className="wizard-summary-price">
+              NT$ {selectedPlan.price_ntd.toLocaleString()} ／ {selectedPlan.coin_amount} coin
+            </span>
+          </div>
+
+          <div className="wizard-form">
+            <div className="wizard-field">
+              <label htmlFor="buyer_name">姓名 *</label>
+              <input
+                id="buyer_name"
+                className="input"
+                placeholder="王小明"
+                value={buyer.buyer_name}
+                onChange={(e) => setBuyer({ ...buyer, buyer_name: e.target.value })}
+              />
+              {errors.buyer_name && <p className="wizard-field-error">{errors.buyer_name}</p>}
             </div>
-          );
-        })}
-      </div>
 
-      <p className="text-xs text-slate-500">
-        ※ 本系統目前為「模擬付款」模式：點選方案即立即加入點數，不會實際扣款。
-        正式上線後將串接金流。
-      </p>
+            <div className="wizard-field">
+              <label htmlFor="buyer_email">收據寄送 email *</label>
+              <input
+                id="buyer_email"
+                className="input"
+                type="email"
+                placeholder="you@example.com"
+                value={buyer.buyer_email}
+                onChange={(e) => setBuyer({ ...buyer, buyer_email: e.target.value })}
+              />
+              {errors.buyer_email && <p className="wizard-field-error">{errors.buyer_email}</p>}
+            </div>
 
-      <div>
-        <h3 className="text-base font-bold text-slate-900">最近交易</h3>
-        <table className="billing-tx-table">
-          <thead>
-            <tr>
-              <th>時間</th>
-              <th>類型</th>
-              <th>變動</th>
-              <th>餘額</th>
-              <th>備註</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(wallet?.recent_transactions || []).map((tx) => (
-              <tr key={tx.id}>
-                <td>{new Date(tx.created_at).toLocaleString("zh-Hant")}</td>
-                <td>{tx.kind_label}</td>
-                <td className={tx.amount > 0 ? "tx-pos" : "tx-neg"}>
-                  {tx.amount > 0 ? "+" : ""}
-                  {tx.amount}
-                </td>
-                <td>{tx.balance_after}</td>
-                <td className="text-xs text-slate-500">{tx.note}</td>
-              </tr>
-            ))}
-            {!wallet?.recent_transactions?.length && (
-              <tr>
-                <td colSpan="5" className="text-center text-slate-400">
-                  尚無交易紀錄
-                </td>
-              </tr>
+            <div className="wizard-field">
+              <label>發票類型 *</label>
+              <div className="wizard-radio-row">
+                <label className="wizard-radio">
+                  <input
+                    type="radio"
+                    name="invoice_type"
+                    value="personal"
+                    checked={buyer.invoice_type === "personal"}
+                    onChange={() => setBuyer({ ...buyer, invoice_type: "personal" })}
+                  />
+                  個人發票（電子）
+                </label>
+                <label className="wizard-radio">
+                  <input
+                    type="radio"
+                    name="invoice_type"
+                    value="company"
+                    checked={buyer.invoice_type === "company"}
+                    onChange={() => setBuyer({ ...buyer, invoice_type: "company" })}
+                  />
+                  公司發票（三聯式）
+                </label>
+              </div>
+            </div>
+
+            {buyer.invoice_type === "company" && (
+              <>
+                <div className="wizard-field">
+                  <label htmlFor="company_name">公司抬頭 *</label>
+                  <input
+                    id="company_name"
+                    className="input"
+                    placeholder="Acme 有限公司"
+                    value={buyer.company_name}
+                    onChange={(e) => setBuyer({ ...buyer, company_name: e.target.value })}
+                  />
+                  {errors.company_name && <p className="wizard-field-error">{errors.company_name}</p>}
+                </div>
+                <div className="wizard-field">
+                  <label htmlFor="tax_id">統一編號 * <span className="wizard-field-hint">8 碼數字</span></label>
+                  <input
+                    id="tax_id"
+                    className="input"
+                    placeholder="12345678"
+                    maxLength={8}
+                    value={buyer.tax_id}
+                    onChange={(e) => setBuyer({ ...buyer, tax_id: e.target.value.replace(/\D/g, "") })}
+                  />
+                  {errors.tax_id && <p className="wizard-field-error">{errors.tax_id}</p>}
+                </div>
+              </>
             )}
-          </tbody>
-        </table>
-      </div>
+
+            <div className="wizard-field">
+              <label className="wizard-checkbox">
+                <input
+                  type="checkbox"
+                  checked={buyer.agree_terms}
+                  onChange={(e) => setBuyer({ ...buyer, agree_terms: e.target.checked })}
+                />
+                <span>
+                  我已閱讀並同意<strong>購買條款</strong>：點數一經入帳不可退費（如需退費請聯絡管理員），
+                  並理解本系統為模擬付款。
+                </span>
+              </label>
+              {errors.agree_terms && <p className="wizard-field-error">{errors.agree_terms}</p>}
+            </div>
+          </div>
+
+          <div className="wizard-nav">
+            <button className="secondary-button" type="button" onClick={() => setStep(1)}>
+              ← 上一步
+            </button>
+            <button className="primary-button" type="button" onClick={goToConfirm}>
+              下一步：確認訂購 →
+            </button>
+          </div>
+        </div>
+      )}
+
+      {step === 3 && selectedPlan && (
+        <div className="wizard-confirm">
+          <h3 className="wizard-confirm-title">請確認以下訂單資訊</h3>
+
+          <div className="wizard-confirm-card">
+            <h4>方案</h4>
+            <div className="wizard-confirm-plan">
+              <div>
+                <div className="wizard-confirm-plan-name">{selectedPlan.name}</div>
+                <div className="wizard-confirm-plan-coin">{selectedPlan.coin_amount.toLocaleString()} coin</div>
+              </div>
+              <div className="wizard-confirm-plan-price">NT$ {selectedPlan.price_ntd.toLocaleString()}</div>
+            </div>
+          </div>
+
+          <div className="wizard-confirm-card">
+            <h4>買家資訊</h4>
+            <dl className="wizard-confirm-dl">
+              <dt>姓名</dt><dd>{buyer.buyer_name}</dd>
+              <dt>email</dt><dd>{buyer.buyer_email}</dd>
+              <dt>發票</dt>
+              <dd>
+                {buyer.invoice_type === "company"
+                  ? `公司發票（${buyer.company_name} / 統編 ${buyer.tax_id}）`
+                  : "個人電子發票"}
+              </dd>
+            </dl>
+          </div>
+
+          <div className="wizard-confirm-total">
+            <span>應付金額</span>
+            <span className="wizard-confirm-total-value">NT$ {selectedPlan.price_ntd.toLocaleString()}</span>
+          </div>
+
+          {Object.keys(errors).length > 0 && (
+            <div className="billing-feedback tone-bad">
+              {Object.values(errors).join("、")}
+            </div>
+          )}
+
+          <div className="wizard-nav">
+            <button className="secondary-button" type="button" onClick={() => setStep(2)} disabled={submitting}>
+              ← 修改資料
+            </button>
+            <button className="primary-button" type="button" onClick={submitOrder} disabled={submitting}>
+              {submitting ? "處理中…" : "確認購買（模擬付款）"}
+            </button>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
@@ -3213,22 +3439,93 @@ function AdminStatCard({ label, value, hint, tone = "cyan" }) {
   );
 }
 
+function AdminMiniChart({ series, keys, height = 110 }) {
+  // series: [{date, ...values}]；keys: [{key, label, color}]
+  if (!series || series.length === 0) {
+    return <div className="admin-empty">尚無資料</div>;
+  }
+  const w = 480;
+  const padding = { top: 8, right: 8, bottom: 24, left: 36 };
+  const plotW = w - padding.left - padding.right;
+  const plotH = height - padding.top - padding.bottom;
+  const allValues = series.flatMap((row) => keys.map((k) => row[k.key] || 0));
+  const maxV = Math.max(...allValues, 1);
+  const step = series.length > 1 ? plotW / (series.length - 1) : 0;
+  const yFor = (v) => padding.top + plotH - (v / maxV) * plotH;
+  const xFor = (i) => padding.left + i * step;
+  const yTicks = [0, Math.round(maxV / 2), maxV];
+
+  return (
+    <svg className="admin-mini-chart" viewBox={`0 0 ${w} ${height}`} width="100%" height={height}>
+      {yTicks.map((t) => (
+        <g key={t}>
+          <line
+            x1={padding.left}
+            x2={w - padding.right}
+            y1={yFor(t)}
+            y2={yFor(t)}
+            stroke="#e2e8f0"
+            strokeDasharray="2 4"
+          />
+          <text x={padding.left - 6} y={yFor(t) + 3} fontSize="10" fill="#94a3b8" textAnchor="end">
+            {t.toLocaleString()}
+          </text>
+        </g>
+      ))}
+      {keys.map((k) => {
+        const points = series
+          .map((row, i) => `${xFor(i)},${yFor(row[k.key] || 0)}`)
+          .join(" ");
+        return (
+          <polyline
+            key={k.key}
+            points={points}
+            fill="none"
+            stroke={k.color}
+            strokeWidth="2"
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+        );
+      })}
+      {series.length > 0 && (
+        <>
+          <text x={xFor(0)} y={height - 4} fontSize="10" fill="#94a3b8" textAnchor="start">
+            {series[0].date.slice(5)}
+          </text>
+          <text x={xFor(series.length - 1)} y={height - 4} fontSize="10" fill="#94a3b8" textAnchor="end">
+            {series[series.length - 1].date.slice(5)}
+          </text>
+        </>
+      )}
+    </svg>
+  );
+}
+
 function AdminOverviewPage() {
   const [data, setData] = useState(null);
+  const [dash, setDash] = useState(null);
   const [error, setError] = useState("");
+  const navigate = useNavigate();
+
   useEffect(() => {
-    api.get("/admin/overview/")
-      .then((r) => setData(r.data))
+    Promise.all([api.get("/admin/overview/"), api.get("/admin/dashboard/")])
+      .then(([o, d]) => { setData(o.data); setDash(d.data); })
       .catch(() => setError("無法載入概覽。"));
   }, []);
+
   if (error) return <div className="admin-error">{error}</div>;
-  if (!data) return <div className="admin-loading">載入中…</div>;
+  if (!data || !dash) return <div className="admin-loading">載入中…</div>;
   const t = data.totals;
+  const providerMaxTokens = Math.max(
+    ...dash.provider_breakdown.map((r) => r.tokens), 1,
+  );
+
   return (
     <div className="admin-page">
       <header className="admin-page-head">
         <h1>概覽</h1>
-        <p>系統整體狀態</p>
+        <p>系統整體狀態與最近 14 天活動</p>
       </header>
 
       <div className="admin-stat-grid">
@@ -3245,10 +3542,22 @@ function AdminOverviewPage() {
           tone="violet"
         />
         <AdminStatCard
+          label="訂單"
+          value={t.orders.toLocaleString()}
+          hint={`本月 ${t.orders_this_month} / 已付 ${t.orders_paid}`}
+          tone="good"
+        />
+        <AdminStatCard
           label="掃描總數"
           value={t.scans.toLocaleString()}
           hint={`本月 ${t.scans_this_month.toLocaleString()}`}
           tone="amber"
+        />
+        <AdminStatCard
+          label="AI Token 用量"
+          value={t.ai_tokens_total.toLocaleString()}
+          hint={`本月 ${t.ai_tokens_this_month.toLocaleString()} / Sessions ${t.ai_sessions_total}`}
+          tone="violet"
         />
         <AdminStatCard
           label="評論"
@@ -3258,6 +3567,80 @@ function AdminOverviewPage() {
         />
       </div>
 
+      {/* 14 天時序圖：3 條線（訂單、AI tokens、掃描） */}
+      <section className="admin-panel">
+        <div className="admin-panel-head-row">
+          <h3>最近 14 天活動</h3>
+          <div className="admin-chart-legend">
+            <span><i style={{ background: "#06b6d4" }} />AI tokens</span>
+            <span><i style={{ background: "#6366f1" }} />訂單金額</span>
+            <span><i style={{ background: "#f59e0b" }} />掃描數</span>
+          </div>
+        </div>
+        <AdminMiniChart
+          series={dash.series}
+          keys={[
+            { key: "ai_tokens", color: "#06b6d4" },
+            { key: "revenue_ntd", color: "#6366f1" },
+            { key: "scans", color: "#f59e0b" },
+          ]}
+          height={140}
+        />
+      </section>
+
+      <div className="admin-grid-2col">
+        <section className="admin-panel">
+          <h3>AI Provider 用量分佈</h3>
+          {dash.provider_breakdown.length === 0 ? (
+            <p className="admin-empty">尚無 AI 使用紀錄</p>
+          ) : (
+            <div className="admin-provider-bars">
+              {dash.provider_breakdown.map((row) => (
+                <div className="admin-provider-row" key={`${row.provider}-${row.model}`}>
+                  <div className="admin-provider-meta">
+                    <span className="admin-provider-name">{row.provider}</span>
+                    <span className="admin-provider-model">{row.model || "—"}</span>
+                  </div>
+                  <div className="admin-provider-track">
+                    <div
+                      className="admin-provider-fill"
+                      style={{ width: `${(row.tokens / providerMaxTokens) * 100}%` }}
+                    />
+                  </div>
+                  <div className="admin-provider-stats">
+                    <span className="admin-provider-tokens">{row.tokens.toLocaleString()}</span>
+                    <span className="admin-provider-sessions">{row.sessions} sess</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="admin-panel">
+          <h3>Top 10 AI 用戶</h3>
+          {dash.top_ai_users.length === 0 ? (
+            <p className="admin-empty">尚無 AI 使用紀錄</p>
+          ) : (
+            <table className="admin-table compact">
+              <thead><tr><th>使用者</th><th className="num">tokens</th><th className="num">sessions</th></tr></thead>
+              <tbody>
+                {dash.top_ai_users.map((u) => (
+                  <tr key={u.id} className="clickable" onClick={() => navigate(`/admin/users/${u.id}`)}>
+                    <td>
+                      <div className="admin-cell-primary">{u.username}</div>
+                      <div className="admin-cell-secondary">{u.email}</div>
+                    </td>
+                    <td className="num"><span className="admin-coin">{u.ai_tokens.toLocaleString()}</span></td>
+                    <td className="num">{u.ai_sessions}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </section>
+      </div>
+
       <div className="admin-grid-2col">
         <section className="admin-panel">
           <h3>最近購買</h3>
@@ -3265,7 +3648,7 @@ function AdminOverviewPage() {
             <p className="admin-empty">尚無購買紀錄</p>
           ) : (
             <table className="admin-table compact">
-              <thead><tr><th>時間</th><th>方案</th><th>金額</th></tr></thead>
+              <thead><tr><th>時間</th><th>方案</th><th className="num">金額</th></tr></thead>
               <tbody>
                 {data.recent_purchases.map((tx) => (
                   <tr key={tx.id}>
@@ -3530,6 +3913,41 @@ function AdminUserDetailPage() {
           )}
         </form>
       </section>
+
+      {user.ai_usage && (
+        <section className="admin-panel">
+          <h3>AI 使用量</h3>
+          <div className="admin-ai-summary">
+            <div>
+              <div className="admin-stat-label">總 Tokens</div>
+              <div className="admin-balance-big" style={{ marginBottom: 0 }}>
+                {user.ai_usage.total_tokens.toLocaleString()}
+              </div>
+            </div>
+            <div>
+              <div className="admin-stat-label">Sessions</div>
+              <div className="admin-balance-big" style={{ marginBottom: 0 }}>
+                {user.ai_usage.total_sessions}
+              </div>
+            </div>
+          </div>
+          {user.ai_usage.by_provider.length > 0 && (
+            <table className="admin-table compact" style={{ marginTop: 12 }}>
+              <thead><tr><th>Provider</th><th>Model</th><th className="num">Sessions</th><th className="num">Tokens</th></tr></thead>
+              <tbody>
+                {user.ai_usage.by_provider.map((row, i) => (
+                  <tr key={`${row.provider}-${row.model}-${i}`}>
+                    <td>{row.provider}</td>
+                    <td>{row.model || "—"}</td>
+                    <td className="num">{row.sessions}</td>
+                    <td className="num"><span className="admin-coin">{row.tokens.toLocaleString()}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </section>
+      )}
 
       <section className="admin-panel">
         <h3>最近 30 筆交易</h3>

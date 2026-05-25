@@ -2489,6 +2489,202 @@
     @apply flex justify-end;
   }
 
+  /* ============================================================
+     /billing 3 步驟 Wizard
+     ============================================================ */
+
+  .wizard-stepper {
+    @apply flex items-center justify-between gap-2 px-2 py-3;
+    list-style: none;
+    margin: 0;
+  }
+  .wizard-step {
+    @apply relative flex flex-1 flex-col items-center gap-2;
+  }
+  .wizard-step-circle {
+    @apply flex h-10 w-10 items-center justify-center rounded-full text-base font-bold transition;
+    background: #e2e8f0;
+    color: #94a3b8;
+    border: 2px solid transparent;
+    z-index: 1;
+  }
+  .wizard-step-label {
+    @apply text-sm font-semibold;
+    color: #94a3b8;
+  }
+  .wizard-step-bar {
+    position: absolute;
+    top: 20px;
+    left: calc(50% + 24px);
+    right: calc(-50% + 24px);
+    height: 2px;
+    background: #e2e8f0;
+    z-index: 0;
+  }
+  .wizard-step.active .wizard-step-circle {
+    background: linear-gradient(135deg, #06b6d4 0%, #6366f1 100%);
+    color: #fff;
+    box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.15);
+  }
+  .wizard-step.active .wizard-step-label { color: #1e293b; }
+  .wizard-step.done .wizard-step-circle {
+    background: #06b6d4;
+    color: #fff;
+  }
+  .wizard-step.done .wizard-step-label { color: #0e7490; }
+  .wizard-step.done .wizard-step-bar { background: #67e8f9; }
+
+  .wizard-form-wrap { @apply space-y-4; }
+  .wizard-summary-mini {
+    @apply flex flex-wrap items-baseline gap-3 rounded-xl px-4 py-3 text-sm;
+    background: linear-gradient(135deg, #eef2ff 0%, #ecfeff 100%);
+    border: 1px solid #c7d2fe;
+    color: #475569;
+  }
+  .wizard-summary-mini strong { color: #4338ca; }
+  .wizard-summary-price { @apply ml-auto text-slate-700; }
+  .wizard-form { @apply grid gap-4 sm:grid-cols-2; }
+  .wizard-field { @apply flex flex-col gap-1; }
+  .wizard-field label { @apply text-sm font-semibold text-slate-700; }
+  .wizard-field-hint { @apply ml-1 text-xs font-normal text-slate-400; }
+  .wizard-field-error { @apply text-xs text-rose-600; }
+  .wizard-radio-row { @apply flex flex-wrap gap-3; }
+  .wizard-radio {
+    @apply inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm cursor-pointer transition;
+    border-color: #cbd5e1;
+    background: #fff;
+  }
+  .wizard-radio:hover { border-color: #67e8f9; }
+  .wizard-radio input[type="radio"] { @apply h-4 w-4; accent-color: #06b6d4; }
+  .wizard-checkbox {
+    @apply inline-flex items-start gap-2 text-sm leading-relaxed font-normal text-slate-600;
+    cursor: pointer;
+  }
+  .wizard-checkbox input[type="checkbox"] {
+    @apply mt-0.5 h-4 w-4;
+    accent-color: #06b6d4;
+  }
+  .wizard-checkbox strong { color: #4338ca; }
+
+  /* 發票類型、條款 等寬欄位佔滿 2 欄 grid */
+  .wizard-form > .wizard-field:has(.wizard-radio-row),
+  .wizard-form > .wizard-field:has(.wizard-checkbox) {
+    grid-column: 1 / -1;
+  }
+
+  .wizard-nav { @apply flex flex-wrap items-center justify-between gap-3 pt-2; }
+
+  .wizard-confirm { @apply space-y-3; }
+  .wizard-confirm-title { @apply text-lg font-bold text-slate-800; }
+  .wizard-confirm-card {
+    @apply rounded-xl border p-4;
+    background: #f8fafc;
+    border-color: #e2e8f0;
+  }
+  .wizard-confirm-card h4 {
+    @apply mb-2 text-xs uppercase tracking-wider text-slate-500;
+  }
+  .wizard-confirm-plan { @apply flex items-center justify-between gap-3; }
+  .wizard-confirm-plan-name { @apply text-base font-bold text-slate-900; }
+  .wizard-confirm-plan-coin { @apply text-sm text-indigo-600; }
+  .wizard-confirm-plan-price { @apply text-xl font-bold text-slate-900; }
+  .wizard-confirm-dl {
+    @apply grid gap-y-1 text-sm;
+    grid-template-columns: 80px 1fr;
+  }
+  .wizard-confirm-dl dt { color: #64748b; }
+  .wizard-confirm-dl dd { color: #0f172a; }
+  .wizard-confirm-total {
+    @apply flex items-center justify-between gap-3 rounded-xl px-5 py-4 text-base font-semibold;
+    background: linear-gradient(135deg, #6366f1 0%, #06b6d4 100%);
+    color: #fff;
+  }
+  .wizard-confirm-total-value { @apply text-2xl font-bold; }
+
+  .wizard-success {
+    @apply mx-auto max-w-xl rounded-2xl border p-8 text-center;
+    background: linear-gradient(180deg, #ffffff 0%, #f0fdfa 100%);
+    border-color: #6ee7b7;
+    box-shadow: 0 4px 18px -6px rgba(16, 185, 129, 0.25);
+  }
+  .wizard-success-emoji { @apply text-5xl mb-2; }
+  .wizard-success-title { @apply text-2xl font-bold text-emerald-700; }
+  .wizard-success-sub { @apply mt-1 text-sm text-slate-600; }
+  .wizard-success-dl {
+    @apply mx-auto mt-5 grid max-w-md gap-y-2 text-left text-sm;
+    grid-template-columns: 100px 1fr;
+  }
+  .wizard-success-dl dt { color: #64748b; }
+  .wizard-success-dl dd { color: #0f172a; font-weight: 500; }
+  .hl-balance {
+    color: #0e7490 !important;
+    font-weight: 700 !important;
+    font-size: 16px;
+  }
+  .wizard-success-actions {
+    @apply mt-6 flex flex-wrap justify-center gap-3;
+  }
+
+  /* --- Dashboard charts --- */
+  .admin-panel-head-row {
+    @apply flex flex-wrap items-center justify-between gap-2 mb-3;
+  }
+  .admin-chart-legend {
+    @apply flex flex-wrap gap-3 text-xs;
+    color: #475569;
+  }
+  .admin-chart-legend span {
+    @apply inline-flex items-center gap-1;
+  }
+  .admin-chart-legend i {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+  }
+  .admin-mini-chart { display: block; }
+
+  .admin-provider-bars {
+    @apply flex flex-col gap-2;
+  }
+  .admin-provider-row {
+    @apply flex items-center gap-3 text-sm;
+  }
+  .admin-provider-meta {
+    @apply flex w-32 flex-col text-xs;
+  }
+  .admin-provider-name {
+    @apply font-semibold;
+    color: #0f172a;
+  }
+  .admin-provider-model {
+    color: #94a3b8;
+  }
+  .admin-provider-track {
+    @apply h-3 flex-1 overflow-hidden rounded-full;
+    background: #e2e8f0;
+  }
+  .admin-provider-fill {
+    @apply h-full rounded-full;
+    background: linear-gradient(90deg, #06b6d4, #6366f1);
+    transition: width 0.4s;
+  }
+  .admin-provider-stats {
+    @apply flex w-28 flex-col text-right text-xs;
+  }
+  .admin-provider-tokens {
+    @apply font-semibold;
+    color: #0e7490;
+  }
+  .admin-provider-sessions {
+    color: #94a3b8;
+  }
+
+  /* AI 使用量 - 使用者詳情頁 */
+  .admin-ai-summary {
+    @apply flex flex-wrap gap-8 mb-2;
+  }
+
   /* --- 前台 AccountBar 的「後台」入口按鈕 --- */
   .admin-entry-chip {
     @apply inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-sm font-semibold transition;

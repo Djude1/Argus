@@ -247,3 +247,93 @@ class MeEndpointTests(APITestCase):
         response = self.client.get(reverse("admin-me"))
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertFalse(response.data["is_staff"])
+
+
+def _make_agent_session(user, *, provider="minimax", model="abab", tokens=1000, scan=None):
+    from apps.scans.models import AgentSession
+    if scan is None:
+        scan = _make_scan(user)
+    return AgentSession.objects.create(
+        scan_job=scan,
+        provider=provider,
+        model=model,
+        status=AgentSession.Status.COMPLETED,
+        total_tokens=tokens,
+    )
+
+
+@override_settings(ARGUS_AUTO_QUEUE_SCANS=False)
+class AIUsageTests(APITestCase):
+    """admin overview / dashboard / user_detail 的 AI 使用量欄位。"""
+
+    def setUp(self):
+        self.admin = _make_user("admin", staff=True)
+        self.client.force_authenticate(self.admin)
+        self.alice = _make_user("alice")
+        self.bob = _make_user("bob")
+        _make_agent_session(self.alice, provider="minimax", tokens=5000)
+        _make_agent_session(self.alice, provider="glm", tokens=3000)
+        _make_agent_session(self.bob, provider="minimax", tokens=2000)
+
+    def test_overview_includes_ai_token_totals(self):
+        response = self.client.get(reverse("admin-overview"))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        totals = response.data["totals"]
+        self.assertEqual(totals["ai_tokens_total"], 10000)
+        self.assertEqual(totals["ai_sessions_total"], 3)
+
+    def test_user_detail_includes_ai_usage_breakdown(self):
+        response = self.client.get(
+            reverse("admin-user-detail", args=[self.alice.id]),
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        ai = response.data["ai_usage"]
+        self.assertEqual(ai["total_tokens"], 8000)
+        self.assertEqual(ai["total_sessions"], 2)
+        providers = {row["provider"] for row in ai["by_provider"]}
+        self.assertEqual(providers, {"minimax", "glm"})
+
+    def test_user_detail_ai_usage_does_not_leak_others(self):
+        # bob 的 detail 不該包含 alice 的 tokens
+        response = self.client.get(
+            reverse("admin-user-detail", args=[self.bob.id]),
+        )
+        self.assertEqual(response.data["ai_usage"]["total_tokens"], 2000)
+        self.assertEqual(response.data["ai_usage"]["total_sessions"], 1)
+
+    def test_dashboard_returns_14_day_series(self):
+        response = self.client.get(reverse("admin-dashboard"))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data["series"]), 14)
+        # 所有 keys 一致
+        for row in response.data["series"]:
+            self.assertIn("date", row)
+            self.assertIn("orders", row)
+            self.assertIn("revenue_ntd", row)
+            self.assertIn("ai_tokens", row)
+            self.assertIn("scans", row)
+
+    def test_dashboard_provider_breakdown_sorted_by_tokens(self):
+        response = self.client.get(reverse("admin-dashboard"))
+        breakdown = response.data["provider_breakdown"]
+        providers = [r["provider"] for r in breakdown]
+        # minimax 共 7000 tokens > glm 3000 → minimax 應該在前
+        self.assertEqual(providers[0], "minimax")
+        minimax_tokens = sum(r["tokens"] for r in breakdown if r["provider"] == "minimax")
+        self.assertEqual(minimax_tokens, 7000)
+
+    def test_dashboard_top_ai_users_includes_only_users_with_usage(self):
+        response = self.client.get(reverse("admin-dashboard"))
+        top = response.data["top_ai_users"]
+        usernames = [u["username"] for u in top]
+        # alice (8000) 應排在 bob (2000) 之前；admin 沒用 AI 不應出現
+        self.assertEqual(usernames[0], "alice")
+        self.assertIn("bob", usernames)
+        self.assertNotIn("admin", usernames)
+        self.assertEqual(top[0]["ai_tokens"], 8000)
+
+    def test_dashboard_non_staff_blocked(self):
+        normal = _make_user("normal")
+        self.client.force_authenticate(normal)
+        response = self.client.get(reverse("admin-dashboard"))
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)

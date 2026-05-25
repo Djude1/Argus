@@ -15,16 +15,17 @@ from rest_framework.response import Response
 from apps.admin_api.serializers import (
     AdjustCoinSerializer,
     AdminCoinTransactionSerializer,
+    AdminPurchaseOrderSerializer,
     AdminReplyReviewSerializer,
     AdminReviewSerializer,
     AdminScanJobSerializer,
     AdminUserDetailSerializer,
     AdminUserListSerializer,
 )
-from apps.billing.models import CoinTransaction, CoinWallet
+from apps.billing.models import CoinTransaction, CoinWallet, PurchaseOrder
 from apps.billing.services import admin_adjust
 from apps.reviews.models import PlatformReview
-from apps.scans.models import ScanJob
+from apps.scans.models import AgentSession, ScanJob
 
 PAGE_SIZE = 25
 
@@ -74,6 +75,20 @@ def overview(request):
         .annotate(findings_count=Count("findings"), pages_count=Count("pages"))
     )
 
+    total_orders = PurchaseOrder.objects.count()
+    orders_this_month = PurchaseOrder.objects.filter(created_at__gte=month_start).count()
+    paid_orders = PurchaseOrder.objects.filter(status=PurchaseOrder.Status.PAID).count()
+
+    # AI 使用量（從 AgentSession.total_tokens 聚合）
+    ai_agg = AgentSession.objects.aggregate(
+        total=Sum("total_tokens"),
+        sessions=Count("id"),
+    )
+    ai_month = AgentSession.objects.filter(created_at__gte=month_start).aggregate(
+        total=Sum("total_tokens"),
+        sessions=Count("id"),
+    )
+
     return Response({
         "totals": {
             "users": total_users,
@@ -85,11 +100,139 @@ def overview(request):
             "reviews": total_reviews,
             "reviews_pending": pending_reviews,
             "avg_rating": avg_rating,
+            "orders": total_orders,
+            "orders_this_month": orders_this_month,
+            "orders_paid": paid_orders,
+            "ai_tokens_total": ai_agg["total"] or 0,
+            "ai_sessions_total": ai_agg["sessions"] or 0,
+            "ai_tokens_this_month": ai_month["total"] or 0,
+            "ai_sessions_this_month": ai_month["sessions"] or 0,
         },
         "recent_purchases": AdminCoinTransactionSerializer(
             recent_purchases, many=True,
         ).data,
         "recent_scans": AdminScanJobSerializer(recent_scans, many=True).data,
+    })
+
+
+@api_view(["GET"])
+@permission_classes([permissions.IsAdminUser])
+def dashboard(request):
+    """進階 dashboard：14 天時序 + provider 分群 + Top AI 用戶。"""
+    from datetime import timedelta
+
+    from django.contrib.auth import get_user_model
+
+    now = timezone.now()
+    start = (now - timedelta(days=13)).replace(hour=0, minute=0, second=0, microsecond=0)
+
+    # 14 天時序：每天彙整 orders、revenue、ai_tokens、scans
+    days = [(start + timedelta(days=i)).date() for i in range(14)]
+    series_index = {d.isoformat(): {
+        "date": d.isoformat(),
+        "orders": 0,
+        "revenue_ntd": 0,
+        "ai_tokens": 0,
+        "scans": 0,
+    } for d in days}
+
+    for o in PurchaseOrder.objects.filter(
+        status=PurchaseOrder.Status.PAID, created_at__gte=start,
+    ).values("created_at", "price_ntd"):
+        key = o["created_at"].date().isoformat()
+        if key in series_index:
+            series_index[key]["orders"] += 1
+            series_index[key]["revenue_ntd"] += o["price_ntd"]
+
+    for s in AgentSession.objects.filter(created_at__gte=start).values(
+        "created_at", "total_tokens",
+    ):
+        key = s["created_at"].date().isoformat()
+        if key in series_index:
+            series_index[key]["ai_tokens"] += s["total_tokens"] or 0
+
+    for s in ScanJob.objects.filter(created_at__gte=start).values("created_at"):
+        key = s["created_at"].date().isoformat()
+        if key in series_index:
+            series_index[key]["scans"] += 1
+
+    series = [series_index[d.isoformat()] for d in days]
+
+    # Provider 分群（按 provider + model 彙整 sessions / tokens）
+    provider_rows = (
+        AgentSession.objects
+        .values("provider", "model")
+        .annotate(sessions=Count("id"), tokens=Sum("total_tokens"))
+        .order_by("-tokens")
+    )
+    provider_breakdown = [
+        {
+            "provider": r["provider"],
+            "model": r["model"],
+            "sessions": r["sessions"],
+            "tokens": r["tokens"] or 0,
+        }
+        for r in provider_rows
+    ]
+
+    # Top 10 AI 用戶（按 tokens 排序）
+    user_model = get_user_model()
+    top_user_rows = (
+        user_model.objects
+        .annotate(
+            ai_tokens=Sum("scan_jobs__agent_sessions__total_tokens"),
+            ai_sessions=Count("scan_jobs__agent_sessions", distinct=True),
+        )
+        .filter(ai_tokens__gt=0)
+        .order_by("-ai_tokens")[:10]
+    )
+    top_ai_users = [
+        {
+            "id": u.id,
+            "username": u.username,
+            "email": u.email,
+            "ai_tokens": u.ai_tokens or 0,
+            "ai_sessions": u.ai_sessions or 0,
+        }
+        for u in top_user_rows
+    ]
+
+    return Response({
+        "series": series,
+        "provider_breakdown": provider_breakdown,
+        "top_ai_users": top_ai_users,
+    })
+
+
+@api_view(["GET"])
+@permission_classes([permissions.IsAdminUser])
+def orders_list(request):
+    """訂單列表（搜尋 buyer_email/姓名/公司/統編 + status/invoice_type 篩選）。"""
+    qs = (
+        PurchaseOrder.objects.select_related("user", "plan")
+        .order_by("-created_at")
+    )
+    search = (request.query_params.get("q") or "").strip()
+    if search:
+        qs = qs.filter(
+            Q(buyer_email__icontains=search)
+            | Q(buyer_name__icontains=search)
+            | Q(company_name__icontains=search)
+            | Q(tax_id__icontains=search)
+            | Q(user__username__icontains=search)
+        )
+    status_filter = request.query_params.get("status")
+    if status_filter:
+        qs = qs.filter(status=status_filter)
+    invoice_type = request.query_params.get("invoice_type")
+    if invoice_type:
+        qs = qs.filter(invoice_type=invoice_type)
+    items, page, total_pages, total = _paginate(request, qs)
+    return Response({
+        "orders": AdminPurchaseOrderSerializer(items, many=True).data,
+        "page": page,
+        "total_pages": total_pages,
+        "total": total,
     })
 
 
@@ -122,7 +265,29 @@ def user_detail(request, user_id: int):
     user = get_object_or_404(
         user_model.objects.select_related("coin_wallet"), pk=user_id,
     )
-    return Response(AdminUserDetailSerializer(user).data)
+    data = AdminUserDetailSerializer(user).data
+    # 附 AI 使用量（從 AgentSession 聚合）
+    sessions_qs = AgentSession.objects.filter(scan_job__user=user)
+    agg = sessions_qs.aggregate(total=Sum("total_tokens"), sessions=Count("id"))
+    by_provider = list(
+        sessions_qs.values("provider", "model")
+        .annotate(sessions=Count("id"), tokens=Sum("total_tokens"))
+        .order_by("-tokens")
+    )
+    data["ai_usage"] = {
+        "total_tokens": agg["total"] or 0,
+        "total_sessions": agg["sessions"] or 0,
+        "by_provider": [
+            {
+                "provider": r["provider"],
+                "model": r["model"],
+                "sessions": r["sessions"],
+                "tokens": r["tokens"] or 0,
+            }
+            for r in by_provider
+        ],
+    }
+    return Response(data)
 
 
 @api_view(["POST"])

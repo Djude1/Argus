@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from apps.billing.models import CoinTransaction, CoinWallet
+from apps.billing.models import CoinTransaction, CoinWallet, PurchaseOrder
 from apps.reviews.models import PlatformReview
 from apps.scans.models import ScanJob
 
@@ -145,3 +145,24 @@ class AdminScanJobSerializer(serializers.ModelSerializer):
         if obj.started_at and obj.completed_at:
             return int((obj.completed_at - obj.started_at).total_seconds())
         return None
+
+
+class AdminPurchaseOrderSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(source="user.username", read_only=True)
+    plan_name = serializers.CharField(source="plan.name", read_only=True)
+    status_label = serializers.CharField(source="get_status_display", read_only=True)
+    invoice_type_label = serializers.CharField(
+        source="get_invoice_type_display", read_only=True,
+    )
+
+    class Meta:
+        model = PurchaseOrder
+        fields = [
+            "id", "created_at", "paid_at",
+            "username", "plan_name",
+            "price_ntd", "coin_amount",
+            "buyer_name", "buyer_email",
+            "invoice_type", "invoice_type_label",
+            "company_name", "tax_id",
+            "status", "status_label",
+        ]
