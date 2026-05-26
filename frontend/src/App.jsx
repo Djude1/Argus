@@ -4896,27 +4896,6 @@ function AdminOverviewPage() {
             </table>
           )}
         </section>
-
-        <section className="admin-panel">
-          <h3>最近掃描</h3>
-          {data.recent_scans.length === 0 ? (
-            <p className="admin-empty">尚無掃描</p>
-          ) : (
-            <table className="admin-table compact">
-              <thead><tr><th>時間</th><th>使用者</th><th>網址</th><th>狀態</th></tr></thead>
-              <tbody>
-                {data.recent_scans.map((s) => (
-                  <tr key={s.id}>
-                    <td>{new Date(s.created_at).toLocaleString("zh-Hant")}</td>
-                    <td>{s.username}</td>
-                    <td className="truncate" title={s.origin}>{s.origin}</td>
-                    <td><span className={`admin-status ${s.status}`}>{STATUS_LABELS[s.status]?.label || s.status}</span></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </section>
       </div>
     </div>
   );
