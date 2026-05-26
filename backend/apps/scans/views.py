@@ -1,6 +1,9 @@
+import re
 from collections import Counter, defaultdict
 from pathlib import Path
+from urllib.parse import urljoin, urlparse
 
+import requests as http_requests
 from django.conf import settings
 from django.db.models import Avg, Count, Max
 from django.http import FileResponse, Http404
@@ -438,12 +441,6 @@ def findings_by_category(request):
         result[cat] = {"total_findings": sum(counter.values()), "items": items}
 
     return Response({"categories": result})
-
-
-import re
-from urllib.parse import urljoin, urlparse
-
-import requests as http_requests
 
 
 def _is_safe_url(url: str) -> bool:
