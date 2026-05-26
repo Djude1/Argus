@@ -28,6 +28,10 @@ class TeamMember(models.Model):
         max_length=8, blank=True,
         help_text="一個 emoji 當頭像，例如 🧑‍💻、🎨",
     )
+    avatar_url = models.URLField(
+        blank=True,
+        help_text="大頭照圖片 URL；留空時使用 avatar_emoji",
+    )
     bio = models.TextField(blank=True)
     skills = models.JSONField(
         default=list, blank=True,

@@ -4012,10 +4012,16 @@ function ProjectScanDemo() {
 }
 
 function ProjectPage() {
-  const [features, setFeatures] = useState([]);
+  const features = [
+    { id: 1, icon: "🕷️", title: "BFS 深度爬蟲", description: "以 Playwright 驅動的 BFS 爬蟲，自動探索整站結構。" },
+    { id: 2, icon: "🔍", title: "四維安全掃描", description: "涵蓋 SEO、AEO、GEO、Security 四個維度的全面分析。" },
+    { id: 3, icon: "🤖", title: "Hermes AI Agent", description: "LLM 驅動的智慧代理人，提供主動式漏洞驗證。" },
+    { id: 4, icon: "📊", title: "即時進度追蹤", description: "掃描進度即時更新，支援多任務並行管理。" },
+    { id: 5, icon: "📝", title: "Word 報告匯出", description: "一鍵產生專業 Word 格式掃描報告，方便交付客戶。" },
+    { id: 6, icon: "💎", title: "點數計費系統", description: "靈活的 Coin 計費模式，按頁計費，精準控制成本。" },
+  ];
   const [milestones, setMilestones] = useState([]);
   useEffect(() => {
-    api.get("/content/features/").then((r) => setFeatures(r.data.features || [])).catch(() => {});
     api.get("/content/milestones/").then((r) => setMilestones(r.data.milestones || [])).catch(() => {});
   }, []);
   return (
@@ -5741,25 +5747,6 @@ function AdminCmsManager({ schema }) {
   );
 }
 
-const FEATURE_SCHEMA = {
-  endpoint: "/admin/cms/features/",
-  title: "專案特色",
-  titleField: "title",
-  fields: [
-    { key: "icon", label: "圖示 emoji", type: "text", hint: "例：🕷️ 🔍 🤖" },
-    { key: "title", label: "標題", type: "text", required: true },
-    { key: "description", label: "描述", type: "textarea", required: true, rows: 4 },
-    { key: "sort_order", label: "排序", type: "number", default: 0 },
-    { key: "is_active", label: "啟用", type: "boolean", default: true },
-  ],
-  displayFields: [
-    { key: "sort_order", label: "順序", num: true },
-    { key: "icon", label: "圖示", render: (i) => <span style={{ fontSize: 22 }}>{i.icon}</span> },
-    { key: "title", label: "標題" },
-    { key: "is_active", label: "啟用", render: (i) => i.is_active ? "✓" : "—" },
-  ],
-};
-
 const TEAM_SCHEMA = {
   endpoint: "/admin/cms/team/",
   title: "團隊成員",
@@ -5837,13 +5824,12 @@ const PLAN_SCHEMA = {
 };
 
 const CONTENT_TABS = [
-  { key: "features", label: "📌 專案特色", schema: FEATURE_SCHEMA },
   { key: "team", label: "👥 團隊成員", schema: TEAM_SCHEMA },
   { key: "releases", label: "📱 APP / PWA 版本", schema: RELEASE_SCHEMA },
 ];
 
 function AdminContentPage() {
-  const [tab, setTab] = useState("features");
+  const [tab, setTab] = useState("team");
   const active = CONTENT_TABS.find((t) => t.key === tab);
   return (
     <div className="admin-page">
