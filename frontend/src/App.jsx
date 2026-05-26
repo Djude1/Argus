@@ -482,7 +482,7 @@ function ScoreBadge({ score }) {
 // 登入相關
 // ============================================================
 
-function AccountBar() {
+function NavActions() {
   const { accessToken, setToken, wallet, fetchWallet, me, fetchMe } = useArgusStore();
   const navigate = useNavigate();
   const { canInstall, installed, trigger } = useInstallPrompt();
@@ -504,7 +504,7 @@ function AccountBar() {
   }
   const balance = wallet?.balance;
   return (
-    <div className="account-bar">
+    <>
       {canInstall && !installed && (
         <button
           className="install-chip"
@@ -528,10 +528,10 @@ function AccountBar() {
         </span>
         <span className="coin-chip-unit">coin</span>
       </button>
-      <button className="secondary-button" type="button" onClick={handleLogout}>
+      <button className="nav-logout-btn" type="button" onClick={handleLogout}>
         登出
       </button>
-    </div>
+    </>
   );
 }
 
@@ -2316,7 +2316,7 @@ function TopNav() {
             </NavLink>
           ))}
         </div>
-        <AccountBar />
+        <NavActions />
       </div>
     </nav>
   );
