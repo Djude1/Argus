@@ -55,6 +55,7 @@ INSTALLED_APPS = [
     "apps.billing",
     "apps.reviews",
     "apps.admin_api",
+    "apps.content",
 ]
 
 MIDDLEWARE = [
@@ -202,6 +203,12 @@ JAZZMIN_SETTINGS = {
         "billing.CoinTransaction": "fas fa-exchange-alt",
         "billing.PricingPlan": "fas fa-tags",
         "billing.PurchaseOrder": "fas fa-receipt",
+        "admin_api": "fas fa-shield-alt",
+        "admin_api.AdminAuditLog": "fas fa-clipboard-list",
+        "content": "fas fa-newspaper",
+        "content.ProjectFeature": "fas fa-rocket",
+        "content.TeamMember": "fas fa-user-friends",
+        "content.AppRelease": "fas fa-mobile-alt",
         "reviews": "fas fa-star-half-alt",
         "reviews.PlatformReview": "fas fa-star",
         "scans": "fas fa-search",

@@ -170,34 +170,51 @@ class ReviewsEndpointTests(APITestCase):
         response = self.client.get(reverse("admin-reviews"))
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["pending_count"], 1)
-        self.assertTrue(response.data["reviews"][0]["is_pending"])
+        # 新欄位：last_message_is_user 為 True 表示等待 admin 回覆
+        self.assertTrue(response.data["reviews"][0]["last_message_is_user"])
+        self.assertFalse(response.data["reviews"][0]["has_admin_reply"])
 
-    def test_reply_writes_admin_replied_at_and_by(self):
+    def test_reply_creates_admin_review_message(self):
+        from apps.reviews.models import ReviewMessage
         response = self.client.post(
             reverse("admin-reply-review", args=[self.review.id]),
             {"reply": "謝謝你的回饋！"},
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.review.refresh_from_db()
-        self.assertEqual(self.review.admin_reply, "謝謝你的回饋！")
-        self.assertIsNotNone(self.review.admin_replied_at)
-        self.assertEqual(self.review.admin_replied_by, self.admin)
+        msg = ReviewMessage.objects.get(review=self.review)
+        self.assertTrue(msg.is_admin)
+        self.assertEqual(msg.author, self.admin)
+        self.assertEqual(msg.body, "謝謝你的回饋！")
 
-    def test_clear_reply_resets_metadata(self):
-        # 先回覆，再清空，確認 admin_replied_at/by 一併清除
-        self.review.admin_reply = "舊回覆"
-        self.review.save()
+    def test_reply_can_also_override_rating(self):
         response = self.client.post(
             reverse("admin-reply-review", args=[self.review.id]),
-            {"reply": ""},
+            {"reply": "已協助處理", "rating": 5},
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.review.refresh_from_db()
-        self.assertEqual(self.review.admin_reply, "")
-        self.assertIsNone(self.review.admin_replied_at)
-        self.assertIsNone(self.review.admin_replied_by)
+        self.assertEqual(self.review.rating, 5)
+
+    def test_reply_requires_at_least_reply_or_rating(self):
+        response = self.client.post(
+            reverse("admin-reply-review", args=[self.review.id]),
+            {},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_reply_creates_audit_log_entry(self):
+        from apps.admin_api.models import AdminAuditLog
+        self.client.post(
+            reverse("admin-reply-review", args=[self.review.id]),
+            {"reply": "已收到"},
+            format="json",
+        )
+        log = AdminAuditLog.objects.get(action=AdminAuditLog.Action.REVIEW_REPLY)
+        self.assertEqual(log.admin_actor, self.admin)
+        self.assertEqual(log.target_user, self.user)
 
 
 @override_settings(ARGUS_AUTO_QUEUE_SCANS=False)

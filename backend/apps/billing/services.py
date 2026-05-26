@@ -178,6 +178,7 @@ def admin_adjust(*, target_user, delta: int, admin_actor, note: str) -> CoinTran
     """管理員手動加/減 coin（含退費）。
 
     `delta` 可正可負；負數時若超過餘額會被夾到 0（避免負餘額）。
+    同時寫一筆 AdminAuditLog 供 superuser 查核。
     """
     if delta == 0:
         raise ValueError("delta 不可為 0")
@@ -186,7 +187,7 @@ def admin_adjust(*, target_user, delta: int, admin_actor, note: str) -> CoinTran
     actual_delta = new_balance - wallet.balance
     wallet.balance = new_balance
     wallet.save(update_fields=["balance", "updated_at"])
-    return CoinTransaction.objects.create(
+    tx = CoinTransaction.objects.create(
         wallet=wallet,
         amount=actual_delta,
         kind=CoinTransaction.Kind.ADMIN_ADJUST,
@@ -194,3 +195,19 @@ def admin_adjust(*, target_user, delta: int, admin_actor, note: str) -> CoinTran
         admin_actor=admin_actor,
         note=note,
     )
+    # 寫入 admin 操作 audit log（延後 import 避免 circular）
+    from apps.admin_api.models import AdminAuditLog, log_admin_action
+    log_admin_action(
+        admin_actor=admin_actor,
+        action=AdminAuditLog.Action.COIN_ADJUST,
+        target_user=target_user,
+        target_repr=f"{target_user.username} wallet→{new_balance}",
+        payload={
+            "delta_requested": delta,
+            "delta_actual": actual_delta,
+            "balance_after": new_balance,
+            "note": note,
+            "transaction_id": tx.id,
+        },
+    )
+    return tx

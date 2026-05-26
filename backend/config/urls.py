@@ -13,12 +13,19 @@ urlpatterns = [
     path("api/billing/", include("apps.billing.urls")),
     path("api/reviews/", include("apps.reviews.urls")),
     path("api/admin/", include("apps.admin_api.urls")),
+    path("api/content/", include("apps.content.urls")),
     path("api/", include("apps.scans.urls")),
     # 由 Django 直接服務 Vite build 出的靜態 assets，讓 runserver 模式不必另開 npm dev
     re_path(
         r"^assets/(?P<path>.*)$",
         serve,
         {"document_root": FRONTEND_DIST / "assets"},
+    ),
+    # PWA 必要檔案（從 frontend/dist 根目錄 serve）
+    re_path(
+        r"^(?P<path>manifest\.webmanifest|service-worker\.js|pwa-icon\.svg)$",
+        serve,
+        {"document_root": FRONTEND_DIST},
     ),
     # SPA fallback：其他路徑（含 /admin/*）都回傳 index.html，由 React Router 處理
     # （Docker 模式由 nginx 處理 SPA fallback，此路由在容器內為惰性 fallback）

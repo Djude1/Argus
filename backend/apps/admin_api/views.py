@@ -12,8 +12,11 @@ from rest_framework import permissions, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
+from apps.admin_api.models import AdminAuditLog, log_admin_action
+from apps.admin_api.permissions import IsSuperuser
 from apps.admin_api.serializers import (
     AdjustCoinSerializer,
+    AdminAuditLogSerializer,
     AdminCoinTransactionSerializer,
     AdminPurchaseOrderSerializer,
     AdminReplyReviewSerializer,
@@ -57,7 +60,7 @@ def overview(request):
     total_revenue = CoinWallet.objects.aggregate(s=Sum("total_purchased_ntd"))["s"] or 0
     total_scans = ScanJob.objects.count()
     scans_this_month = ScanJob.objects.filter(created_at__gte=month_start).count()
-    pending_reviews = PlatformReview.objects.filter(admin_reply="").count()
+    pending_reviews = len(_review_pending_subquery())
     total_reviews = PlatformReview.objects.count()
     avg_rating = None
     if total_reviews:
@@ -331,44 +334,102 @@ def transactions_list(request):
     })
 
 
+def _review_pending_subquery():
+    """『待回覆』定義：最後一則 message 不是 admin 發的，或還沒有任何 message。
+
+    這裡用簡單做法：列出有 admin 回覆且最新訊息是 admin 的不算 pending。
+    回傳 pending review id 的 list。
+    """
+    pending = []
+    for r in PlatformReview.objects.prefetch_related("messages").all():
+        last = r.messages.order_by("-created_at").first()
+        if not last or not last.is_admin:
+            pending.append(r.id)
+    return pending
+
+
 @api_view(["GET"])
 @permission_classes([permissions.IsAdminUser])
 def reviews_list(request):
-    qs = PlatformReview.objects.select_related(
-        "user", "admin_replied_by",
-    ).order_by("-created_at")
+    qs = PlatformReview.objects.select_related("user").order_by("-created_at")
     only_pending = request.query_params.get("pending") in {"1", "true", "yes"}
+    pending_ids = _review_pending_subquery()
     if only_pending:
-        qs = qs.filter(admin_reply="")
+        qs = qs.filter(id__in=pending_ids)
     items, page, total_pages, total = _paginate(request, qs)
     return Response({
         "reviews": AdminReviewSerializer(items, many=True).data,
         "page": page,
         "total_pages": total_pages,
         "total": total,
-        "pending_count": PlatformReview.objects.filter(admin_reply="").count(),
+        "pending_count": len(pending_ids),
     })
 
 
 @api_view(["POST"])
 @permission_classes([permissions.IsAdminUser])
 def reply_review(request, review_id: int):
+    """管理員回覆：建立一筆 admin ReviewMessage；可選同時校正 rating。"""
     review = get_object_or_404(PlatformReview, pk=review_id)
     serializer = AdminReplyReviewSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
-    new_reply = serializer.validated_data["reply"].strip()
-    review.admin_reply = new_reply
-    if new_reply:
-        review.admin_replied_at = timezone.now()
-        review.admin_replied_by = request.user
-    else:
-        # 清空回覆時，把時間與回覆者也清空，避免畫面顯示空回覆但有時間
-        review.admin_replied_at = None
-        review.admin_replied_by = None
-    review.save(update_fields=[
-        "admin_reply", "admin_replied_at", "admin_replied_by", "updated_at",
-    ])
+
+    reply_body = (serializer.validated_data.get("reply") or "").strip()
+    new_rating = serializer.validated_data.get("rating")
+
+    from apps.reviews.models import ReviewMessage
+    created_msg = None
+    if reply_body:
+        created_msg = ReviewMessage.objects.create(
+            review=review,
+            author=request.user,
+            is_admin=True,
+            body=reply_body,
+        )
+
+    rating_changed = False
+    if new_rating is not None and new_rating != review.rating:
+        review.rating = new_rating
+        review.save(update_fields=["rating", "updated_at"])
+        rating_changed = True
+
+    log_admin_action(
+        admin_actor=request.user,
+        action=AdminAuditLog.Action.REVIEW_REPLY,
+        target_user=review.user,
+        target_repr=f"Review #{review.id} ({review.user.username})",
+        payload={
+            "review_id": review.id,
+            "reply_excerpt": reply_body[:120],
+            "rating_override": new_rating if rating_changed else None,
+            "message_id": created_msg.id if created_msg else None,
+        },
+    )
     return Response(AdminReviewSerializer(review).data)
+
+
+@api_view(["GET"])
+@permission_classes([IsSuperuser])
+def audit_log(request):
+    """管理員操作 audit log（僅超級管理員）。"""
+    qs = (
+        AdminAuditLog.objects
+        .select_related("admin_actor", "target_user")
+        .order_by("-created_at")
+    )
+    action = request.query_params.get("action")
+    if action:
+        qs = qs.filter(action=action)
+    actor_id = request.query_params.get("actor_id")
+    if actor_id:
+        qs = qs.filter(admin_actor_id=actor_id)
+    items, page, total_pages, total = _paginate(request, qs)
+    return Response({
+        "logs": AdminAuditLogSerializer(items, many=True).data,
+        "page": page,
+        "total_pages": total_pages,
+        "total": total,
+    })
 
 
 @api_view(["GET"])

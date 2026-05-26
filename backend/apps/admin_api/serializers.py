@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from apps.admin_api.models import AdminAuditLog
 from apps.billing.models import CoinTransaction, CoinWallet, PurchaseOrder
 from apps.reviews.models import PlatformReview
 from apps.scans.models import ScanJob
@@ -99,30 +100,52 @@ class AdjustCoinSerializer(serializers.Serializer):
 class AdminReviewSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source="user.username", read_only=True)
     full_name = serializers.SerializerMethodField()
-    admin_replied_by_username = serializers.CharField(
-        source="admin_replied_by.username", read_only=True, default=None,
-    )
-    is_pending = serializers.SerializerMethodField()
+    message_count = serializers.SerializerMethodField()
+    has_admin_reply = serializers.SerializerMethodField()
+    last_message_at = serializers.SerializerMethodField()
+    last_message_is_user = serializers.SerializerMethodField()
 
     class Meta:
         model = PlatformReview
         fields = [
             "id", "username", "full_name",
             "rating", "comment",
-            "admin_reply", "admin_replied_at", "admin_replied_by_username",
-            "is_pending", "created_at", "updated_at",
+            "message_count", "has_admin_reply",
+            "last_message_at", "last_message_is_user",
+            "created_at", "updated_at",
         ]
 
     def get_full_name(self, obj) -> str:
         u = obj.user
         return f"{u.first_name} {u.last_name}".strip() or u.username
 
-    def get_is_pending(self, obj) -> bool:
-        return not bool(obj.admin_reply)
+    def get_message_count(self, obj) -> int:
+        return obj.messages.count()
+
+    def get_has_admin_reply(self, obj) -> bool:
+        return obj.messages.filter(is_admin=True).exists()
+
+    def get_last_message_at(self, obj):
+        last = obj.messages.order_by("-created_at").first()
+        return last.created_at if last else None
+
+    def get_last_message_is_user(self, obj) -> bool:
+        """最後一則由非 admin 發 → 表示「正等管理員回覆」。"""
+        last = obj.messages.order_by("-created_at").first()
+        if not last:
+            return True  # 只有評分還沒任何 thread，視為待回覆
+        return not last.is_admin
 
 
 class AdminReplyReviewSerializer(serializers.Serializer):
-    reply = serializers.CharField(max_length=2000, allow_blank=True)
+    reply = serializers.CharField(max_length=2000, required=False, allow_blank=True)
+    rating = serializers.IntegerField(required=False, min_value=1, max_value=5)
+    # 允許 admin 同時：(1) 補上回覆訊息 (2) 校正 rating
+
+    def validate(self, attrs):
+        if not attrs.get("reply") and "rating" not in attrs:
+            raise serializers.ValidationError("必須至少提供 reply 或 rating。")
+        return attrs
 
 
 class AdminScanJobSerializer(serializers.ModelSerializer):
@@ -145,6 +168,27 @@ class AdminScanJobSerializer(serializers.ModelSerializer):
         if obj.started_at and obj.completed_at:
             return int((obj.completed_at - obj.started_at).total_seconds())
         return None
+
+
+class AdminAuditLogSerializer(serializers.ModelSerializer):
+    actor_username = serializers.CharField(
+        source="admin_actor.username", read_only=True, default=None,
+    )
+    target_username = serializers.CharField(
+        source="target_user.username", read_only=True, default=None,
+    )
+    action_label = serializers.CharField(source="get_action_display", read_only=True)
+
+    class Meta:
+        model = AdminAuditLog
+        fields = [
+            "id", "created_at",
+            "action", "action_label",
+            "actor_username",
+            "target_username",
+            "target_object_repr",
+            "payload",
+        ]
 
 
 class AdminPurchaseOrderSerializer(serializers.ModelSerializer):

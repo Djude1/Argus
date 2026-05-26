@@ -2130,8 +2130,6 @@ const NAV_ITEMS = [
   { to: "/dashboard", label: "Dashboard", emoji: "📊" },
   { to: "/scans", label: "掃描", emoji: "🔍" },
   { to: "/history", label: "歷史", emoji: "📈" },
-  { to: "/audit", label: "活動", emoji: "🧾" },
-  { to: "/categories", label: "分類", emoji: "🗂️" },
   { to: "/billing", label: "購點", emoji: "💎" },
   { to: "/reviews", label: "評論", emoji: "⭐" },
   { to: "/settings", label: "設定", emoji: "⚙️" },
@@ -2141,8 +2139,11 @@ function TopNav() {
   const accessToken = useArgusStore((state) => state.accessToken);
   const location = useLocation();
   if (!accessToken) return null;
-  // /admin/* 走獨立 dark sidebar 版面，不顯示前台 TopNav
+  // /admin/* 與公開頁走獨立 layout，不顯示前台 TopNav
   if (location.pathname.startsWith("/admin")) return null;
+  if (["/project", "/team", "/purchase", "/download"].some((p) =>
+    location.pathname.startsWith(p),
+  )) return null;
   return (
     <nav className="argus-nav">
       <div className="argus-nav-inner">
@@ -2524,141 +2525,6 @@ function HistoryPage() {
           );
         })}
       </div>
-    </section>
-  );
-}
-
-// ============================================================
-// Audit log 頁
-// ============================================================
-
-const AUDIT_TYPE_META = {
-  scan_created: { label: "建立掃描", tone: "blue", emoji: "🔍" },
-  scan_completed: { label: "完成掃描", tone: "emerald", emoji: "✓" },
-  scan_failed: { label: "掃描失敗", tone: "red", emoji: "✗" },
-  authorization: { label: "授權確認", tone: "slate", emoji: "🛡️" },
-};
-
-function AuditPage() {
-  const navigate = useNavigate();
-  const [data, setData] = useState(null);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    let cancelled = false;
-    api
-      .get("/audit/")
-      .then((r) => !cancelled && setData(r.data))
-      .catch(() => !cancelled && setError("無法載入活動紀錄。"));
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  if (error) return <section className="panel"><p className="error-text">{error}</p></section>;
-  if (!data) return <section className="panel"><p className="hint-text">載入中...</p></section>;
-
-  return (
-    <section className="panel">
-      <div className="dashboard-panel-header">
-        <h3>活動紀錄</h3>
-        <span className="hint-text-sm">{data.events.length} 筆事件</span>
-      </div>
-      {data.events.length === 0 && (
-        <p className="mt-3 text-sm text-slate-500">尚無活動。</p>
-      )}
-      <ol className="timeline">
-        {data.events.map((event, idx) => {
-          const meta = AUDIT_TYPE_META[event.type] || { label: event.type, tone: "slate", emoji: "•" };
-          return (
-            <li className="timeline-item" key={`${event.type}-${event.timestamp}-${idx}`}>
-              <span className={`timeline-marker tone-${meta.tone}`}>{meta.emoji}</span>
-              <div className="timeline-body">
-                <div className="timeline-row">
-                  <span className="timeline-label">{meta.label}</span>
-                  <span className="timeline-time">
-                    {new Date(event.timestamp).toLocaleString("zh-Hant")}
-                  </span>
-                </div>
-                <p className="timeline-message">{event.message}</p>
-                {event.scan_id && (
-                  <button
-                    className="link-button"
-                    type="button"
-                    onClick={() => navigate(`/scans/${event.scan_id}`)}
-                  >
-                    查看掃描 #{event.scan_id}
-                  </button>
-                )}
-              </div>
-            </li>
-          );
-        })}
-      </ol>
-    </section>
-  );
-}
-
-// ============================================================
-// Categories 頁（跨掃描 finding 分類聚合）
-// ============================================================
-
-function CategoriesPage() {
-  const [data, setData] = useState(null);
-  const [error, setError] = useState("");
-  const [active, setActive] = useState("security");
-
-  useEffect(() => {
-    let cancelled = false;
-    api
-      .get("/findings-by-category/")
-      .then((r) => !cancelled && setData(r.data))
-      .catch(() => !cancelled && setError("無法載入分類資料。"));
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  if (error) return <section className="panel"><p className="error-text">{error}</p></section>;
-  if (!data) return <section className="panel"><p className="hint-text">載入中...</p></section>;
-
-  const categories = Object.keys(CATEGORY_LABELS);
-  const current = data.categories[active] || { total_findings: 0, items: [] };
-
-  return (
-    <section className="panel">
-      <div className="dashboard-panel-header">
-        <h3>跨掃描分類彙總</h3>
-        <span className="hint-text-sm">同類問題重複出現的次數</span>
-      </div>
-      <div className="category-tabs">
-        {categories.map((cat) => {
-          const stats = data.categories[cat];
-          return (
-            <button
-              key={cat}
-              className={`category-tab cat-${cat} ${active === cat ? "active" : ""}`}
-              type="button"
-              onClick={() => setActive(cat)}
-            >
-              <span className="category-tab-label">{CATEGORY_LABELS[cat]}</span>
-              <span className="category-tab-count">{stats?.total_findings || 0}</span>
-            </button>
-          );
-        })}
-      </div>
-      <ul className="category-issue-list">
-        {current.items.length === 0 && (
-          <li className="hint-text">此分類目前沒有 finding。</li>
-        )}
-        {current.items.map((item) => (
-          <li key={`${active}-${item.title}`} className="category-issue-row">
-            <span className={`severity ${item.severity}`}>{item.severity}</span>
-            <span className="category-issue-title">{item.title}</span>
-            <span className="category-issue-count">×{item.count}</span>
-          </li>
-        ))}
-      </ul>
     </section>
   );
 }
@@ -3066,11 +2932,120 @@ function StarRating({ value, onChange, readOnly = false, size = 24 }) {
   );
 }
 
+function ReviewMessageThread({ messages }) {
+  if (!messages || messages.length === 0) {
+    return <p className="review-empty-thread">尚無對話訊息</p>;
+  }
+  return (
+    <ol className="review-thread">
+      {messages.map((m) => (
+        <li
+          key={m.id}
+          className={`review-msg ${m.is_admin ? "is-admin" : "is-user"}`}
+        >
+          <div className="review-msg-head">
+            <span className="review-msg-author">
+              {m.is_admin ? "🛡️ Argus 官方" : m.author_username}
+            </span>
+            <span className="review-msg-time">
+              {new Date(m.created_at).toLocaleString("zh-Hant")}
+            </span>
+          </div>
+          {m.body && <p className="review-msg-body">{m.body}</p>}
+          {m.image_url && (
+            <a
+              href={m.image_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="review-msg-image-link"
+            >
+              <img src={m.image_url} alt="附件" className="review-msg-image" />
+            </a>
+          )}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function ReviewMessageComposer({ reviewId, onPosted }) {
+  const [body, setBody] = useState("");
+  const [imageFile, setImageFile] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!body.trim() && !imageFile) {
+      setError("請輸入文字或附上圖片");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      const formData = new FormData();
+      if (body.trim()) formData.append("body", body.trim());
+      if (imageFile) formData.append("image", imageFile);
+      await api.post(`/reviews/${reviewId}/messages/`, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      setBody("");
+      setImageFile(null);
+      onPosted?.();
+    } catch (err) {
+      setError(
+        err?.response?.data?.detail ||
+          err?.response?.data?.non_field_errors?.[0] ||
+          "送出失敗，請稍後再試。",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form className="review-composer" onSubmit={handleSubmit}>
+      <textarea
+        className="input review-composer-input"
+        placeholder="補充說明或回覆管理員…"
+        rows={2}
+        value={body}
+        onChange={(e) => setBody(e.target.value)}
+      />
+      <div className="review-composer-row">
+        <label className="review-composer-image">
+          📎 附圖
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(e) => setImageFile(e.target.files?.[0] || null)}
+          />
+        </label>
+        {imageFile && (
+          <span className="review-composer-filename" title={imageFile.name}>
+            {imageFile.name}
+            <button
+              type="button"
+              className="review-composer-clear"
+              onClick={() => setImageFile(null)}
+              aria-label="移除附圖"
+            >×</button>
+          </span>
+        )}
+        <button className="primary-button" type="submit" disabled={busy}>
+          {busy ? "送出中…" : "送出"}
+        </button>
+      </div>
+      {error && <p className="review-composer-error">{error}</p>}
+    </form>
+  );
+}
+
 function ReviewsPage() {
   const [reviews, setReviews] = useState([]);
   const [mine, setMine] = useState(null);
-  const [rating, setRating] = useState(0);
-  const [comment, setComment] = useState("");
+  const [initialRating, setInitialRating] = useState(0);
+  const [initialComment, setInitialComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState(null);
   const accessToken = useArgusStore((s) => s.accessToken);
@@ -3082,8 +3057,6 @@ function ReviewsPage() {
       try {
         const me = await api.get("/reviews/mine/");
         setMine(me.data);
-        setRating(me.data.rating);
-        setComment(me.data.comment || "");
       } catch {
         setMine(null);
       }
@@ -3095,36 +3068,32 @@ function ReviewsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken]);
 
-  async function handleSubmit(event) {
+  async function handleFirstReview(event) {
     event.preventDefault();
-    if (!rating) {
+    if (!initialRating) {
       setFeedback({ tone: "bad", message: "請選擇 1-5 星" });
       return;
     }
     setSubmitting(true);
     setFeedback(null);
     try {
-      const response = await api.post("/reviews/mine/", { rating, comment });
-      setMine(response.data);
-      setFeedback({
-        tone: "good",
-        message: response.status === 201 ? "評論已送出，感謝你！" : "評論已更新",
+      const response = await api.post("/reviews/mine/", {
+        rating: initialRating,
+        comment: initialComment,
       });
-      // 重新拉列表
-      const list = await api.get("/reviews/");
-      setReviews(list.data.reviews || []);
+      setMine(response.data);
+      setFeedback({ tone: "good", message: "評論已送出，感謝你！" });
+      await loadAll();
     } catch (err) {
-      const detail =
-        err?.response?.data?.detail ||
-        err?.response?.data?.rating?.[0] ||
-        "送出失敗，請稍後再試。";
-      setFeedback({ tone: "bad", message: detail });
+      setFeedback({
+        tone: "bad",
+        message: err?.response?.data?.detail || "送出失敗，請稍後再試。",
+      });
     } finally {
       setSubmitting(false);
     }
   }
 
-  // 統計：平均星數
   const total = reviews.length;
   const avg = total
     ? (reviews.reduce((s, r) => s + r.rating, 0) / total).toFixed(2)
@@ -3139,6 +3108,9 @@ function ReviewsPage() {
       <div>
         <p className="eyebrow">使用者評論</p>
         <h2 className="section-title">大家對 Argus 的評價</h2>
+        <p className="mt-1 text-xs text-slate-500">
+          星等一人只能評一次（送出後鎖定）；後續可在留言區補充意見、附上問題照片，與管理員對話。
+        </p>
       </div>
 
       <div className="reviews-stats">
@@ -3166,30 +3138,38 @@ function ReviewsPage() {
         </div>
       </div>
 
-      {accessToken && (
-        <form className="reviews-form" onSubmit={handleSubmit}>
-          <p className="reviews-form-title">
-            {mine ? "更新你的評論" : "寫下你對 Argus 的評價"}
-          </p>
-          <StarRating value={rating} onChange={setRating} size={32} />
+      {/* 還沒評過的人才看到評分表單 */}
+      {accessToken && !mine && (
+        <form className="reviews-form" onSubmit={handleFirstReview}>
+          <p className="reviews-form-title">寫下你對 Argus 的評價（一次定終生）</p>
+          <StarRating value={initialRating} onChange={setInitialRating} size={32} />
           <textarea
             className="input reviews-textarea"
             placeholder="（選填）你最喜歡的功能、改進建議..."
-            rows={4}
-            value={comment}
-            onChange={(e) => setComment(e.target.value)}
+            rows={3}
+            value={initialComment}
+            onChange={(e) => setInitialComment(e.target.value)}
           />
           {feedback && (
-            <p
-              className={`reviews-feedback tone-${feedback.tone}`}
-            >
+            <p className={`reviews-feedback tone-${feedback.tone}`}>
               {feedback.message}
             </p>
           )}
           <button className="primary-button" type="submit" disabled={submitting}>
-            {submitting ? "送出中..." : mine ? "更新評論" : "送出評論"}
+            {submitting ? "送出中..." : "送出評論"}
           </button>
         </form>
+      )}
+
+      {accessToken && mine && (
+        <div className="reviews-mine-banner">
+          <span>
+            ✓ 你已為 Argus 評分 <strong>{"★".repeat(mine.rating)}{"☆".repeat(5 - mine.rating)}</strong>（{mine.rating}）
+          </span>
+          <span className="text-xs text-slate-500">
+            如要補充意見，請在下方自己的評論卡裡留言。
+          </span>
+        </div>
       )}
 
       <div className="reviews-list">
@@ -3216,18 +3196,16 @@ function ReviewsPage() {
             {review.comment && (
               <p className="review-card-body">{review.comment}</p>
             )}
-            {review.admin_reply && (
-              <div className="review-admin-reply">
-                <div className="review-admin-reply-head">
-                  <span>🛡️ Argus 官方回覆</span>
-                  {review.admin_replied_at && (
-                    <span className="text-xs text-slate-500">
-                      {new Date(review.admin_replied_at).toLocaleDateString("zh-Hant")}
-                    </span>
-                  )}
-                </div>
-                <p>{review.admin_reply}</p>
-              </div>
+
+            {/* Thread */}
+            <ReviewMessageThread messages={review.messages || []} />
+
+            {/* 自己的評論才有 composer */}
+            {accessToken && review.is_mine && (
+              <ReviewMessageComposer
+                reviewId={review.id}
+                onPosted={loadAll}
+              />
             )}
           </article>
         ))}
@@ -3338,6 +3316,471 @@ function SettingsPage() {
 }
 
 // ============================================================
+// 公開頁面（PublicLayout + /project /team /purchase /download）
+// 不需登入即可瀏覽，獨立 nav，PWA 真實可安裝。
+// ============================================================
+
+const PUBLIC_NAV_ITEMS = [
+  { to: "/project", label: "專案介紹" },
+  { to: "/team", label: "團隊" },
+  { to: "/purchase", label: "購買" },
+  { to: "/download", label: "下載" },
+];
+
+function PublicNav() {
+  const accessToken = useArgusStore((s) => s.accessToken);
+  return (
+    <nav className="public-nav">
+      <div className="public-nav-inner">
+        <NavLink to="/project" className="public-brand">
+          <span className="public-brand-glyph">⟡</span>
+          <span>
+            <span className="public-brand-title">ARGUS</span>
+            <span className="public-brand-sub">AI 網站健檢平台</span>
+          </span>
+        </NavLink>
+        <div className="public-nav-links">
+          {PUBLIC_NAV_ITEMS.map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              className={({ isActive }) =>
+                `public-nav-link ${isActive ? "active" : ""}`
+              }
+            >
+              {item.label}
+            </NavLink>
+          ))}
+        </div>
+        <div className="public-nav-cta">
+          {accessToken ? (
+            <NavLink to="/dashboard" className="public-cta-primary">
+              進入 Dashboard
+            </NavLink>
+          ) : (
+            <NavLink to="/login" className="public-cta-primary">
+              登入 / 註冊
+            </NavLink>
+          )}
+        </div>
+      </div>
+    </nav>
+  );
+}
+
+function PublicFooter() {
+  return (
+    <footer className="public-footer">
+      <div className="public-footer-inner">
+        <div>
+          <div className="public-footer-brand">⟡ ARGUS</div>
+          <div className="public-footer-sub">授權式 AI 網站健檢平台</div>
+        </div>
+        <div className="public-footer-links">
+          <NavLink to="/project">專案介紹</NavLink>
+          <NavLink to="/team">團隊</NavLink>
+          <NavLink to="/purchase">購買</NavLink>
+          <NavLink to="/download">下載 PWA</NavLink>
+          <NavLink to="/reviews">評論</NavLink>
+        </div>
+        <div className="public-footer-copy">
+          © Argus · 僅供授權測試的網站健檢工具
+        </div>
+      </div>
+    </footer>
+  );
+}
+
+function PublicLayout() {
+  return (
+    <div className="public-shell">
+      <PublicNav />
+      <main className="public-main">
+        <Outlet />
+      </main>
+      <PublicFooter />
+    </div>
+  );
+}
+
+// useInstallPrompt：監聽 beforeinstallprompt 事件，給 DownloadPage 的安裝按鈕用
+function useInstallPrompt() {
+  const [deferred, setDeferred] = useState(null);
+  const [installed, setInstalled] = useState(false);
+  useEffect(() => {
+    function onPrompt(e) {
+      e.preventDefault();
+      setDeferred(e);
+    }
+    function onInstalled() {
+      setInstalled(true);
+      setDeferred(null);
+    }
+    window.addEventListener("beforeinstallprompt", onPrompt);
+    window.addEventListener("appinstalled", onInstalled);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onPrompt);
+      window.removeEventListener("appinstalled", onInstalled);
+    };
+  }, []);
+  async function trigger() {
+    if (!deferred) return null;
+    deferred.prompt();
+    const { outcome } = await deferred.userChoice;
+    setDeferred(null);
+    return outcome;
+  }
+  return { canInstall: !!deferred, installed, trigger };
+}
+
+const TECH_STACK_CHIPS = [
+  { label: "React 18", colour: "#06b6d4" },
+  { label: "Vite", colour: "#a855f7" },
+  { label: "Tailwind", colour: "#22d3ee" },
+  { label: "Zustand", colour: "#f97316" },
+  { label: "Django 5", colour: "#0ea5e9" },
+  { label: "DRF", colour: "#dc2626" },
+  { label: "Celery", colour: "#10b981" },
+  { label: "Playwright", colour: "#84cc16" },
+  { label: "PostgreSQL", colour: "#3b82f6" },
+  { label: "Docker", colour: "#0284c7" },
+  { label: "PWA", colour: "#6366f1" },
+];
+
+function ProjectPage() {
+  const [features, setFeatures] = useState([]);
+  useEffect(() => {
+    api.get("/content/features/").then((r) => setFeatures(r.data.features || [])).catch(() => {});
+  }, []);
+  return (
+    <div className="public-page">
+      <section className="public-hero">
+        <div className="public-hero-bg" aria-hidden="true">
+          <span className="hero-orb hero-orb-1" />
+          <span className="hero-orb hero-orb-2" />
+          <span className="hero-orb hero-orb-3" />
+        </div>
+        <div className="public-hero-content">
+          <span className="public-hero-eyebrow">PROJECT · 專案介紹</span>
+          <h1 className="public-hero-title">
+            一鍵看見<span className="hero-grad">網站的所有問題</span>
+          </h1>
+          <p className="public-hero-sub">
+            Argus 整合全站爬蟲、四維靜態掃描與 LLM Agent 行為測試，
+            為「你授權的網站」產出可互動報告與管理層 Word 文件，
+            並輸出結構化問題 Prompt 給你帶去 ChatGPT / Claude 取得修補方向。
+          </p>
+          <div className="public-hero-actions">
+            <NavLink to="/purchase" className="public-cta-primary">立即購買 →</NavLink>
+            <NavLink to="/download" className="public-cta-ghost">下載 PWA</NavLink>
+          </div>
+        </div>
+      </section>
+
+      <section className="public-section">
+        <header className="public-section-head">
+          <h2>核心功能</h2>
+          <p>從爬蟲到 LLM Agent，端到端解決方案</p>
+        </header>
+        <div className="public-feature-grid">
+          {features.map((f) => (
+            <article key={f.id} className="public-feature-card">
+              <div className="public-feature-icon">{f.icon || "✨"}</div>
+              <h3 className="public-feature-title">{f.title}</h3>
+              <p className="public-feature-desc">{f.description}</p>
+            </article>
+          ))}
+          {features.length === 0 && (
+            <p className="public-empty">尚未設定功能介紹。</p>
+          )}
+        </div>
+      </section>
+
+      <section className="public-section">
+        <header className="public-section-head">
+          <h2>技術棧</h2>
+          <p>不偷工，全棧現代化選型</p>
+        </header>
+        <div className="public-tech-chips">
+          {TECH_STACK_CHIPS.map((t) => (
+            <span
+              key={t.label}
+              className="public-tech-chip"
+              style={{ borderColor: t.colour + "60", color: t.colour }}
+            >{t.label}</span>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function TeamPage() {
+  const [members, setMembers] = useState([]);
+  useEffect(() => {
+    api.get("/content/team/").then((r) => setMembers(r.data.members || [])).catch(() => {});
+  }, []);
+  return (
+    <div className="public-page">
+      <section className="public-hero compact">
+        <div className="public-hero-bg" aria-hidden="true">
+          <span className="hero-orb hero-orb-1" />
+          <span className="hero-orb hero-orb-2" />
+        </div>
+        <div className="public-hero-content">
+          <span className="public-hero-eyebrow">TEAM · 團隊</span>
+          <h1 className="public-hero-title">打造 Argus 的<span className="hero-grad">人們</span></h1>
+          <p className="public-hero-sub">跨領域協作，從爬蟲、AI 到 UI 一手包辦。</p>
+        </div>
+      </section>
+
+      <section className="public-section">
+        <div className="public-team-grid">
+          {members.map((m) => (
+            <article key={m.id} className="public-team-card">
+              <div className="public-team-avatar">{m.avatar_emoji || "🧑"}</div>
+              <div className="public-team-name">{m.name}</div>
+              <div className="public-team-role">{m.role}</div>
+              {m.bio && <p className="public-team-bio">{m.bio}</p>}
+              {m.skills && m.skills.length > 0 && (
+                <div className="public-team-skills">
+                  {m.skills.map((s) => (
+                    <span key={s} className="public-team-skill-chip">{s}</span>
+                  ))}
+                </div>
+              )}
+              {(m.email || m.github_url) && (
+                <div className="public-team-links">
+                  {m.email && <a href={`mailto:${m.email}`}>✉ {m.email}</a>}
+                  {m.github_url && (
+                    <a href={m.github_url} target="_blank" rel="noopener noreferrer">
+                      🐙 GitHub
+                    </a>
+                  )}
+                </div>
+              )}
+            </article>
+          ))}
+          {members.length === 0 && (
+            <p className="public-empty">尚未設定團隊成員。</p>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+const PURCHASE_FAQ = [
+  {
+    q: "點數會過期嗎？",
+    a: "不會。已購點數永久有效，未使用的點數可一直累積。",
+  },
+  {
+    q: "如何計算所需點數？",
+    a: "每爬一個頁面 10 coin。建立掃描時依「最大頁數」預扣，完成後依實際頁數退回未使用的部分。",
+  },
+  {
+    q: "支援哪些付款方式？",
+    a: "目前為模擬付款（點選即入帳，供示範用）。正式上線後將串接綠界 / 藍新 / Stripe 等金流。",
+  },
+  {
+    q: "可以退費嗎？",
+    a: "如有特殊狀況請聯絡管理員，由 admin 在後台手動退費。掃描失敗或被取消時，系統會自動全額退回預扣的點數。",
+  },
+];
+
+function PurchasePage() {
+  const [plans, setPlans] = useState([]);
+  const [openFaq, setOpenFaq] = useState(0);
+  const navigate = useNavigate();
+  useEffect(() => {
+    api.get("/billing/plans/").then((r) => setPlans(r.data.plans || [])).catch(() => {});
+  }, []);
+  return (
+    <div className="public-page">
+      <section className="public-hero compact">
+        <div className="public-hero-bg" aria-hidden="true">
+          <span className="hero-orb hero-orb-1" />
+          <span className="hero-orb hero-orb-2" />
+          <span className="hero-orb hero-orb-3" />
+        </div>
+        <div className="public-hero-content">
+          <span className="public-hero-eyebrow">PURCHASE · 購買方案</span>
+          <h1 className="public-hero-title">
+            <span className="hero-grad">按頁付費</span>，永久有效
+          </h1>
+          <p className="public-hero-sub">
+            每爬一頁 10 coin，新會員每月自動贈送 200 coin。買越多越划算。
+          </p>
+        </div>
+      </section>
+
+      <section className="public-section">
+        <div className="public-plan-grid">
+          {plans.map((p) => {
+            const featured = p.code === "advanced";
+            return (
+              <div
+                key={p.code}
+                className={`public-plan-card ${featured ? "is-featured" : ""}`}
+              >
+                {featured && <span className="public-plan-recommend">★ 最受歡迎</span>}
+                {p.badge && <span className="public-plan-badge">{p.badge}</span>}
+                <h3 className="public-plan-name">{p.name}</h3>
+                <div className="public-plan-coin">{p.coin_amount.toLocaleString()}<span> coin</span></div>
+                <div className="public-plan-price">NT$ {p.price_ntd.toLocaleString()}</div>
+                <div className="public-plan-rate">{p.coin_per_ntd?.toFixed(2)} coin / NT$</div>
+                {p.description && <p className="public-plan-desc">{p.description}</p>}
+                <button
+                  type="button"
+                  className="public-plan-cta"
+                  onClick={() => navigate("/billing")}
+                >立即購買 →</button>
+              </div>
+            );
+          })}
+          {plans.length === 0 && <p className="public-empty">尚未設定方案。</p>}
+        </div>
+      </section>
+
+      <section className="public-section">
+        <header className="public-section-head">
+          <h2>常見問題</h2>
+        </header>
+        <div className="public-faq">
+          {PURCHASE_FAQ.map((item, idx) => (
+            <details
+              key={idx}
+              open={openFaq === idx}
+              onToggle={(e) => e.target.open && setOpenFaq(idx)}
+              className="public-faq-item"
+            >
+              <summary>{item.q}</summary>
+              <p>{item.a}</p>
+            </details>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function DownloadPage() {
+  const [releases, setReleases] = useState([]);
+  const { canInstall, installed, trigger } = useInstallPrompt();
+  useEffect(() => {
+    api.get("/content/releases/").then((r) => setReleases(r.data.releases || [])).catch(() => {});
+  }, []);
+  const latest = releases.find((r) => r.is_latest) || releases[0];
+  return (
+    <div className="public-page">
+      <section className="public-hero">
+        <div className="public-hero-bg" aria-hidden="true">
+          <span className="hero-orb hero-orb-1" />
+          <span className="hero-orb hero-orb-2" />
+        </div>
+        <div className="public-hero-content">
+          <span className="public-hero-eyebrow">DOWNLOAD · 下載安裝</span>
+          <h1 className="public-hero-title">
+            <span className="hero-grad">隨身</span>使用 Argus
+          </h1>
+          <p className="public-hero-sub">
+            PWA（漸進式網頁應用）— 一鍵安裝到主畫面，像 App 一樣開啟，支援離線瀏覽既有報告。
+          </p>
+          <div className="public-hero-actions">
+            {installed ? (
+              <span className="public-install-installed">✓ 已安裝，請從主畫面開啟</span>
+            ) : canInstall ? (
+              <button type="button" className="public-cta-primary public-install-cta" onClick={trigger}>
+                ⬇ 安裝 Argus PWA
+              </button>
+            ) : (
+              <span className="public-install-hint">
+                請使用 Chrome / Edge / Safari 開啟並點選「加到主畫面」（不同瀏覽器選單位置略異）
+              </span>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <section className="public-section">
+        <header className="public-section-head">
+          <h2>安裝步驟</h2>
+          <p>三大平台一覽</p>
+        </header>
+        <div className="public-install-grid">
+          <div className="public-install-card">
+            <div className="public-install-icon">💻</div>
+            <div className="public-install-title">桌面（Chrome / Edge）</div>
+            <ol>
+              <li>網址列右側點選安裝圖示 <kbd>⬇</kbd></li>
+              <li>點「安裝」即出現桌面捷徑</li>
+            </ol>
+          </div>
+          <div className="public-install-card">
+            <div className="public-install-icon">🤖</div>
+            <div className="public-install-title">Android（Chrome）</div>
+            <ol>
+              <li>右上 ⋮ 選單 → 「加到主畫面」</li>
+              <li>確認 → 出現於主畫面</li>
+            </ol>
+          </div>
+          <div className="public-install-card">
+            <div className="public-install-icon">🍎</div>
+            <div className="public-install-title">iOS（Safari）</div>
+            <ol>
+              <li>下方分享按鈕 → 「加入主畫面」</li>
+              <li>確認 → 出現於主畫面</li>
+            </ol>
+          </div>
+        </div>
+      </section>
+
+      {latest && (
+        <section className="public-section">
+          <header className="public-section-head">
+            <h2>版本資訊</h2>
+            <p>最新版 {latest.version}（{latest.platform_label}）</p>
+          </header>
+          <div className="public-release-card">
+            <div className="public-release-version">
+              <span className="public-release-badge">最新</span>
+              v{latest.version}
+            </div>
+            <div className="public-release-date">
+              {new Date(latest.released_at).toLocaleDateString("zh-Hant")}
+            </div>
+            <p className="public-release-notes">{latest.release_notes}</p>
+            {latest.download_url && (
+              <a className="public-cta-primary" href={latest.download_url}>
+                ⬇ 取得 {latest.platform_label}
+              </a>
+            )}
+          </div>
+
+          {releases.length > 1 && (
+            <details className="public-release-history">
+              <summary>查看歷史版本</summary>
+              <ul>
+                {releases.slice(1).map((r) => (
+                  <li key={r.id}>
+                    <strong>v{r.version}</strong>
+                    <span className="public-release-history-date">
+                      {new Date(r.released_at).toLocaleDateString("zh-Hant")}
+                    </span>
+                    <span>{r.release_notes}</span>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+        </section>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
 // /admin React 後台（精簡 5 大分類 + dark cyan 主題）
 // 走獨立 layout，不顯示前台 TopNav；只有 is_staff 可進入。
 // ============================================================
@@ -3346,6 +3789,9 @@ const ADMIN_NAV_ITEMS = [
   { to: "/admin/overview", label: "概覽", emoji: "📊" },
   { to: "/admin/users", label: "使用者", emoji: "👥" },
   { to: "/admin/transactions", label: "交易", emoji: "💎" },
+  { to: "/admin/content", label: "內容", emoji: "📝" },
+  // /admin/audit-log 入口為條件渲染：只有 superuser 顯示，故不放在這裡
+  // 而是在 AdminLayout 內 me.is_superuser 時動態加進去
   { to: "/admin/reviews", label: "評論", emoji: "⭐" },
   { to: "/admin/scans", label: "掃描", emoji: "🔍" },
 ];
@@ -3379,12 +3825,16 @@ function RequireAdmin({ children }) {
 }
 
 function AdminLayout() {
-  const { setToken } = useArgusStore();
+  const { setToken, me } = useArgusStore();
   const navigate = useNavigate();
   function handleLogout() {
     setToken(null);
     navigate("/login");
   }
+  // 超級管理員額外看到「📜 操作紀錄」分頁
+  const navItems = me?.is_superuser
+    ? [...ADMIN_NAV_ITEMS, { to: "/admin/audit-log", label: "操作紀錄", emoji: "📜" }]
+    : ADMIN_NAV_ITEMS;
   return (
     <div className="admin-shell">
       <aside className="admin-sidebar">
@@ -3396,7 +3846,7 @@ function AdminLayout() {
           </div>
         </div>
         <nav className="admin-nav">
-          {ADMIN_NAV_ITEMS.map((item) => (
+          {navItems.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
@@ -4315,6 +4765,225 @@ function AdminScanDetailPage() {
   );
 }
 
+// ------ AdminContentPage：內容速覽（編輯走 Jazzmin Django Admin） ------
+
+function AdminContentPage() {
+  const [data, setData] = useState({ features: [], members: [], releases: [] });
+  useEffect(() => {
+    Promise.all([
+      api.get("/content/features/"),
+      api.get("/content/team/"),
+      api.get("/content/releases/"),
+    ])
+      .then(([f, t, r]) =>
+        setData({
+          features: f.data.features || [],
+          members: t.data.members || [],
+          releases: r.data.releases || [],
+        }),
+      )
+      .catch(() => {});
+  }, []);
+
+  const CARDS = [
+    {
+      title: "專案特色",
+      count: data.features.length,
+      desc: "/project 頁的卡片列表",
+      editUrl: "/django-admin/content/projectfeature/",
+      tone: "cyan",
+    },
+    {
+      title: "團隊成員",
+      count: data.members.length,
+      desc: "/team 頁的成員 grid",
+      editUrl: "/django-admin/content/teammember/",
+      tone: "violet",
+    },
+    {
+      title: "PWA / APP 版本",
+      count: data.releases.length,
+      desc: "/download 頁的版本資訊",
+      editUrl: "/django-admin/content/apprelease/",
+      tone: "amber",
+    },
+  ];
+
+  return (
+    <div className="admin-page">
+      <header className="admin-page-head">
+        <h1>內容管理</h1>
+        <p>編輯前台公開頁的卡片內容（在 Django Admin 編輯，存檔後即生效）</p>
+      </header>
+
+      <div className="admin-stat-grid">
+        {CARDS.map((c) => (
+          <div key={c.title} className={`admin-stat-card tone-${c.tone}`}>
+            <div className="admin-stat-label">{c.title}</div>
+            <div className="admin-stat-value">{c.count}</div>
+            <div className="admin-stat-hint">{c.desc}</div>
+            <a
+              href={c.editUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="admin-btn"
+              style={{ marginTop: 12, display: "inline-flex" }}
+            >
+              在 Django Admin 編輯 →
+            </a>
+          </div>
+        ))}
+      </div>
+
+      <section className="admin-panel">
+        <h3>專案特色預覽</h3>
+        <table className="admin-table compact">
+          <thead><tr><th>順序</th><th>圖示</th><th>標題</th><th>描述</th></tr></thead>
+          <tbody>
+            {data.features.map((f) => (
+              <tr key={f.id}>
+                <td className="num">{f.sort_order}</td>
+                <td style={{ fontSize: 20 }}>{f.icon}</td>
+                <td className="admin-cell-primary">{f.title}</td>
+                <td className="admin-cell-secondary truncate" title={f.description}>{f.description}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
+
+      <section className="admin-panel">
+        <h3>團隊成員預覽</h3>
+        <table className="admin-table compact">
+          <thead><tr><th>順序</th><th>頭像</th><th>姓名</th><th>角色</th><th>技能</th></tr></thead>
+          <tbody>
+            {data.members.map((m) => (
+              <tr key={m.id}>
+                <td className="num">{m.sort_order}</td>
+                <td style={{ fontSize: 20 }}>{m.avatar_emoji}</td>
+                <td className="admin-cell-primary">{m.name}</td>
+                <td>{m.role}</td>
+                <td className="admin-cell-secondary">{(m.skills || []).join(" · ")}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
+
+      <section className="admin-panel">
+        <h3>版本資訊預覽</h3>
+        <table className="admin-table compact">
+          <thead><tr><th>版本</th><th>平台</th><th>最新</th><th>發布時間</th><th>說明</th></tr></thead>
+          <tbody>
+            {data.releases.map((r) => (
+              <tr key={r.id}>
+                <td className="admin-cell-primary">v{r.version}</td>
+                <td>{r.platform_label}</td>
+                <td>{r.is_latest ? "✓" : "—"}</td>
+                <td>{new Date(r.released_at).toLocaleDateString("zh-Hant")}</td>
+                <td className="admin-cell-secondary truncate" title={r.release_notes}>{r.release_notes}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
+    </div>
+  );
+}
+
+// ------ AdminAuditLogPage（僅超級管理員） ------
+
+const AUDIT_ACTION_OPTIONS = [
+  { v: "", label: "全部動作" },
+  { v: "coin_adjust", label: "調整點數" },
+  { v: "review_reply", label: "回覆評論" },
+  { v: "review_delete", label: "刪除評論" },
+  { v: "user_toggle_staff", label: "切換管理員身份" },
+  { v: "other", label: "其他" },
+];
+
+function AdminAuditLogPage() {
+  const [data, setData] = useState(null);
+  const [page, setPage] = useState(1);
+  const [action, setAction] = useState("");
+  const me = useArgusStore((s) => s.me);
+
+  async function load() {
+    const r = await api.get("/admin/audit-log/", {
+      params: { page, action: action || undefined },
+    });
+    setData(r.data);
+  }
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [page, action]);
+
+  if (!me?.is_superuser) {
+    return <div className="admin-error">需要超級管理員權限才能查看。</div>;
+  }
+
+  return (
+    <div className="admin-page">
+      <header className="admin-page-head">
+        <h1>操作紀錄</h1>
+        <p>所有管理員的敏感操作審計（僅超級管理員可見）</p>
+      </header>
+
+      <div className="admin-filter-bar">
+        <select
+          className="admin-input"
+          value={action}
+          onChange={(e) => { setAction(e.target.value); setPage(1); }}
+        >
+          {AUDIT_ACTION_OPTIONS.map((o) => (
+            <option key={o.v} value={o.v}>{o.label}</option>
+          ))}
+        </select>
+      </div>
+
+      {!data && <div className="admin-loading">載入中…</div>}
+      {data && (
+        <>
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th>時間</th>
+                <th>動作</th>
+                <th>操作者</th>
+                <th>對象</th>
+                <th>細節</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.logs.map((log) => (
+                <tr key={log.id}>
+                  <td>{new Date(log.created_at).toLocaleString("zh-Hant")}</td>
+                  <td><span className="admin-status">{log.action_label}</span></td>
+                  <td><strong>{log.actor_username || "(已刪除)"}</strong></td>
+                  <td>{log.target_username || "—"}</td>
+                  <td className="admin-cell-secondary">
+                    {log.target_object_repr}
+                    {Object.keys(log.payload || {}).length > 0 && (
+                      <details style={{ marginTop: 4 }}>
+                        <summary style={{ cursor: "pointer", color: "#0e7490", fontSize: 11 }}>payload</summary>
+                        <pre style={{ fontSize: 11, margin: "4px 0 0", whiteSpace: "pre-wrap" }}>
+                          {JSON.stringify(log.payload, null, 2)}
+                        </pre>
+                      </details>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {data.logs.length === 0 && (
+                <tr><td colSpan="5" className="admin-empty">尚無紀錄</td></tr>
+              )}
+            </tbody>
+          </table>
+          <AdminPagination page={data.page} totalPages={data.total_pages} onChange={setPage} />
+        </>
+      )}
+    </div>
+  );
+}
+
 // ============================================================
 // 根 App + Routes
 // ============================================================
@@ -4323,12 +4992,22 @@ function AppShell() {
   const accessToken = useArgusStore((state) => state.accessToken);
   const location = useLocation();
   const isAdmin = location.pathname.startsWith("/admin");
+  const isPublic = ["/project", "/team", "/purchase", "/download"].some((p) =>
+    location.pathname.startsWith(p),
+  );
+  const showTopNav = !isAdmin && !isPublic;
   return (
-    <div className={`argus-app ${isAdmin ? "is-admin-mode" : ""}`}>
-      <TopNav />
-      <main className={`argus-main ${accessToken && !isAdmin ? "with-nav" : ""} ${isAdmin ? "is-admin" : ""}`}>
+    <div className={`argus-app ${isAdmin ? "is-admin-mode" : ""} ${isPublic ? "is-public-mode" : ""}`}>
+      {showTopNav && <TopNav />}
+      <main className={`argus-main ${accessToken && showTopNav ? "with-nav" : ""} ${isAdmin ? "is-admin" : ""} ${isPublic ? "is-public" : ""}`}>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route element={<PublicLayout />}>
+            <Route path="/project" element={<ProjectPage />} />
+            <Route path="/team" element={<TeamPage />} />
+            <Route path="/purchase" element={<PurchasePage />} />
+            <Route path="/download" element={<DownloadPage />} />
+          </Route>
           <Route
             path="/dashboard"
             element={
@@ -4353,22 +5032,6 @@ function AppShell() {
             element={
               <RequireAuth>
                 <HistoryPage />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/audit"
-            element={
-              <RequireAuth>
-                <AuditPage />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/categories"
-            element={
-              <RequireAuth>
-                <CategoriesPage />
               </RequireAuth>
             }
           />
@@ -4404,8 +5067,15 @@ function AppShell() {
             <Route path="/admin/reviews" element={<AdminReviewsPage />} />
             <Route path="/admin/scans" element={<AdminScansPage />} />
             <Route path="/admin/scans/:scanId" element={<AdminScanDetailPage />} />
+            <Route path="/admin/content" element={<AdminContentPage />} />
+            <Route path="/admin/audit-log" element={<AdminAuditLogPage />} />
           </Route>
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          <Route
+            path="*"
+            element={
+              <Navigate to={accessToken ? "/dashboard" : "/project"} replace />
+            }
+          />
         </Routes>
       </main>
     </div>

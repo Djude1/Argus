@@ -15,4 +15,5 @@ urlpatterns = [
     path("scans/<int:scan_id>/", views.scan_detail, name="admin-scan-detail"),
     path("orders/", views.orders_list, name="admin-orders"),
     path("dashboard/", views.dashboard, name="admin-dashboard"),
+    path("audit-log/", views.audit_log, name="admin-audit-log"),
 ]
