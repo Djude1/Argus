@@ -76,6 +76,66 @@ class GoogleLoginView(views.APIView):
         )
 
 
+class EmailRegisterView(views.APIView):
+    """以 email + password 建立帳號。"""
+
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        email = (request.data.get("email") or "").strip().lower()
+        password = request.data.get("password") or ""
+
+        if not email or "@" not in email:
+            return Response({"email": "請輸入有效的 Email。"}, status=status.HTTP_400_BAD_REQUEST)
+        if len(password) < 8:
+            return Response({"password": "密碼至少需要 8 個字元。"}, status=status.HTTP_400_BAD_REQUEST)
+
+        user_model = get_user_model()
+        if user_model.objects.filter(username=email).exists():
+            return Response({"email": "此 Email 已被註冊。"}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = user_model.objects.create_user(
+            username=email,
+            email=email,
+            password=password,
+        )
+        user.last_login = timezone.now()
+        user.save(update_fields=["last_login"])
+        grant_monthly_bonus_if_needed(user)
+        refresh = RefreshToken.for_user(user)
+        return Response(
+            {"access": str(refresh.access_token), "refresh": str(refresh)},
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class EmailLoginView(views.APIView):
+    """以 email + password 登入，回傳 JWT。"""
+
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        email = (request.data.get("email") or "").strip().lower()
+        password = request.data.get("password") or ""
+
+        if not email or not password:
+            return Response({"detail": "請提供 email 與密碼。"}, status=status.HTTP_400_BAD_REQUEST)
+
+        user_model = get_user_model()
+        user = user_model.objects.filter(username=email).first()
+        if not user or not user.check_password(password):
+            return Response({"detail": "Email 或密碼錯誤。"}, status=status.HTTP_400_BAD_REQUEST)
+
+        user.last_login = timezone.now()
+        user.save(update_fields=["last_login"])
+        grant_monthly_bonus_if_needed(user)
+        refresh = RefreshToken.for_user(user)
+        return Response(
+            {"access": str(refresh.access_token), "refresh": str(refresh)},
+            status=status.HTTP_200_OK,
+        )
+
+
 # ============================================================
 # DEV LOGIN BACKDOOR — REMOVE WHEN GOOGLE OAUTH IS FULLY WORKING
 # 用途：Google Cloud Console 的 Authorized JavaScript origins 設定還沒生效時，
