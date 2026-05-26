@@ -1,7 +1,9 @@
 import os
 
 from django.conf import settings
+from django.contrib.auth import authenticate as django_authenticate
 from django.contrib.auth import get_user_model
+from django.db import transaction
 from django.utils import timezone
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token
@@ -94,14 +96,15 @@ class EmailRegisterView(views.APIView):
         if user_model.objects.filter(username=email).exists():
             return Response({"email": "此 Email 已被註冊。"}, status=status.HTTP_400_BAD_REQUEST)
 
-        user = user_model.objects.create_user(
-            username=email,
-            email=email,
-            password=password,
-        )
-        user.last_login = timezone.now()
-        user.save(update_fields=["last_login"])
-        grant_monthly_bonus_if_needed(user)
+        with transaction.atomic():
+            user = user_model.objects.create_user(
+                username=email,
+                email=email,
+                password=password,
+            )
+            user.last_login = timezone.now()
+            user.save(update_fields=["last_login"])
+            grant_monthly_bonus_if_needed(user)
         refresh = RefreshToken.for_user(user)
         return Response(
             {"access": str(refresh.access_token), "refresh": str(refresh)},
@@ -121,9 +124,8 @@ class EmailLoginView(views.APIView):
         if not email or not password:
             return Response({"detail": "請提供 email 與密碼。"}, status=status.HTTP_400_BAD_REQUEST)
 
-        user_model = get_user_model()
-        user = user_model.objects.filter(username=email).first()
-        if not user or not user.check_password(password):
+        user = django_authenticate(request, username=email, password=password)
+        if not user:
             return Response({"detail": "Email 或密碼錯誤。"}, status=status.HTTP_400_BAD_REQUEST)
 
         user.last_login = timezone.now()
