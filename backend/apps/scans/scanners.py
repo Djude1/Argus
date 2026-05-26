@@ -492,10 +492,10 @@ def analyze_security(page_input: PageAnalysisInput, parser: HtmlSignalParser) ->
             )
         )
     required_headers = {
-        "strict-transport-security": ("medium", "缺少 HSTS"),
-        "content-security-policy": ("medium", "缺少 CSP"),
-        "x-frame-options": ("low", "缺少 X-Frame-Options"),
-        "x-content-type-options": ("low", "缺少 X-Content-Type-Options"),
+        "strict-transport-security": (Finding.Severity.MEDIUM, "缺少 HSTS"),
+        "content-security-policy": (Finding.Severity.MEDIUM, "缺少 CSP"),
+        "x-frame-options": (Finding.Severity.LOW, "缺少 X-Frame-Options"),
+        "x-content-type-options": (Finding.Severity.INFO, "缺少 X-Content-Type-Options"),
     }
     for header_name, (severity, title) in required_headers.items():
         if header_name not in headers:
@@ -508,7 +508,7 @@ def analyze_security(page_input: PageAnalysisInput, parser: HtmlSignalParser) ->
                     remediation=f"依網站需求設定合適的 {header_name} header。",
                     evidence=f"missing_header={header_name}",
                     impact_area="security_headers",
-                    priority_score=55 if severity == "medium" else 32,
+                    priority_score=55 if severity == Finding.Severity.MEDIUM else 25,
                 )
             )
     if parser.form_without_csrf:
@@ -517,7 +517,10 @@ def analyze_security(page_input: PageAnalysisInput, parser: HtmlSignalParser) ->
                 category=Finding.Category.SECURITY,
                 severity=Finding.Severity.MEDIUM,
                 title="表單可能缺少 CSRF token",
-                description="表單缺少 CSRF 防護可能讓使用者在不知情下提交非預期請求。",
+                description=(
+                    "偵測到表單可能缺少 CSRF token。若此表單會改變登入狀態、個人資料、"
+                    "訂單或後台設定，可能造成使用者在不知情下提交非預期請求。"
+                ),
                 remediation="確認會改變狀態的表單都具備 CSRF token 或等效防護。",
                 evidence=(
                     f"form_count={parser.form_count}, "
