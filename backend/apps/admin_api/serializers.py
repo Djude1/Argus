@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from apps.admin_api.models import AdminAuditLog
+from apps.admin_api.models import AdminAuditLog, Announcement
 from apps.billing.models import CoinTransaction, CoinWallet, PurchaseOrder
 from apps.reviews.models import PlatformReview
 from apps.scans.models import ScanJob
@@ -210,3 +210,13 @@ class AdminPurchaseOrderSerializer(serializers.ModelSerializer):
             "company_name", "tax_id",
             "status", "status_label",
         ]
+
+
+class AnnouncementSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Announcement
+        fields = [
+            "id", "title", "content", "type",
+            "active_days", "is_active", "created_at",
+        ]
+        read_only_fields = ["id", "created_at"]

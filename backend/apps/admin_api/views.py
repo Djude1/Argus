@@ -12,7 +12,7 @@ from rest_framework import permissions, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
-from apps.admin_api.models import AdminAuditLog, log_admin_action
+from apps.admin_api.models import AdminAuditLog, Announcement, log_admin_action
 from apps.admin_api.permissions import IsSuperuser
 from apps.admin_api.serializers import (
     AdjustCoinSerializer,
@@ -24,6 +24,7 @@ from apps.admin_api.serializers import (
     AdminScanJobSerializer,
     AdminUserDetailSerializer,
     AdminUserListSerializer,
+    AnnouncementSerializer,
 )
 from apps.billing.models import CoinTransaction, CoinWallet, PurchaseOrder
 from apps.billing.services import admin_adjust
@@ -493,3 +494,45 @@ def me(request):
         "is_staff": user.is_staff,
         "is_superuser": user.is_superuser,
     })
+
+
+@api_view(["GET"])
+@permission_classes([permissions.IsAuthenticated])
+def active_announcements(request):
+    """回傳目前有效的公告（任何登入者可取得）。
+
+    過濾 is_active=True 後，再用 Announcement.is_currently_active() 排除
+    過期的臨時公告（active_days 已到）。
+    """
+    qs = Announcement.objects.filter(is_active=True)
+    result = [a for a in qs if a.is_currently_active()]
+    return Response({"announcements": AnnouncementSerializer(result, many=True).data})
+
+
+@api_view(["GET", "POST"])
+@permission_classes([permissions.IsAdminUser])
+def announcements_admin(request):
+    """管理員列表 / 建立公告（含停用、過期者）。"""
+    if request.method == "GET":
+        qs = Announcement.objects.all()
+        return Response({"announcements": AnnouncementSerializer(qs, many=True).data})
+    serializer = AnnouncementSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    obj = serializer.save()
+    return Response(AnnouncementSerializer(obj).data, status=status.HTTP_201_CREATED)
+
+
+@api_view(["GET", "PATCH", "DELETE"])
+@permission_classes([permissions.IsAdminUser])
+def announcement_detail(request, pk: int):
+    """管理員取得 / 部分更新 / 刪除單一公告。"""
+    obj = get_object_or_404(Announcement, pk=pk)
+    if request.method == "GET":
+        return Response(AnnouncementSerializer(obj).data)
+    if request.method == "PATCH":
+        serializer = AnnouncementSerializer(obj, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(AnnouncementSerializer(obj).data)
+    obj.delete()
+    return Response(status=status.HTTP_204_NO_CONTENT)
