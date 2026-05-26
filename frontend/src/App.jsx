@@ -4576,13 +4576,9 @@ function DownloadPage() {
 const ADMIN_NAV_ITEMS = [
   { to: "/admin/overview", label: "概覽", emoji: "📊" },
   { to: "/admin/users", label: "使用者", emoji: "👥" },
-  { to: "/admin/transactions", label: "交易", emoji: "💎" },
   { to: "/admin/plans", label: "方案", emoji: "💼" },
   { to: "/admin/content", label: "內容", emoji: "📝" },
-  // /admin/audit-log 入口為條件渲染：只有 superuser 顯示，故不放在這裡
-  // 而是在 AdminLayout 內 me.is_superuser 時動態加進去
   { to: "/admin/reviews", label: "評論", emoji: "⭐" },
-  { to: "/admin/scans", label: "掃描", emoji: "🔍" },
 ];
 
 function RequireAdmin({ children }) {
@@ -4622,7 +4618,7 @@ function AdminLayout() {
   }
   // 超級管理員額外看到「📜 操作紀錄」分頁
   const navItems = me?.is_superuser
-    ? [...ADMIN_NAV_ITEMS, { to: "/admin/audit-log", label: "操作紀錄", emoji: "📜" }, { to: "/admin/announcements", label: "公告管理", emoji: "📢" }]
+    ? [...ADMIN_NAV_ITEMS, { to: "/admin/audit-log", label: "操作日誌", emoji: "📜" }, { to: "/admin/announcements", label: "公告管理", emoji: "📢" }]
     : ADMIN_NAV_ITEMS;
   return (
     <div className="admin-shell">
@@ -5214,7 +5210,7 @@ function AdminUserDetailPage() {
   );
 }
 
-function AdminTransactionsPage() {
+function AdminTransactionsPage({ embedded }) {
   const [data, setData] = useState(null);
   const [page, setPage] = useState(1);
   const [kind, setKind] = useState("");
@@ -5236,12 +5232,14 @@ function AdminTransactionsPage() {
     { v: "admin_adjust", label: "管理員調整" },
   ];
 
-  return (
-    <div className="admin-page">
-      <header className="admin-page-head">
-        <h1>交易紀錄</h1>
-        <p>所有 coin 異動的審計紀錄</p>
-      </header>
+  const content = (
+    <>
+      {!embedded && (
+        <header className="admin-page-head">
+          <h1>交易紀錄</h1>
+          <p>所有 coin 異動的審計紀錄</p>
+        </header>
+      )}
 
       <div className="admin-filter-bar">
         <select
@@ -5286,8 +5284,11 @@ function AdminTransactionsPage() {
           <AdminPagination page={data.page} totalPages={data.total_pages} onChange={setPage} />
         </>
       )}
-    </div>
+    </>
   );
+
+  if (embedded) return content;
+  return <div className="admin-page">{content}</div>;
 }
 
 function AdminReviewsPage() {
@@ -5391,7 +5392,7 @@ function AdminReviewsPage() {
   );
 }
 
-function AdminScansPage() {
+function AdminScansPage({ embedded }) {
   const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [search, setSearch] = useState("");
@@ -5412,12 +5413,14 @@ function AdminScansPage() {
     load();
   }
 
-  return (
-    <div className="admin-page">
-      <header className="admin-page-head">
-        <h1>掃描</h1>
-        <p>所有使用者的掃描任務</p>
-      </header>
+  const content = (
+    <>
+      {!embedded && (
+        <header className="admin-page-head">
+          <h1>掃描</h1>
+          <p>所有使用者的掃描任務</p>
+        </header>
+      )}
 
       <form className="admin-search-bar" onSubmit={handleSearchSubmit}>
         <input
@@ -5473,8 +5476,11 @@ function AdminScansPage() {
           <AdminPagination page={data.page} totalPages={data.total_pages} onChange={setPage} />
         </>
       )}
-    </div>
+    </>
   );
+
+  if (embedded) return content;
+  return <div className="admin-page">{content}</div>;
 }
 
 function AdminScanDetailPage() {
@@ -6004,10 +6010,51 @@ function AdminAnnouncementsPage() {
 }
 
 function AdminAuditLogPage() {
+  const [tab, setTab] = useState("audit");
+  const me = useArgusStore((s) => s.me);
+
+  if (!me?.is_superuser) {
+    return <div className="admin-error">需要超級管理員權限才能查看。</div>;
+  }
+
+  const TABS = [
+    { key: "audit", label: "操作紀錄" },
+    { key: "transactions", label: "交易紀錄" },
+    { key: "scans", label: "掃描紀錄" },
+  ];
+
+  return (
+    <div className="admin-page">
+      <header className="admin-page-head">
+        <h1 className="admin-page-title">操作日誌</h1>
+        <p>操作/交易/掃描紀錄（僅超級管理員可見）</p>
+      </header>
+
+      <div className="admin-sub-tabs">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            className={`admin-sub-tab ${tab === t.key ? "active" : ""}`}
+            onClick={() => setTab(t.key)}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="admin-panel">
+        {tab === "audit" && <AuditLogTab />}
+        {tab === "transactions" && <AdminTransactionsPage embedded />}
+        {tab === "scans" && <AdminScansPage embedded />}
+      </div>
+    </div>
+  );
+}
+
+function AuditLogTab() {
   const [data, setData] = useState(null);
   const [page, setPage] = useState(1);
   const [action, setAction] = useState("");
-  const me = useArgusStore((s) => s.me);
 
   async function load() {
     const r = await api.get("/admin/audit-log/", {
@@ -6017,17 +6064,8 @@ function AdminAuditLogPage() {
   }
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [page, action]);
 
-  if (!me?.is_superuser) {
-    return <div className="admin-error">需要超級管理員權限才能查看。</div>;
-  }
-
   return (
-    <div className="admin-page">
-      <header className="admin-page-head">
-        <h1>操作紀錄</h1>
-        <p>所有管理員的敏感操作審計（僅超級管理員可見）</p>
-      </header>
-
+    <>
       <div className="admin-filter-bar">
         <select
           className="admin-input"
@@ -6081,7 +6119,7 @@ function AdminAuditLogPage() {
           <AdminPagination page={data.page} totalPages={data.total_pages} onChange={setPage} />
         </>
       )}
-    </div>
+    </>
   );
 }
 
