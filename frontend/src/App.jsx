@@ -560,8 +560,6 @@ function clearScanDraft() {
   window.localStorage.removeItem(SCAN_DRAFT_KEY);
 }
 
-const SITE_PAGE_PRESETS = [10, 30, 50, 100, 200];
-
 function ScanJobForm({ onCreated }) {
   // 從 localStorage 還原草稿，避免 F5 後重打網址
   const initial = loadScanDraft() || {};
@@ -575,15 +573,16 @@ function ScanJobForm({ onCreated }) {
   );
   const [activeMode, setActiveMode] = useState(initial.activeMode || false);
   const [activeAuthorized, setActiveAuthorized] = useState(initial.activeAuthorized || false);
-  const [maxPages, setMaxPages] = useState(initial.maxPages || 50);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [estimating, setEstimating] = useState(false);
+  const [estimate, setEstimate] = useState(null); // { estimated_pages, estimated_cost, confidence }
   const navigate = useNavigate();
   const wallet = useArgusStore((s) => s.wallet);
   const fetchWallet = useArgusStore((s) => s.fetchWallet);
 
   const coinPerPage = wallet?.coin_per_page ?? 10;
-  const effectivePages = scope === "single" ? 1 : Math.max(1, Number(maxPages) || 0);
+  const effectivePages = scope === "single" ? 1 : 500;
   const estimatedCost = effectivePages * coinPerPage;
   const balance = wallet?.balance ?? 0;
   const insufficient = balance < estimatedCost;
@@ -596,9 +595,8 @@ function ScanJobForm({ onCreated }) {
       thirdPartyReconfirmed,
       activeMode,
       activeAuthorized,
-      maxPages,
     });
-  }, [scope, url, authorizationConfirmed, thirdPartyReconfirmed, activeMode, activeAuthorized, maxPages]);
+  }, [scope, url, authorizationConfirmed, thirdPartyReconfirmed, activeMode, activeAuthorized]);
 
   useEffect(() => {
     if (!submitting) return undefined;
@@ -616,14 +614,14 @@ function ScanJobForm({ onCreated }) {
     setSubmitting(true);
     try {
       // 單頁掃描：max_pages=1, max_depth=1（不走連結）
-      // 整站掃描：max_pages 由使用者選, max_depth=3
+      // 整站掃描：max_pages 固定 500，不再由使用者設定
       const payload = {
         url,
         authorization_confirmed: authorizationConfirmed,
         third_party_reconfirmed: thirdPartyReconfirmed,
         scan_mode: activeMode ? "active" : "passive",
         active_testing_authorized: activeMode && activeAuthorized,
-        max_pages: scope === "single" ? 1 : Math.max(1, Number(maxPages) || 50),
+        max_pages: scope === "single" ? 1 : 500,
         max_depth: scope === "single" ? 1 : 3,
       };
       const response = await api.post("/scans/", payload);
@@ -632,7 +630,7 @@ function ScanJobForm({ onCreated }) {
       setThirdPartyReconfirmed(false);
       setActiveMode(false);
       setActiveAuthorized(false);
-      setMaxPages(50);
+      setEstimate(null);
       setScope("site");
       clearScanDraft();
       fetchWallet();
@@ -644,6 +642,20 @@ function ScanJobForm({ onCreated }) {
       );
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function handleEstimate() {
+    if (!url || scope === "single") return;
+    setEstimating(true);
+    setEstimate(null);
+    try {
+      const res = await api.post("/estimate/", { url });
+      setEstimate(res.data);
+    } catch {
+      setEstimate({ estimated_pages: "?", estimated_cost: "?", confidence: "low" });
+    } finally {
+      setEstimating(false);
     }
   }
 
@@ -679,7 +691,7 @@ function ScanJobForm({ onCreated }) {
             <span className="scope-icon" aria-hidden="true">🌐</span>
             <span className="scope-title">整個網站</span>
             <span className="scope-desc">從入口出發爬同網域多頁，產出完整健檢報告</span>
-            <span className="scope-meta">{maxPages} 頁 = {maxPages * coinPerPage} coin</span>
+            <span className="scope-meta">最多 500 頁，依實際爬到頁數計費</span>
           </button>
         </div>
       </div>
@@ -693,35 +705,32 @@ function ScanJobForm({ onCreated }) {
           className="input"
           placeholder="https://example.com/"
           value={url}
-          onChange={(event) => setUrl(event.target.value)}
+          onChange={(event) => { setUrl(event.target.value); setEstimate(null); }}
         />
-      </div>
-
-      {scope === "site" && (
-        <div>
-          <label className="text-xs text-slate-500">最大頁數上限</label>
-          <div className="page-preset-row">
-            {SITE_PAGE_PRESETS.map((n) => (
-              <button
-                key={n}
-                type="button"
-                className={`page-preset ${maxPages === n ? "active" : ""}`}
-                onClick={() => setMaxPages(n)}
-              >
-                {n} 頁
-              </button>
-            ))}
-            <input
-              className="input page-preset-custom"
-              type="number"
-              min="1"
-              max="200"
-              value={maxPages}
-              onChange={(e) => setMaxPages(Number(e.target.value) || 1)}
-            />
+        {scope !== "single" && (
+          <div className="scan-estimate-row">
+            <button
+              type="button"
+              className="scan-estimate-btn"
+              onClick={handleEstimate}
+              disabled={estimating || !url}
+            >
+              {estimating ? "估算中…" : "🔍 預估費用"}
+            </button>
+            {estimate && (
+              <div className={`scan-estimate-result conf-${estimate.confidence}`}>
+                <span>約 <strong>{estimate.estimated_pages}</strong> 頁</span>
+                <span>≈ <strong>{estimate.estimated_cost}</strong> coin</span>
+                <span className="scan-estimate-conf">
+                  {estimate.confidence === "high" ? "（sitemap 精準）" :
+                   estimate.confidence === "medium" ? "（連結計算，中等精確）" :
+                   "（估算，實際可能不同）"}
+                </span>
+              </div>
+            )}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       <div className={`coin-estimate ${insufficient ? "is-insufficient" : ""}`}>
         <div className="coin-estimate-row">
