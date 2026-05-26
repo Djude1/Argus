@@ -4,6 +4,88 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ---
 
+## 多層 CLAUDE.md 架構
+
+本專案採用四層結構，各層規則**串接（不覆蓋）**，避免跨層寫矛盾規則：
+
+| 層 | 路徑 | 用途 | git 追蹤 |
+|---|---|---|---|
+| 使用者層 | `~/.claude/CLAUDE.md` | 個人偏好、OMC 設定 | 不提交 |
+| 專案層 | `CLAUDE.md`（本檔） | 團隊共用規範、架構、禁止事項 | ✅ 提交 |
+| 子目錄層 | `frontend/CLAUDE.md` 等 | 各模組的具體規則（越深越具體） | ✅ 提交 |
+| 個人覆寫層 | `CLAUDE.local.md` | 本機個人微調，不影響他人 | 不提交 |
+
+**子目錄 CLAUDE.md 位置：**
+- [`frontend/CLAUDE.md`](frontend/CLAUDE.md) — React/Vite build、App.jsx 操作規範
+- [`backend/apps/billing/CLAUDE.md`](backend/apps/billing/CLAUDE.md) — 點數系統唯一入口規則
+- [`backend/apps/scans/CLAUDE.md`](backend/apps/scans/CLAUDE.md) — ScanJob 狀態機、Playwright、取消機制
+
+---
+
+## 禁止事項清單（Prohibited Actions）
+
+以下操作**在任何情況下都禁止**，違反可能導致資料損毀、安全漏洞或計費錯誤。
+
+| 禁止事項 | 原因 | 正確做法 |
+|---|---|---|
+| 直接對 `CoinWallet` 或 `CoinTransaction` 呼叫 `.save()` / `.create()` | 繞過原子交易與冪等保護，導致 race condition | 使用 `billing/services.py` 的函式 |
+| 直接執行 `npm run build` | Node v24 + Rollup 4.x 在 Windows 會 `STATUS_STACK_BUFFER_OVERRUN` crash | `cd frontend; .\build-node22.ps1` |
+| 在程式碼中硬編碼 API Key / Token / 密碼 | 機密外洩，且一旦推上 git 無法徹底清除 | 放 `.env`，用 `python-dotenv` 讀取 |
+| `playwright install` 不加 `PLAYWRIGHT_BROWSERS_PATH` | 污染 `%USERPROFILE%\AppData\Local\ms-playwright` 全域路徑 | `$env:PLAYWRIGHT_BROWSERS_PATH=".ms-playwright"; uv run playwright install chromium` |
+| `pip install` 全域安裝 Python 套件 | 污染全域 Python 環境 | `uv add 套件名` |
+| 全域 `npm install -g` | 污染全域 Node 環境 | `D:\node22\npm.cmd install 套件名` |
+| 修改或刪除已存在的 `CoinTransaction` 紀錄 | 破壞計費稽核軌跡 | 新增 `type=manual` 的補正交易 |
+| 刪除 `AdminAuditLog` 紀錄 | 破壞合規稽核軌跡 | 禁止刪除，僅可查詢 |
+| 在 `scanners.py` / `crawler.py` 直接修改 `ScanJob.status` | 繞過狀態機，導致不一致狀態 | 只在 `tasks.py` 推進狀態 |
+| 在 `views.py` 直接 render 使用者個資欄位（email、手機等） | 個資洩漏 | 透過 Serializer 明確 whitelist 欄位 |
+
+---
+
+## 任務完成記錄規則（log 資料夾）
+
+**每次完成任務後，必須在 `log/` 資料夾建立一筆記錄**，哪怕是小改動也要記。這是為了讓其他組員（或下次的 Claude）能快速了解「誰動了什麼、為什麼動、影響哪裡」，不必靠記憶或翻 git diff 猜測。
+
+### 檔案命名
+
+```
+log/YYYY-MM-DD_簡短描述.md
+```
+
+- 日期格式 ISO 8601（`2026-05-26`）
+- 描述用連字號分隔，中英文均可
+- 同一天多筆加後綴：`2026-05-26_fix-a.md`、`2026-05-26_fix-b.md`
+
+### 記錄格式
+
+```markdown
+# 簡短描述
+
+**日期**：YYYY-MM-DD  
+**操作者**：（誰執行，如：Claude / 組員 A）
+
+## 變更內容
+- 修改了哪個檔案的哪個函式 / 哪段邏輯
+- 新增了什麼
+
+## 原因
+使用者請求或 bug 描述（Why，不只是 What）
+
+## 影響範圍
+- 哪些功能受影響
+- 需要注意的副作用或相依關係
+
+## 驗證方式
+- 執行了哪些測試或手動確認步驟
+- 測試結果（pass / 手動確認 OK）
+```
+
+### 注意事項
+- log 檔案**必須納入同次 git commit**，與程式碼修改一起提交
+- 只記「做了什麼、為什麼、影響哪裡」，不要貼完整程式碼（程式碼在 git diff 裡）
+- 若任務未完成（中斷），記錄到目前為止的狀態與下一步
+
+---
+
 ## 常用命令
 
 ```powershell
@@ -42,6 +124,99 @@ docker compose up -d --build frontend
 
 ### 整體資料流
 使用者在前端填網址 → `POST /api/scans/`（billing 預扣 coin）→ Celery worker 啟動 Playwright BFS 爬蟲 → 四維 scanner → 可選 Hermes-Agent → 結果寫 DB → 前端 polling 取 findings。
+
+---
+
+### 前端路由地圖（`frontend/src/App.jsx`）
+
+> 所有路由定義在 App.jsx 底部 `<Routes>` 區塊（約第 5380 行起）。
+
+| 路由 | 元件 / 頁面 | 說明 |
+|---|---|---|
+| `/login` | `LoginPage` | Google OAuth 登入 |
+| `/project` | `ProjectPage` | 公開行銷頁：產品特色 |
+| `/team` | `TeamPage` | 公開行銷頁：團隊介紹 |
+| `/purchase` | `PurchasePage` | 購買點數（3 步驟結帳 wizard） |
+| `/download` | `DownloadPage` | 下載報告 |
+| `/scans` | `ScansPlaceholder` → `ScanListPage` | 掃描列表（需登入） |
+| `/scans/:scanId` | `ScanDetailPage` | 掃描結果詳情 + findings |
+| `/scans/:scanId/topology` | `TopologyPage` | 網站拓樸圖（ReactFlow） |
+| `/reviews` | `ReviewsPage` | 平台評論 |
+| `/admin` | → redirect `/admin/overview` | staff 進入點 |
+| `/admin/overview` | `AdminOverviewPage` | 後台總覽 |
+| `/admin/users` | `AdminUsersPage` | 使用者管理 |
+| `/admin/users/:userId` | `AdminUserDetailPage` | 使用者詳情 + 點數調整 |
+| `/admin/transactions` | `AdminTransactionsPage` | 交易紀錄 |
+| `/admin/reviews` | `AdminReviewsPage` | 評論管理（可回覆） |
+| `/admin/scans` | `AdminScansPage` | 掃描任務管理 |
+| `/admin/scans/:scanId` | `AdminScanDetailPage` | 掃描詳情（管理員視角） |
+| `/admin/content` | `AdminContentPage` | CMS 內容管理 |
+| `/admin/plans` | `AdminPlansPage` | 定價方案管理 |
+| `/admin/audit-log` | `AdminAuditLogPage` | 操作紀錄（superuser 限定） |
+
+**前端核心檔案：**
+
+| 檔案 | 職責 |
+|---|---|
+| `frontend/src/App.jsx` | 4500+ 行，所有頁面元件與路由定義全在此 |
+| `frontend/src/api.js` | Axios instance，統一處理 base URL 與 CSRF token |
+| `frontend/src/store.js` | Zustand 全域狀態（user、wallet 等） |
+| `frontend/src/main.jsx` | React entry point，Provider 掛載 |
+| `frontend/src/styles.css` | 全域樣式（含 admin 深色 sidebar 變數） |
+
+---
+
+### 後端 API 路由地圖（`backend/config/urls.py`）
+
+| URL 前綴 | Django App | 主要端點 |
+|---|---|---|
+| `/api/auth/` | `accounts` | `login/`（dev）、`google/`（OAuth）、`logout/`、`me/` |
+| `/api/scans/` | `scans` | `scans/`（CRUD）、`pages/`、`findings/`、`dashboard/`、`history/`、`audit/`、`findings-by-category/` |
+| `/api/billing/` | `billing` | `wallet/`、`plans/`、`purchase/`、`orders/` |
+| `/api/reviews/` | `reviews` | `reviews/`（CRUD + thread） |
+| `/api/content/` | `content` | `features/`、`team/`、`releases/`（公開 CMS） |
+| `/api/admin/` | `admin_api` | `overview/`、`users/`、`transactions/`、`scans/`、`reviews/`、`orders/`、`dashboard/`、`audit-log/`、`cms/*` |
+| `/django-admin/` | Django Admin | superuser 後門（Jazzmin 主題） |
+| `/` ～ `/*` | SPA fallback | 回傳 `frontend/dist/index.html`，由 React Router 處理 |
+
+---
+
+### 關鍵 Model 速查
+
+**ScanJob**（`apps/scans/models.py`）
+```
+狀態機：queued → crawling → scanning → [agent_testing] → completed
+                                                        ↘ failed / cancelled
+欄位重點：original_url、status、scan_mode（passive/active）、
+         max_depth、max_pages、progress（JSON 即時進度）、
+         overall_score、category_scores（JSON）、top_actions（JSON）
+```
+
+**CoinWallet**（`apps/billing/models.py`）
+```
+balance（目前餘額）、total_purchased_ntd、total_scans_used
+last_bonus_year / last_bonus_month（月贈點冪等欄位）
+→ 所有寫入必須經過 billing/services.py，禁止直接 .save()
+```
+
+**CoinTransaction**（`apps/billing/models.py`）
+```
+wallet FK、amount（正=入帳、負=扣款）、type（purchase/hold/settle/refund/bonus/manual）
+scan FK（nullable）、note
+```
+
+**AdminAuditLog**（`apps/admin_api/models.py`）
+```
+actor（staff user）、action（字串）、target_user FK（nullable）、
+detail（JSON）、created_at
+→ 每次後台操作（調整點數、回覆評論等）自動寫入
+```
+
+**PlatformReview**（`apps/reviews/models.py`）
+```
+user（一人一則，unique）、rating（1-5）、content、images（JSON）
+parent FK（nullable，用於 thread 回覆）
+```
 
 ### Node 22 portable（build 必用）
 系統 Node 是 v24.13（`C:\Program Files\nodejs`），但 v24 + Rollup 4.x 在 Windows 會 crash（`STATUS_STACK_BUFFER_OVERRUN`，exit `-1073740791`）。已將 Node v22.22.3 解壓到 `D:\node22`（portable，未動 PATH 也未動系統 Node）。
@@ -183,6 +358,8 @@ $env:PLAYWRIGHT_BROWSERS_PATH=".ms-playwright"; uv run playwright install chromi
 2. [步驟] → 驗證：[確認方式]
 3. [步驟] → 驗證：[確認方式]
 ```
+
+強成功條件讓你能獨立循環執行；弱成功條件（如「讓它能動」）需要不斷釐清，問題往往在出錯後才被發現。
 
 ### 6. 每次更新後必須徹底檢查，直到無錯誤才算完成
 
