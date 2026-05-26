@@ -2274,12 +2274,12 @@ function ScanDetailPage() {
 // ============================================================
 
 const NAV_ITEMS = [
+  { to: "/project", label: "首頁", emoji: "🏠" },
   { to: "/dashboard", label: "Dashboard", emoji: "📊" },
   { to: "/scans", label: "掃描", emoji: "🔍" },
   { to: "/history", label: "歷史", emoji: "📈" },
   { to: "/billing", label: "購點", emoji: "💎" },
   { to: "/reviews", label: "評論", emoji: "⭐" },
-  { to: "/download", label: "下載", emoji: "📱" },
   { to: "/settings", label: "設定", emoji: "⚙️" },
 ];
 
@@ -2295,13 +2295,13 @@ function TopNav() {
   return (
     <nav className="argus-nav">
       <div className="argus-nav-inner">
-        <div className="argus-brand">
+        <NavLink to="/project" className="argus-brand" aria-label="回首頁">
           <span className="argus-brand-glyph">⟡</span>
           <span>
             <span className="argus-brand-title">ARGUS</span>
             <span className="argus-brand-sub">AI 網站健檢平台</span>
           </span>
-        </div>
+        </NavLink>
         <div className="argus-nav-links">
           {NAV_ITEMS.map((item) => (
             <NavLink
