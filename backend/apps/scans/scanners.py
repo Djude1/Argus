@@ -399,35 +399,58 @@ def analyze_geo(page_input: PageAnalysisInput, parser: HtmlSignalParser) -> list
         findings.append(
             make_finding(
                 category=Finding.Category.GEO,
-                severity=Finding.Severity.MEDIUM,
-                title="缺少 JSON-LD 結構化資料",
+                severity=Finding.Severity.LOW,
+                title="可補充 JSON-LD 結構化資料",
                 description=(
-                    "缺少 Schema.org JSON-LD 會降低 AI 系統辨識品牌、頁面類型與主要實體的穩定性。"
+                    "頁面目前沒有 JSON-LD 結構化資料。若此頁承載品牌介紹、文章、"
+                    "產品、服務或常見問答內容，補充 Schema.org 資料可提升 AI 系統"
+                    "辨識頁面主題與實體的穩定性。"
                 ),
                 remediation=(
-                    "依頁面類型加入 Organization、Article、Product、FAQPage "
-                    "或 BreadcrumbList 等 Schema。"
+                    "依頁面類型考慮加入 Organization、WebSite、WebPage、Article、Product、"
+                    "Service、FAQPage、HowTo 或 BreadcrumbList 等 Schema。"
                 ),
                 evidence="json_ld_blocks=0",
                 selector='script[type="application/ld+json"]',
                 impact_area="structured_data",
-                priority_score=68,
+                priority_score=35,
             )
         )
     elif not any(
-        kind in json_ld_text for kind in ["organization", "article", "product", "faqpage"]
+        kind in json_ld_text
+        for kind in [
+            "organization",
+            "website",
+            "webpage",
+            "article",
+            "product",
+            "service",
+            "faqpage",
+            "howto",
+            "breadcrumblist",
+            "person",
+            "localbusiness",
+            "softwareapplication",
+            "event",
+        ]
     ):
         findings.append(
             make_finding(
                 category=Finding.Category.GEO,
-                severity=Finding.Severity.LOW,
-                title="JSON-LD 缺少常見核心實體類型",
-                description="結構化資料存在，但可能未清楚描述組織、文章、產品或問答等核心實體。",
-                remediation="檢查 Schema 類型是否符合頁面目的，並補齊必要欄位。",
+                severity=Finding.Severity.INFO,
+                title="JSON-LD 可補充更明確的實體類型",
+                description=(
+                    "頁面已有結構化資料，但目前未偵測到常見的頁面、組織、文章、產品、"
+                    "服務、問答或導覽類型。這可能讓 AI 系統較難穩定判斷頁面用途。"
+                ),
+                remediation=(
+                    "檢查 Schema 類型是否符合頁面目的，"
+                    "必要時補齊更明確的 @type 與必要欄位。"
+                ),
                 evidence=json_ld_text[:1000],
                 selector='script[type="application/ld+json"]',
                 impact_area="structured_data",
-                priority_score=42,
+                priority_score=25,
             )
         )
     if paragraph_count < 2 or len(text.strip()) < 300:
@@ -436,13 +459,16 @@ def analyze_geo(page_input: PageAnalysisInput, parser: HtmlSignalParser) -> list
                 category=Finding.Category.GEO,
                 severity=Finding.Severity.INFO,
                 title="可引用文字區塊偏少",
-                description="AI 系統通常需要清楚、可獨立引用的段落來生成可靠答案。",
+                description=(
+                    "頁面可獨立引用的文字段落偏少。若此頁希望被 AI 系統摘要或引用，"
+                    "可補充更清楚的段落、定義、數據來源與具體事實。"
+                ),
                 remediation="增加清楚的小段落、定義、數據來源與具體事實，讓內容更容易被引用。",
                 evidence=f"paragraph_count={paragraph_count}, text_length={len(text.strip())}",
                 selector="main",
                 bounding_box=page_input.element_boxes.get("main"),
                 impact_area="chunkability",
-                priority_score=25,
+                priority_score=20,
             )
         )
     return findings
