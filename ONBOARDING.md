@@ -220,7 +220,7 @@ Argus/
 | `/billing` | `BillingPage` | 3 步驟結帳 wizard |
 | `/settings` | `SettingsPage` | 錢包概覽 |
 
-### 6.2 React /admin（dark sidebar，淺色內容）
+### 6.2 React /admin（深色 sidebar）
 | 路徑 | 看得到 |
 |---|---|
 | `/admin/overview` | staff（含 6 stat card + 14 天 SVG mini chart + AI provider 用量 + Top 10 AI 用戶） |
@@ -228,12 +228,14 @@ Argus/
 | `/admin/transactions` | staff |
 | `/admin/reviews` | staff（thread 邏輯，待回覆=最後一則非 admin） |
 | `/admin/scans` `/admin/scans/:id` | staff |
-| `/admin/content` | staff（連 Jazzmin 編輯） |
+| `/admin/content` | staff（**3 tab inline CRUD**：特色 / 成員 / 版本） |
+| `/admin/plans` | staff（**inline CRUD** 編輯 PricingPlan） |
 | `/admin/audit-log` | **superuser** |
 
-### 6.3 Django Admin（Jazzmin 美化、superuser 後門）
-- `/django-admin/` — 完整 Django Admin
-- `/django-admin/billing/coinwallet/<id>/adjust/` — 自訂任意金額調 coin form
+### 6.3 Django Admin（**已砍 Jazzmin**，superuser 應急後門）
+- `/django-admin/` — Django 預設樣式（醜但 functional）
+- 主要 admin 介面已搬到 React `/admin/*`
+- W4 移除 django-jazzmin 套件，settings 內保留 `_JAZZMIN_*_DEPRECATED` 命名常數供未來參考
 
 ### 6.4 PWA 必要檔（Django runserver 用 re_path 明確 serve）
 - `/manifest.webmanifest`
@@ -287,8 +289,9 @@ Argus/
 | Method | 端點 | 權限 | 說明 |
 |---|---|---|---|
 | GET | `/api/content/features/` | open | /project 用 |
-| GET | `/api/content/team/` | open | /team 用 |
+| GET | `/api/content/team/` | open | /team 用（含 skill_levels + contributions） |
 | GET | `/api/content/releases/` | open | /download 用 |
+| GET | `/api/content/milestones/` | open | /project timeline 用 |
 
 ### 7.6 管理員 API（React /admin 用）
 | Method | 端點 | 權限 | 說明 |
@@ -306,6 +309,17 @@ Argus/
 | GET | `/api/admin/scans/{id}/` | staff | 掃描詳情 |
 | GET | `/api/admin/orders/?q=&status=&invoice_type=&page=` | staff | 訂單列表 |
 | GET | `/api/admin/audit-log/?action=&actor_id=&page=` | **superuser** | 管理員操作審計 |
+| GET / POST / PUT / DELETE | `/api/admin/cms/features/` | staff | ProjectFeature CRUD（W4 新） |
+| GET / POST / PUT / DELETE | `/api/admin/cms/team/` | staff | TeamMember CRUD（W4 新） |
+| GET / POST / PUT / DELETE | `/api/admin/cms/releases/` | staff | AppRelease CRUD（W4 新） |
+| GET / POST / PUT / DELETE | `/api/admin/cms/plans/` | staff | PricingPlan CRUD（W4 新） |
+
+### 7.7 點讚（W3 新增，Trustpilot 風）
+| Method | 端點 | 權限 | 說明 |
+|---|---|---|---|
+| POST | `/api/reviews/{id}/helpful/` | auth | 切換評論「有幫助」 |
+| POST | `/api/reviews/messages/{id}/helpful/` | auth | 切換訊息「有幫助」 |
+| GET | `/api/reviews/?sort=helpful\|newest` | open | 排序評論列表 |
 
 ---
 
@@ -366,20 +380,37 @@ ProjectFeature / TeamMember / AppRelease（CMS）
 
 ## 10. 已完成（截至本檔生效時）
 
-從 `開發計畫.md` 摘要：T1–T26 已完成，包含：
+從 `開發計畫.md` 摘要：T1–T26 + W1–W4 + 同學貢獻已完成，包含：
 
 | 階段 | 內容 |
 |---|---|
 | T1–T10 | MVP 後端 + 前端 + Word 報告 + 後台 |
-| T11–T12 | 法律授權 + 27 → 192 個測試 |
+| T11–T12 | 法律授權 + 27 → 212 個測試 |
 | T13–T15 | Hermes-Agent / 主動式資安 / 拓撲圖 |
-| T16–T18 | Coin 點數制 + 評論 + Jazzmin 美化 |
+| T16–T18 | Coin 點數制 + 評論 + Jazzmin 美化（後 W4 砍掉） |
 | T19–T21 | React /admin / 3 步驟結帳 wizard / AI 用量 dashboard |
-| T22–T26 | 公開頁 CMS / PWA / Audit log + 兩級權限 / Reviews thread + 圖片 / 拿掉 /audit /categories |
+| T22–T26 | 公開頁 CMS / PWA / Audit log + 兩級權限 / Reviews thread + 圖片 |
+| **W1** | TopNav 加下載 + /scans 範圍切換（單頁/整站）+ /billing 電子發票載具（手機條碼/自然人憑證） |
+| **W4** | 砍 django-jazzmin + React /admin 補 inline CRUD（content + plans） |
+| **W3** | /reviews 重做為 Trustpilot 風（點讚/精選/lightbox/admin 真名） |
+| **W2** | /team /purchase /project 視覺大美化 + 字體全面放大（評審老花需求） |
 
-**最新 commit**: `1e13514 公開頁 + PWA + CMS + 兩級權限 + audit log + reviews thread`
+**最新 commit**: 持續更新中（看 `git log --oneline -5`）
 
-**驗證狀態**：後端 192/192、ruff 全綠、frontend build 通過、PWA 可安裝。
+**驗證狀態**：後端 212/212、ruff 全綠、frontend build 通過、PWA 可安裝。
+
+### 同學（另一個 Claude Code）已完成
+
+- `後台深色 sidebar 改造 + Node 24 build crash 修復`（f38c6d8）
+- `文件：建立多層 CLAUDE.md + log 規範 + 禁止事項清單`（6206b3e）
+- `修復：掃描詳情頁雙重載入動畫`（6f1b9da）
+
+**重要規範**（建立於 `frontend/CLAUDE.md`）：
+- **build 必須用 `frontend/build-node22.ps1`**（系統 Node v24 + Rollup 4 在 Windows crash），dev 兩種 Node 都能跑
+- 禁止 inline style（除動態值如 progress 寬度）
+- 禁止新增獨立 `.jsx`/`.tsx` 元件檔（單檔架構）
+- 禁止 `fetch()` / `axios` 直接呼叫（要走 `api.js`）
+- 套件安裝用 `D:\node22\npm.cmd install`
 
 ---
 
@@ -394,18 +425,20 @@ ProjectFeature / TeamMember / AppRelease（CMS）
 4. **TeamPage 加成員照片支援**（TeamMember 加 ImageField avatar）— `apps/content/models.py` + migration + admin + 前端 fallback
 
 ### 中等（半天 ~ 1 天）
-5. **content app 加 ProjectMilestone**（時程里程碑）+ ProjectPage 加 timeline 視覺化
-6. **AdminAuditLog 擴充**：訂單狀態變更、user toggle staff 也寫 log
-7. **前台 DashboardPage 加「我的 AI 用量」段**（目前只有 admin 看得到）
-8. **ReviewMessage pending_subquery 改 SQL subquery**（提升效能，目前是 Python loop）
-9. **iOS Safari PWA 實機測試**（修補可能的 manifest 問題）
+5. **AdminAuditLog 擴充**：訂單狀態變更、user toggle staff 也寫 log
+6. **前台 DashboardPage 加「我的 AI 用量」段**（目前只有 admin 看得到）
+7. **ReviewMessage pending_subquery 改 SQL subquery**（提升效能，目前是 Python loop）
+8. **iOS Safari PWA 實機測試**（修補可能的 manifest 問題）
+9. **/reviews 加篩選**（按星等 / 按 thread 有無回覆 / 按 verified）
+10. **/billing 載具表單** 改即時格式提示（輸入時 highlight 不合格字元）
 
 ### 較大（1+ 天）
-10. **真實金流串接**（綠界 / 藍新 / Stripe）—— 把 `PurchaseView` 拆 init + callback/webhook
-11. **Playwright E2E 測試** —— 覆蓋掃描流程、報告互動、終止按鈕、結帳 wizard
-12. **拓撲圖 v2**：加 force layout、互動拖曳保存、節點群組
-13. **AI 用量 quota / 上限警告**（超過 100k tokens/月）
-14. **Reviews 圖片 lightbox / lazy load**
+11. **真實金流串接**（綠界 / 藍新 / Stripe）—— 把 `PurchaseView` 拆 init + callback/webhook
+12. **Playwright E2E 測試** —— 覆蓋掃描流程、報告互動、終止按鈕、結帳 wizard
+13. **拓撲圖 v2**：加 force layout、互動拖曳保存、節點群組
+14. **AI 用量 quota / 上限警告**（超過 100k tokens/月）
+15. **/admin/content 加 drag 排序**（目前用 sort_order 輸入，UX 不夠直覺）
+16. **公開頁 SEO**：加 sitemap.xml、Open Graph meta、JSON-LD 結構化資料
 
 ---
 
