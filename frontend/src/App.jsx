@@ -1257,13 +1257,10 @@ function ScreenshotCanvas({ scan, targetPage, findings, selectedFinding, onSelec
       )}
       {!imageUrl && (
         isInProgress(scan?.status) ? (
-          <CrawlingAnimation
-            status={scan.status}
-            progress={scan.progress}
-            startedAt={scan.started_at}
-            hint="截圖完成後會自動顯示在此"
-            compact
-          />
+          <div className="screenshot-pending">
+            <span className="crawl-anim-spinner" aria-hidden="true" />
+            <p className="hint-text">掃描進行中，截圖完成後自動顯示</p>
+          </div>
         ) : (
           <p className="hint-text">
             {targetPage

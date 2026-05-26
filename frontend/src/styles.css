@@ -333,6 +333,10 @@
     @apply min-h-[460px] overflow-auto rounded-2xl border border-slate-200 bg-slate-50 p-4;
   }
 
+  .screenshot-pending {
+    @apply flex min-h-[380px] flex-col items-center justify-center gap-3;
+  }
+
   .screenshot-image {
     @apply max-w-full rounded-xl border border-slate-200;
   }
