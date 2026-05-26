@@ -256,14 +256,14 @@ def analyze_seo(page_input: PageAnalysisInput, parser: HtmlSignalParser) -> list
         findings.append(
             make_finding(
                 category=Finding.Category.SEO,
-                severity=Finding.Severity.MEDIUM,
+                severity=Finding.Severity.LOW,
                 title="Meta title 長度不理想",
                 description="頁面標題過短或過長，可能降低搜尋結果可讀性與點擊率。",
                 remediation="將 title 調整為清楚描述頁面主題且約 10 到 65 字元。",
                 evidence=f"title={page_input.title!r}, length={title_length}",
                 selector="title",
                 impact_area="metadata",
-                priority_score=60,
+                priority_score=40,
             )
         )
     description_length = len(parser.meta_description.strip())
@@ -271,21 +271,21 @@ def analyze_seo(page_input: PageAnalysisInput, parser: HtmlSignalParser) -> list
         findings.append(
             make_finding(
                 category=Finding.Category.SEO,
-                severity=Finding.Severity.MEDIUM,
+                severity=Finding.Severity.LOW,
                 title="Meta description 缺失或長度不理想",
                 description="Meta description 缺失、過短或過長，會影響搜尋摘要品質。",
                 remediation="補上清楚摘要頁面價值的 description，建議約 50 到 160 字元。",
                 evidence=f"description_length={description_length}",
                 selector='meta[name="description"]',
                 impact_area="metadata",
-                priority_score=58,
+                priority_score=38,
             )
         )
     if parser.h1_count != 1:
         findings.append(
             make_finding(
                 category=Finding.Category.SEO,
-                severity=Finding.Severity.HIGH if parser.h1_count == 0 else Finding.Severity.MEDIUM,
+                severity=Finding.Severity.MEDIUM if parser.h1_count == 0 else Finding.Severity.LOW,
                 title="H1 標題數量不正確",
                 description="每頁應有唯一且明確的 H1，協助搜尋引擎與使用者理解頁面主題。",
                 remediation="保留一個代表頁面主題的 H1，其他段落標題改用 H2-H6。",
@@ -293,7 +293,7 @@ def analyze_seo(page_input: PageAnalysisInput, parser: HtmlSignalParser) -> list
                 selector="h1",
                 bounding_box=page_input.element_boxes.get("h1"),
                 impact_area="heading",
-                priority_score=72,
+                priority_score=55 if parser.h1_count == 0 else 42,
             )
         )
     if parser.image_without_alt:
@@ -311,21 +311,21 @@ def analyze_seo(page_input: PageAnalysisInput, parser: HtmlSignalParser) -> list
                 selector="img:not([alt])",
                 bounding_box=page_input.element_boxes.get("img:not([alt])"),
                 impact_area="accessibility",
-                priority_score=35,
+                priority_score=25,
             )
         )
     if not parser.canonical:
         findings.append(
             make_finding(
                 category=Finding.Category.SEO,
-                severity=Finding.Severity.LOW,
+                severity=Finding.Severity.INFO,
                 title="缺少 canonical URL",
                 description="缺少 canonical 可能讓重複內容頁面分散搜尋權重。",
                 remediation="為主要內容頁加入 canonical，指向該內容的標準 URL。",
                 evidence="canonical_missing=true",
                 selector='link[rel="canonical"]',
                 impact_area="metadata",
-                priority_score=30,
+                priority_score=15,
             )
         )
     return findings
