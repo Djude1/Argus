@@ -4337,3 +4337,20 @@
   padding: .5rem 1.25rem; background: #6366f1; border: none;
   border-radius: 8px; color: #fff; font-weight: 600; cursor: pointer;
 }
+
+/* ===== AdminAnnouncementsPage ===== */
+.admin-add-btn { padding: .5rem 1rem; background: #0891b2; border: none; border-radius: 8px; color: #fff; cursor: pointer; font-weight: 600; }
+.admin-ann-list { display: flex; flex-direction: column; gap: .75rem; }
+.admin-ann-card { background: var(--bg-card, #1e293b); border: 1px solid rgba(255,255,255,.08); border-radius: 10px; padding: 1rem; }
+.admin-ann-card.inactive { opacity: .55; }
+.admin-ann-card-header { display: flex; align-items: center; gap: .75rem; margin-bottom: .5rem; }
+.admin-ann-title { font-weight: 600; color: #e2e8f0; }
+.admin-ann-type { font-size: .75rem; padding: .15rem .5rem; border-radius: 4px; }
+.admin-ann-type.permanent { background: rgba(239,68,68,.15); color: #f87171; }
+.admin-ann-type.temporary { background: rgba(99,102,241,.15); color: #818cf8; }
+.admin-ann-preview { color: #64748b; font-size: .85rem; margin: 0 0 .75rem; }
+.admin-ann-actions { display: flex; align-items: center; gap: .75rem; }
+.admin-ann-actions button { padding: .3rem .75rem; border: 1px solid rgba(255,255,255,.15); border-radius: 6px; background: transparent; color: #94a3b8; cursor: pointer; font-size: .85rem; }
+.admin-ann-actions button.danger { border-color: rgba(239,68,68,.3); color: #f87171; }
+.status-active { color: #22c55e; font-size: .8rem; }
+.status-inactive { color: #64748b; font-size: .8rem; }

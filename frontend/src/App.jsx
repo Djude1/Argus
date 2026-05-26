@@ -4579,7 +4579,7 @@ function AdminLayout() {
   }
   // 超級管理員額外看到「📜 操作紀錄」分頁
   const navItems = me?.is_superuser
-    ? [...ADMIN_NAV_ITEMS, { to: "/admin/audit-log", label: "操作紀錄", emoji: "📜" }]
+    ? [...ADMIN_NAV_ITEMS, { to: "/admin/audit-log", label: "操作紀錄", emoji: "📜" }, { to: "/admin/announcements", label: "公告管理", emoji: "📢" }]
     : ADMIN_NAV_ITEMS;
   return (
     <div className="admin-shell">
@@ -5865,6 +5865,101 @@ const AUDIT_ACTION_OPTIONS = [
   { v: "other", label: "其他" },
 ];
 
+function AdminAnnouncementsPage() {
+  const [list, setList] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(null);
+  const [form, setForm] = useState({ title: "", content: "", type: "temporary", active_days: 7, is_active: true });
+
+  function loadList() {
+    setLoading(true);
+    api.get("/admin/announcements/").then((r) => setList(r.data.announcements || [])).finally(() => setLoading(false));
+  }
+  useEffect(loadList, []);
+
+  function openNew() {
+    setForm({ title: "", content: "", type: "temporary", active_days: 7, is_active: true });
+    setEditing("new");
+  }
+  function openEdit(ann) {
+    setForm({ title: ann.title, content: ann.content, type: ann.type, active_days: ann.active_days, is_active: ann.is_active });
+    setEditing(ann);
+  }
+  async function handleSave() {
+    if (editing === "new") {
+      await api.post("/admin/announcements/", form);
+    } else {
+      await api.patch(`/admin/announcements/${editing.id}/`, form);
+    }
+    setEditing(null);
+    loadList();
+  }
+  async function handleDelete(id) {
+    if (!window.confirm("確定刪除此公告？")) return;
+    await api.delete(`/admin/announcements/${id}/`);
+    loadList();
+  }
+
+  return (
+    <div className="admin-page">
+      <header className="admin-page-head">
+        <h1 className="admin-page-title">📢 公告管理</h1>
+        <button className="admin-add-btn" onClick={openNew}>＋ 新增公告</button>
+      </header>
+
+      {loading ? <div className="admin-loading">載入中…</div> : (
+        <div className="admin-ann-list">
+          {list.map((ann) => (
+            <div key={ann.id} className={`admin-ann-card ${ann.is_active ? "" : "inactive"}`}>
+              <div className="admin-ann-card-header">
+                <span className="admin-ann-title">{ann.title}</span>
+                <span className={`admin-ann-type ${ann.type}`}>
+                  {ann.type === "permanent" ? "常駐" : `臨時（${ann.active_days}天）`}
+                </span>
+              </div>
+              <p className="admin-ann-preview">{ann.content.slice(0, 80)}…</p>
+              <div className="admin-ann-actions">
+                <button onClick={() => openEdit(ann)}>編輯</button>
+                <button className="danger" onClick={() => handleDelete(ann.id)}>刪除</button>
+                <span className={ann.is_active ? "status-active" : "status-inactive"}>
+                  {ann.is_active ? "啟用" : "停用"}
+                </span>
+              </div>
+            </div>
+          ))}
+          {!list.length && <div className="admin-empty">尚無公告</div>}
+        </div>
+      )}
+
+      {editing && (
+        <div className="ann-backdrop">
+          <div className="ann-modal" style={{ maxWidth: 560 }}>
+            <header className="ann-modal-header">
+              <h2 className="ann-modal-title">{editing === "new" ? "新增公告" : "編輯公告"}</h2>
+            </header>
+            <div className="ann-modal-body" style={{ display: "flex", flexDirection: "column", gap: ".75rem" }}>
+              <input className="input" placeholder="標題" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
+              <textarea className="input" rows={6} placeholder="內容" value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })} />
+              <div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
+                <label><input type="radio" name="type" checked={form.type === "temporary"} onChange={() => setForm({ ...form, type: "temporary" })} /> 臨時公告</label>
+                <label><input type="radio" name="type" checked={form.type === "permanent"} onChange={() => setForm({ ...form, type: "permanent" })} /> 常駐公告</label>
+              </div>
+              {form.type === "temporary" && (
+                <label>顯示天數：<input className="input" type="number" min={1} max={365} value={form.active_days} onChange={(e) => setForm({ ...form, active_days: Number(e.target.value) })} style={{ width: 80 }} /></label>
+              )}
+              <label><input type="checkbox" checked={form.is_active} onChange={(e) => setForm({ ...form, is_active: e.target.checked })} /> 啟用</label>
+            </div>
+            <footer className="ann-modal-footer">
+              <button className="ann-btn-dismiss" onClick={() => setEditing(null)}>取消</button>
+              <button className="ann-btn-confirm" onClick={handleSave}>儲存</button>
+            </footer>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AdminAuditLogPage() {
   const [data, setData] = useState(null);
   const [page, setPage] = useState(1);
@@ -6033,6 +6128,7 @@ function AppShell() {
             <Route path="/admin/content" element={<AdminContentPage />} />
             <Route path="/admin/plans" element={<AdminPlansPage />} />
             <Route path="/admin/audit-log" element={<AdminAuditLogPage />} />
+            <Route path="/admin/announcements" element={<AdminAnnouncementsPage />} />
           </Route>
           <Route
             path="*"
