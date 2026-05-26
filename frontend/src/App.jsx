@@ -2385,11 +2385,61 @@ function StatTile({ label, value, hint, tone = "neutral", animateValue }) {
   );
 }
 
+function AnnouncementModal({ announcements, onDismiss, onConfirm }) {
+  const [index, setIndex] = useState(0);
+  if (!announcements.length) return null;
+  const ann = announcements[index];
+  const isLast = index === announcements.length - 1;
+  const isPermanent = ann.type === "permanent";
+
+  return (
+    <div className="ann-backdrop" role="dialog" aria-modal="true">
+      <div className="ann-modal">
+        <header className="ann-modal-header">
+          <h2 className="ann-modal-title">{ann.title}</h2>
+          {!isPermanent && (
+            <span className="ann-modal-type-chip">臨時公告</span>
+          )}
+          {isPermanent && (
+            <span className="ann-modal-type-chip permanent">常駐公告</span>
+          )}
+        </header>
+        <div className="ann-modal-body">
+          {ann.content.split("\n").map((line, i) => (
+            <p key={i} style={{ margin: line ? ".25rem 0" : ".5rem 0" }}>{line || <br />}</p>
+          ))}
+        </div>
+        <footer className="ann-modal-footer">
+          {!isPermanent && (
+            <button
+              className="ann-btn-dismiss"
+              onClick={() => onDismiss(ann.id)}
+            >
+              不再顯示
+            </button>
+          )}
+          {isLast ? (
+            <button className="ann-btn-confirm" onClick={() => onConfirm(ann.id)}>
+              確認
+            </button>
+          ) : (
+            <button className="ann-btn-confirm" onClick={() => setIndex(index + 1)}>
+              下一則 ({index + 1}/{announcements.length})
+            </button>
+          )}
+        </footer>
+      </div>
+    </div>
+  );
+}
+
 function DashboardPage() {
   const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [categoriesData, setCategoriesData] = useState(null);
   const [error, setError] = useState("");
+  const [announcements, setAnnouncements] = useState([]);
+  const [annVisible, setAnnVisible] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -2406,6 +2456,38 @@ function DashboardPage() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    api.get("/admin/announcements/active/")
+      .then((r) => {
+        const all = r.data.announcements || [];
+        const toShow = all.filter((ann) => {
+          if (ann.type === "temporary") {
+            return !localStorage.getItem(`ann_dismissed_${ann.id}`);
+          }
+          const confirmed = localStorage.getItem(`ann_confirmed_${ann.id}`);
+          if (!confirmed) return true;
+          return Date.now() - Number(confirmed) > 24 * 60 * 60 * 1000;
+        });
+        if (toShow.length) {
+          setAnnouncements(toShow);
+          setAnnVisible(true);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  function handleDismiss(annId) {
+    localStorage.setItem(`ann_dismissed_${annId}`, "1");
+    const remaining = announcements.filter((a) => a.id !== annId);
+    if (!remaining.length) setAnnVisible(false);
+    setAnnouncements(remaining);
+  }
+
+  function handleConfirm(annId) {
+    localStorage.setItem(`ann_confirmed_${annId}`, String(Date.now()));
+    setAnnVisible(false);
+  }
 
   if (error) {
     return (
@@ -2549,6 +2631,13 @@ function DashboardPage() {
           ))}
         </ul>
       </div>
+      {annVisible && (
+        <AnnouncementModal
+          announcements={announcements}
+          onDismiss={handleDismiss}
+          onConfirm={handleConfirm}
+        />
+      )}
     </div>
   );
 }

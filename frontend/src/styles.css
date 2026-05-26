@@ -4299,3 +4299,41 @@
 .scan-estimate-result.conf-medium { border-left: 3px solid #eab308; }
 .scan-estimate-result.conf-low { border-left: 3px solid #ef4444; }
 .scan-estimate-conf { color: #64748b; font-size: .8rem; }
+
+/* ===== AnnouncementModal ===== */
+.ann-backdrop {
+  position: fixed; inset: 0; z-index: 9000;
+  background: rgba(0,0,0,.65); backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center; padding: 1rem;
+}
+.ann-modal {
+  background: #1e293b; border: 1px solid rgba(255,255,255,.12);
+  border-radius: 16px; max-width: 520px; width: 100%;
+  max-height: 80vh; display: flex; flex-direction: column; overflow: hidden;
+}
+.ann-modal-header {
+  padding: 1.25rem 1.5rem; border-bottom: 1px solid rgba(255,255,255,.08);
+  display: flex; align-items: center; justify-content: space-between; gap: .75rem;
+}
+.ann-modal-title { font-size: 1.1rem; font-weight: 700; color: #e2e8f0; margin: 0; }
+.ann-modal-type-chip {
+  font-size: .7rem; padding: .2rem .6rem; border-radius: 4px;
+  background: rgba(99,102,241,.2); color: #818cf8; white-space: nowrap;
+}
+.ann-modal-type-chip.permanent { background: rgba(239,68,68,.15); color: #f87171; }
+.ann-modal-body {
+  padding: 1.25rem 1.5rem; overflow-y: auto; color: #cbd5e1;
+  font-size: .925rem; line-height: 1.7; flex: 1;
+}
+.ann-modal-footer {
+  padding: 1rem 1.5rem; border-top: 1px solid rgba(255,255,255,.08);
+  display: flex; justify-content: flex-end; gap: .75rem;
+}
+.ann-btn-dismiss {
+  padding: .5rem 1rem; border: 1px solid rgba(255,255,255,.15);
+  border-radius: 8px; background: transparent; color: #94a3b8; cursor: pointer;
+}
+.ann-btn-confirm {
+  padding: .5rem 1.25rem; background: #6366f1; border: none;
+  border-radius: 8px; color: #fff; font-weight: 600; cursor: pointer;
+}
