@@ -256,14 +256,14 @@ def analyze_seo(page_input: PageAnalysisInput, parser: HtmlSignalParser) -> list
         findings.append(
             make_finding(
                 category=Finding.Category.SEO,
-                severity=Finding.Severity.MEDIUM,
+                severity=Finding.Severity.LOW,
                 title="Meta title 長度不理想",
                 description="頁面標題過短或過長，可能降低搜尋結果可讀性與點擊率。",
                 remediation="將 title 調整為清楚描述頁面主題且約 10 到 65 字元。",
                 evidence=f"title={page_input.title!r}, length={title_length}",
                 selector="title",
                 impact_area="metadata",
-                priority_score=60,
+                priority_score=40,
             )
         )
     description_length = len(parser.meta_description.strip())
@@ -271,21 +271,21 @@ def analyze_seo(page_input: PageAnalysisInput, parser: HtmlSignalParser) -> list
         findings.append(
             make_finding(
                 category=Finding.Category.SEO,
-                severity=Finding.Severity.MEDIUM,
+                severity=Finding.Severity.LOW,
                 title="Meta description 缺失或長度不理想",
                 description="Meta description 缺失、過短或過長，會影響搜尋摘要品質。",
                 remediation="補上清楚摘要頁面價值的 description，建議約 50 到 160 字元。",
                 evidence=f"description_length={description_length}",
                 selector='meta[name="description"]',
                 impact_area="metadata",
-                priority_score=58,
+                priority_score=38,
             )
         )
     if parser.h1_count != 1:
         findings.append(
             make_finding(
                 category=Finding.Category.SEO,
-                severity=Finding.Severity.HIGH if parser.h1_count == 0 else Finding.Severity.MEDIUM,
+                severity=Finding.Severity.MEDIUM if parser.h1_count == 0 else Finding.Severity.LOW,
                 title="H1 標題數量不正確",
                 description="每頁應有唯一且明確的 H1，協助搜尋引擎與使用者理解頁面主題。",
                 remediation="保留一個代表頁面主題的 H1，其他段落標題改用 H2-H6。",
@@ -293,7 +293,7 @@ def analyze_seo(page_input: PageAnalysisInput, parser: HtmlSignalParser) -> list
                 selector="h1",
                 bounding_box=page_input.element_boxes.get("h1"),
                 impact_area="heading",
-                priority_score=72,
+                priority_score=55 if parser.h1_count == 0 else 42,
             )
         )
     if parser.image_without_alt:
@@ -311,21 +311,21 @@ def analyze_seo(page_input: PageAnalysisInput, parser: HtmlSignalParser) -> list
                 selector="img:not([alt])",
                 bounding_box=page_input.element_boxes.get("img:not([alt])"),
                 impact_area="accessibility",
-                priority_score=35,
+                priority_score=25,
             )
         )
     if not parser.canonical:
         findings.append(
             make_finding(
                 category=Finding.Category.SEO,
-                severity=Finding.Severity.LOW,
+                severity=Finding.Severity.INFO,
                 title="缺少 canonical URL",
                 description="缺少 canonical 可能讓重複內容頁面分散搜尋權重。",
                 remediation="為主要內容頁加入 canonical，指向該內容的標準 URL。",
                 evidence="canonical_missing=true",
                 selector='link[rel="canonical"]',
                 impact_area="metadata",
-                priority_score=30,
+                priority_score=15,
             )
         )
     return findings
@@ -353,7 +353,7 @@ def analyze_aeo(page_input: PageAnalysisInput, parser: HtmlSignalParser) -> list
         findings.append(
             make_finding(
                 category=Finding.Category.AEO,
-                severity=Finding.Severity.MEDIUM,
+                severity=Finding.Severity.LOW,
                 title="問答內容缺少 FAQPage 或 HowTo 結構化資料",
                 description=(
                     "頁面已有 FAQ 結構（dl/details/accordion）但缺少對應 Schema，"
@@ -367,7 +367,7 @@ def analyze_aeo(page_input: PageAnalysisInput, parser: HtmlSignalParser) -> list
                 ),
                 selector='script[type="application/ld+json"]',
                 impact_area="answer_engine",
-                priority_score=62,
+                priority_score=38,
             )
         )
     elif not has_faq_structure:
@@ -375,7 +375,7 @@ def analyze_aeo(page_input: PageAnalysisInput, parser: HtmlSignalParser) -> list
         findings.append(
             make_finding(
                 category=Finding.Category.AEO,
-                severity=Finding.Severity.LOW,
+                severity=Finding.Severity.INFO,
                 title="問答資訊缺少明確結構",
                 description="頁面出現大量問句但沒有明確的問答區塊，AI 與使用者都較難快速擷取答案。",
                 remediation=(
@@ -384,7 +384,7 @@ def analyze_aeo(page_input: PageAnalysisInput, parser: HtmlSignalParser) -> list
                 ),
                 evidence=f"question_like_count={question_like}, dl_count={parser.dl_count}",
                 impact_area="content_structure",
-                priority_score=40,
+                priority_score=25,
             )
         )
     return findings
@@ -399,35 +399,58 @@ def analyze_geo(page_input: PageAnalysisInput, parser: HtmlSignalParser) -> list
         findings.append(
             make_finding(
                 category=Finding.Category.GEO,
-                severity=Finding.Severity.MEDIUM,
-                title="缺少 JSON-LD 結構化資料",
+                severity=Finding.Severity.LOW,
+                title="可補充 JSON-LD 結構化資料",
                 description=(
-                    "缺少 Schema.org JSON-LD 會降低 AI 系統辨識品牌、頁面類型與主要實體的穩定性。"
+                    "頁面目前沒有 JSON-LD 結構化資料。若此頁承載品牌介紹、文章、"
+                    "產品、服務或常見問答內容，補充 Schema.org 資料可提升 AI 系統"
+                    "辨識頁面主題與實體的穩定性。"
                 ),
                 remediation=(
-                    "依頁面類型加入 Organization、Article、Product、FAQPage "
-                    "或 BreadcrumbList 等 Schema。"
+                    "依頁面類型考慮加入 Organization、WebSite、WebPage、Article、Product、"
+                    "Service、FAQPage、HowTo 或 BreadcrumbList 等 Schema。"
                 ),
                 evidence="json_ld_blocks=0",
                 selector='script[type="application/ld+json"]',
                 impact_area="structured_data",
-                priority_score=68,
+                priority_score=35,
             )
         )
     elif not any(
-        kind in json_ld_text for kind in ["organization", "article", "product", "faqpage"]
+        kind in json_ld_text
+        for kind in [
+            "organization",
+            "website",
+            "webpage",
+            "article",
+            "product",
+            "service",
+            "faqpage",
+            "howto",
+            "breadcrumblist",
+            "person",
+            "localbusiness",
+            "softwareapplication",
+            "event",
+        ]
     ):
         findings.append(
             make_finding(
                 category=Finding.Category.GEO,
-                severity=Finding.Severity.LOW,
-                title="JSON-LD 缺少常見核心實體類型",
-                description="結構化資料存在，但可能未清楚描述組織、文章、產品或問答等核心實體。",
-                remediation="檢查 Schema 類型是否符合頁面目的，並補齊必要欄位。",
+                severity=Finding.Severity.INFO,
+                title="JSON-LD 可補充更明確的實體類型",
+                description=(
+                    "頁面已有結構化資料，但目前未偵測到常見的頁面、組織、文章、產品、"
+                    "服務、問答或導覽類型。這可能讓 AI 系統較難穩定判斷頁面用途。"
+                ),
+                remediation=(
+                    "檢查 Schema 類型是否符合頁面目的，"
+                    "必要時補齊更明確的 @type 與必要欄位。"
+                ),
                 evidence=json_ld_text[:1000],
                 selector='script[type="application/ld+json"]',
                 impact_area="structured_data",
-                priority_score=42,
+                priority_score=25,
             )
         )
     if paragraph_count < 2 or len(text.strip()) < 300:
@@ -436,13 +459,16 @@ def analyze_geo(page_input: PageAnalysisInput, parser: HtmlSignalParser) -> list
                 category=Finding.Category.GEO,
                 severity=Finding.Severity.INFO,
                 title="可引用文字區塊偏少",
-                description="AI 系統通常需要清楚、可獨立引用的段落來生成可靠答案。",
+                description=(
+                    "頁面可獨立引用的文字段落偏少。若此頁希望被 AI 系統摘要或引用，"
+                    "可補充更清楚的段落、定義、數據來源與具體事實。"
+                ),
                 remediation="增加清楚的小段落、定義、數據來源與具體事實，讓內容更容易被引用。",
                 evidence=f"paragraph_count={paragraph_count}, text_length={len(text.strip())}",
                 selector="main",
                 bounding_box=page_input.element_boxes.get("main"),
                 impact_area="chunkability",
-                priority_score=25,
+                priority_score=20,
             )
         )
     return findings
@@ -466,10 +492,10 @@ def analyze_security(page_input: PageAnalysisInput, parser: HtmlSignalParser) ->
             )
         )
     required_headers = {
-        "strict-transport-security": ("medium", "缺少 HSTS"),
-        "content-security-policy": ("medium", "缺少 CSP"),
-        "x-frame-options": ("low", "缺少 X-Frame-Options"),
-        "x-content-type-options": ("low", "缺少 X-Content-Type-Options"),
+        "strict-transport-security": (Finding.Severity.MEDIUM, "缺少 HSTS"),
+        "content-security-policy": (Finding.Severity.MEDIUM, "缺少 CSP"),
+        "x-frame-options": (Finding.Severity.LOW, "缺少 X-Frame-Options"),
+        "x-content-type-options": (Finding.Severity.INFO, "缺少 X-Content-Type-Options"),
     }
     for header_name, (severity, title) in required_headers.items():
         if header_name not in headers:
@@ -482,7 +508,7 @@ def analyze_security(page_input: PageAnalysisInput, parser: HtmlSignalParser) ->
                     remediation=f"依網站需求設定合適的 {header_name} header。",
                     evidence=f"missing_header={header_name}",
                     impact_area="security_headers",
-                    priority_score=55 if severity == "medium" else 32,
+                    priority_score=55 if severity == Finding.Severity.MEDIUM else 25,
                 )
             )
     if parser.form_without_csrf:
@@ -491,7 +517,10 @@ def analyze_security(page_input: PageAnalysisInput, parser: HtmlSignalParser) ->
                 category=Finding.Category.SECURITY,
                 severity=Finding.Severity.MEDIUM,
                 title="表單可能缺少 CSRF token",
-                description="表單缺少 CSRF 防護可能讓使用者在不知情下提交非預期請求。",
+                description=(
+                    "偵測到表單可能缺少 CSRF token。若此表單會改變登入狀態、個人資料、"
+                    "訂單或後台設定，可能造成使用者在不知情下提交非預期請求。"
+                ),
                 remediation="確認會改變狀態的表單都具備 CSRF token 或等效防護。",
                 evidence=(
                     f"form_count={parser.form_count}, "
