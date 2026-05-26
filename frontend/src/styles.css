@@ -2118,7 +2118,7 @@
      ============================================================ */
 
   .argus-app.is-admin-mode {
-    background: linear-gradient(180deg, #f5f7fb 0%, #eef2f9 100%);
+    background: #f1f5f9;
     min-height: 100vh;
   }
 
@@ -2130,7 +2130,7 @@
 
   .admin-shell {
     display: grid;
-    grid-template-columns: 240px 1fr;
+    grid-template-columns: 256px 1fr;
     min-height: 100vh;
     color: #1e293b;
   }
@@ -2148,78 +2148,108 @@
   .admin-forbidden p { @apply text-sm; color: #475569; }
   .admin-error { color: #be123c; }
 
-  /* --- Sidebar --- */
+  /* --- Sidebar (dark gradient) --- */
   .admin-sidebar {
     @apply flex flex-col;
-    background: #ffffff;
-    border-right: 1px solid #e2e8f0;
-    padding: 24px 14px;
+    background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
+    border-right: 1px solid rgba(51, 65, 85, 0.5);
+    padding: 0;
     position: sticky;
     top: 0;
     height: 100vh;
-    box-shadow: 1px 0 0 rgba(15, 23, 42, 0.02);
+    box-shadow: 2px 0 24px -8px rgba(15, 23, 42, 0.25);
   }
 
   .admin-brand {
-    @apply flex items-center gap-3 mb-8;
-    padding: 0 8px;
+    @apply flex items-center gap-3;
+    padding: 20px 14px;
+    border-bottom: 1px solid rgba(51, 65, 85, 0.5);
   }
   .admin-brand-glyph {
-    @apply flex h-10 w-10 items-center justify-center rounded-xl text-xl font-bold;
-    background: linear-gradient(135deg, #06b6d4 0%, #6366f1 100%);
+    @apply flex h-9 w-9 items-center justify-center rounded-xl text-base font-extrabold flex-shrink-0;
+    background: linear-gradient(135deg, #22d3ee 0%, #6366f1 100%);
     color: #fff;
-    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.25);
+    box-shadow: 0 6px 14px -4px rgba(99, 102, 241, 0.5);
   }
   .admin-brand-title {
-    @apply text-lg font-bold;
-    color: #0f172a;
-    letter-spacing: 0.15em;
+    @apply text-sm font-bold leading-tight;
+    color: #f8fafc;
+    letter-spacing: 0.18em;
   }
   .admin-brand-sub {
-    @apply text-xs;
-    color: #64748b;
+    @apply text-xs mt-0.5 font-medium;
+    color: #22d3ee;
   }
 
   .admin-nav {
-    @apply flex flex-1 flex-col gap-1;
+    @apply flex flex-1 flex-col gap-0.5;
+    padding: 12px 10px;
+    overflow-y: auto;
   }
   .admin-nav-link {
-    @apply flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition;
-    color: #475569;
+    @apply flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium;
+    color: #94a3b8;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
   }
   .admin-nav-link:hover {
-    background: #f1f5f9;
-    color: #0f172a;
+    background: rgba(51, 65, 85, 0.5);
+    color: #f1f5f9;
+    transform: translateX(2px);
   }
   .admin-nav-link.active {
-    background: linear-gradient(135deg, rgba(6, 182, 212, 0.12), rgba(99, 102, 241, 0.1));
-    color: #0e7490;
-    box-shadow: inset 2px 0 0 #06b6d4;
+    background: linear-gradient(135deg, #0891b2 0%, #06b6d4 100%);
+    color: #ffffff;
+    box-shadow: 0 6px 16px -4px rgba(8, 145, 178, 0.5),
+                0 0 0 1px rgba(34, 211, 238, 0.2);
+  }
+  .admin-nav-link.active::after {
+    content: "";
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: #cffafe;
+    box-shadow: 0 0 6px rgba(207, 250, 254, 0.7);
   }
   .admin-nav-emoji {
-    @apply text-base;
+    @apply text-base flex-shrink-0;
+    filter: grayscale(0.15) brightness(1.05);
+  }
+  .admin-nav-link.active .admin-nav-emoji {
+    filter: none;
   }
 
   .admin-sidebar-footer {
-    @apply mt-4 flex flex-col gap-1 border-t pt-3;
-    border-color: #e2e8f0;
+    @apply flex flex-col gap-1;
+    padding: 12px 10px 18px;
+    border-top: 1px solid rgba(51, 65, 85, 0.5);
   }
   .admin-side-link {
-    @apply rounded-md px-3 py-2 text-left text-xs transition;
-    color: #64748b;
+    @apply flex items-center gap-2 rounded-xl px-3 py-2.5 text-left text-xs font-medium transition;
+    color: #94a3b8;
     background: transparent;
     border: none;
     cursor: pointer;
   }
   .admin-side-link:hover {
-    background: #f1f5f9;
-    color: #0f172a;
+    background: rgba(51, 65, 85, 0.5);
+    color: #f1f5f9;
+  }
+  .admin-side-link:last-child:hover {
+    background: rgba(127, 29, 29, 0.3);
+    color: #fca5a5;
   }
 
   /* --- Main content --- */
   .admin-main {
     padding: 32px 36px;
     overflow-x: auto;
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 50%, rgba(219, 234, 254, 0.4) 100%);
+    min-height: 100vh;
   }
   .admin-page {
     @apply space-y-5;

@@ -1,5 +1,93 @@
 # CLAUDE.md
 
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+---
+
+## 常用命令
+
+```powershell
+# 啟動（Django 同時 serve 前端 dist，一個命令就能用整個 App）
+uv run python backend/manage.py runserver 127.0.0.1:8000
+
+# 前端 build（先 build 才能讓 Django serve）
+# ⚠️ 本機 Node v24 在 Windows 上會讓 Rollup STATUS_STACK_BUFFER_OVERRUN，
+# 一律用 D:\node22 portable Node，已寫成 helper script：
+cd frontend ; .\build-node22.ps1 ; cd ..
+
+# 套用 migration
+uv run python backend/manage.py migrate
+
+# 後端測試（全部 192 項）
+uv run python backend/manage.py test apps
+
+# 單一 app 測試（例如 billing）
+uv run python backend/manage.py test apps.billing
+
+# Lint
+uv run ruff check backend
+
+# Django 健康檢查
+uv run python backend/manage.py check
+
+# Docker（完整部署，含 nginx 反向代理）
+docker compose up -d --build
+# 改了前端後必須 --build frontend 並強制 reload
+docker compose up -d --build frontend
+```
+
+---
+
+## 專案架構（非顯而易見的設計）
+
+### 整體資料流
+使用者在前端填網址 → `POST /api/scans/`（billing 預扣 coin）→ Celery worker 啟動 Playwright BFS 爬蟲 → 四維 scanner → 可選 Hermes-Agent → 結果寫 DB → 前端 polling 取 findings。
+
+### Node 22 portable（build 必用）
+系統 Node 是 v24.13（`C:\Program Files\nodejs`），但 v24 + Rollup 4.x 在 Windows 會 crash（`STATUS_STACK_BUFFER_OVERRUN`，exit `-1073740791`）。已將 Node v22.22.3 解壓到 `D:\node22`（portable，未動 PATH 也未動系統 Node）。
+
+- **build**：用 `frontend/build-node22.ps1`（已自動切 `D:\node22` 走完 build）
+- **dev**：`npm.cmd run dev` 兩種 Node 都能跑（dev 不經 Rollup 打包）
+- **重灌 node_modules**：請用 `D:\node22\npm.cmd install`
+- **未安裝環境**：下載 `https://nodejs.org/dist/latest-v22.x/node-v22.22.3-win-x64.zip` 解壓到 `D:\node22` 即可，不需 admin 也不需改環境變數
+
+### 7 個 Django App 的職責邊界
+
+| app | 職責 | 最重要的檔案 |
+|---|---|---|
+| `accounts` | User model（繼承 AbstractUser）、Google OAuth、dev-login 後門 | `views.py` |
+| `scans` | **核心**：ScanJob 狀態機、Playwright 爬蟲、四維 scanner、Word 報告、合作式 cancel | `tasks.py` `crawler.py` `scanners.py` |
+| `agent` | Phase 2 Hermes-Agent：provider chain + tool calling loop（預設 `ARGUS_AGENT_ENABLED=false`） | `providers.py` `loop.py` `runner.py` |
+| `billing` | 點數錢包；**`services.py` 是 wallet 唯一寫入入口**，禁止繞過直接改 model | `services.py` `signals.py` |
+| `reviews` | 平台評論（一人一則 + thread + 圖片） | `models.py` `views.py` |
+| `admin_api` | React `/admin/*` 用的 REST API + AdminAuditLog | `views.py` `permissions.py` |
+| `content` | CMS（ProjectFeature / TeamMember / AppRelease），公開 API | `models.py` `admin.py` |
+
+### 前端：巨型單檔架構
+`frontend/src/App.jsx` 是 **4500+ 行的單檔**，包含所有頁面與元件。修改前必須先 grep 定位，不要從頭瀏覽。路由都在 App.jsx 底部 `<Routes>` 區塊。
+
+### Billing 的冪等安全閘
+`billing/services.py` 所有函式都用 `select_for_update` + `transaction.atomic` + 冪等判斷（e.g. `last_bonus_year/month`）。掃描取消或失敗時 worker 和 cancel API 都會呼叫 `refund_full_for_scan`，兩邊都呼叫是安全的。
+
+### Django 直接 serve 前端
+開發時不需要另開 Vite dev server，Django `runserver` 透過 `config/urls.py` 的 SPA fallback 直接服務 `frontend/dist`。**必須先 build 前端**，改了 React code 要重 build 才會生效。
+
+### Playwright 瀏覽器路徑
+Chromium 必須裝在專案 `.ms-playwright`，不可污染全域：
+```powershell
+$env:PLAYWRIGHT_BROWSERS_PATH=".ms-playwright"; uv run playwright install chromium
+```
+
+### 三種管理介面
+- **前台**：`http://127.0.0.1:8000/` — 一般使用者
+- **React 後台**：`/admin/*` — staff 進入（`IsAdminUser`），superuser 多看「操作紀錄」
+- **Jazzmin Django Admin**：`/django-admin/` — superuser 後門，含 CoinWallet adjust 自訂頁
+
+### 掃描 Coin 扣點流程
+建立掃描 → `hold_for_scan(max_pages × 10)` → worker 完成 → `settle_scan_actual(actual_pages × 10)` 退差 → 失敗/取消 → `refund_full_for_scan` 全退。
+
+---
+
 ## 必須遵守的規則
 
 - 所有回覆一律使用**繁體中文**，程式碼註釋也是
