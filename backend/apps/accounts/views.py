@@ -138,6 +138,55 @@ class EmailLoginView(views.APIView):
         )
 
 
+class MeView(views.APIView):
+    """取得或更新目前登入使用者的個人資料。"""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        return Response({
+            "id": user.id,
+            "email": user.email,
+            "username": user.username,
+            "display_name": f"{user.first_name} {user.last_name}".strip() or user.username,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "is_staff": user.is_staff,
+            "date_joined": user.date_joined,
+            "last_login": user.last_login,
+            "auth_provider": "google" if not user.has_usable_password() else "email",
+        })
+
+    def patch(self, request):
+        user = request.user
+        first_name = request.data.get("first_name")
+        last_name = request.data.get("last_name")
+        if first_name is not None:
+            user.first_name = first_name[:150]
+        if last_name is not None:
+            user.last_name = last_name[:150]
+        user.save(update_fields=["first_name", "last_name"])
+        return Response({"detail": "已更新。"})
+
+
+class ChangePasswordView(views.APIView):
+    """變更密碼（僅 email 帳號）。"""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        old_password = request.data.get("old_password") or ""
+        new_password = request.data.get("new_password") or ""
+        if not request.user.check_password(old_password):
+            return Response({"detail": "目前密碼錯誤。"}, status=status.HTTP_400_BAD_REQUEST)
+        if len(new_password) < 8:
+            return Response({"detail": "新密碼至少需要 8 個字元。"}, status=status.HTTP_400_BAD_REQUEST)
+        request.user.set_password(new_password)
+        request.user.save(update_fields=["password"])
+        return Response({"detail": "密碼已更新。"})
+
+
 # ============================================================
 # DEV LOGIN BACKDOOR — REMOVE WHEN GOOGLE OAUTH IS FULLY WORKING
 # 用途：Google Cloud Console 的 Authorized JavaScript origins 設定還沒生效時，
