@@ -353,7 +353,7 @@ def analyze_aeo(page_input: PageAnalysisInput, parser: HtmlSignalParser) -> list
         findings.append(
             make_finding(
                 category=Finding.Category.AEO,
-                severity=Finding.Severity.MEDIUM,
+                severity=Finding.Severity.LOW,
                 title="問答內容缺少 FAQPage 或 HowTo 結構化資料",
                 description=(
                     "頁面已有 FAQ 結構（dl/details/accordion）但缺少對應 Schema，"
@@ -367,7 +367,7 @@ def analyze_aeo(page_input: PageAnalysisInput, parser: HtmlSignalParser) -> list
                 ),
                 selector='script[type="application/ld+json"]',
                 impact_area="answer_engine",
-                priority_score=62,
+                priority_score=38,
             )
         )
     elif not has_faq_structure:
@@ -375,7 +375,7 @@ def analyze_aeo(page_input: PageAnalysisInput, parser: HtmlSignalParser) -> list
         findings.append(
             make_finding(
                 category=Finding.Category.AEO,
-                severity=Finding.Severity.LOW,
+                severity=Finding.Severity.INFO,
                 title="問答資訊缺少明確結構",
                 description="頁面出現大量問句但沒有明確的問答區塊，AI 與使用者都較難快速擷取答案。",
                 remediation=(
@@ -384,7 +384,7 @@ def analyze_aeo(page_input: PageAnalysisInput, parser: HtmlSignalParser) -> list
                 ),
                 evidence=f"question_like_count={question_like}, dl_count={parser.dl_count}",
                 impact_area="content_structure",
-                priority_score=40,
+                priority_score=25,
             )
         )
     return findings
