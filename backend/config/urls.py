@@ -1,12 +1,25 @@
 from django.conf import settings
 from django.contrib import admin
+from django.http import HttpResponse
 from django.urls import include, path, re_path
 from django.views.generic import TemplateView
 from django.views.static import serve
 
 FRONTEND_DIST = settings.BASE_DIR.parent / "frontend" / "dist"
 
+
+def robots_txt(request):
+    lines = [
+        "User-agent: *",
+        "Disallow: /admin/",
+        "Disallow: /django-admin/",
+        "",
+    ]
+    return HttpResponse("\n".join(lines), content_type="text/plain")
+
+
 urlpatterns = [
+    path("robots.txt", robots_txt),
     # Django Admin 搬到 /django-admin/，把 /admin/* 讓給 React 後台
     path("django-admin/", admin.site.urls),
     path("api/auth/", include("apps.accounts.urls")),
