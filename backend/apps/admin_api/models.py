@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.db import models
+from django.utils import timezone as tz
 
 
 class AdminAuditLog(models.Model):
@@ -59,3 +60,34 @@ def log_admin_action(*, admin_actor, action: str, target_user=None,
         )
     except Exception:  # noqa: BLE001 — audit 失敗不該阻擋業務操作
         return None
+
+
+class Announcement(models.Model):
+    """平台公告（常駐或臨時）。"""
+
+    class Type(models.TextChoices):
+        PERMANENT = "permanent", "常駐公告"
+        TEMPORARY = "temporary", "臨時公告"
+
+    title = models.CharField(max_length=128)
+    content = models.TextField()
+    type = models.CharField(max_length=16, choices=Type.choices, default=Type.TEMPORARY)
+    active_days = models.PositiveSmallIntegerField(
+        default=7,
+        help_text="臨時公告從建立日起顯示的天數（常駐公告忽略此欄位）",
+    )
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"[{self.type}] {self.title}"
+
+    def is_currently_active(self) -> bool:
+        if not self.is_active:
+            return False
+        if self.type == self.Type.PERMANENT:
+            return True
+        return (tz.now() - self.created_at).days < self.active_days
