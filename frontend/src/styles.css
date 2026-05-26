@@ -2015,6 +2015,33 @@
   .billing-tx-table .tx-pos { @apply font-semibold text-emerald-600; }
   .billing-tx-table .tx-neg { @apply font-semibold text-rose-600; }
 
+  /* 結帳 wizard 發票設定區塊 */
+  .billing-invoice-section {
+    @apply flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50/60 px-4 py-4;
+  }
+  .billing-section-title {
+    @apply text-sm font-semibold text-slate-700;
+  }
+  .billing-radio-group {
+    @apply flex flex-wrap gap-3;
+  }
+  .billing-radio-label {
+    @apply flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 transition hover:border-cyan-400 has-[:checked]:border-cyan-500 has-[:checked]:bg-cyan-50 has-[:checked]:text-cyan-700;
+  }
+  .billing-radio-label input[type="radio"] {
+    @apply h-4 w-4;
+    accent-color: #06b6d4;
+  }
+  .billing-carrier-section {
+    @apply flex flex-col gap-2 pl-1;
+  }
+  .billing-company-section {
+    @apply flex flex-col gap-2 pl-1;
+  }
+  .billing-error {
+    @apply text-xs text-rose-600;
+  }
+
   /* /reviews 頁 */
   .reviews-stats {
     @apply flex flex-wrap items-center gap-6 rounded-2xl border bg-amber-50/60 px-6 py-4;

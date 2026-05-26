@@ -2944,122 +2944,100 @@ function BillingPage() {
               {errors.buyer_email && <p className="wizard-field-error">{errors.buyer_email}</p>}
             </div>
 
-            <div className="wizard-field">
-              <label>發票類型 *</label>
-              <div className="wizard-radio-row">
-                <label className="wizard-radio">
+            {/* 發票設定 */}
+            <div className="billing-invoice-section">
+              <h4 className="billing-section-title">發票設定</h4>
+
+              {/* 發票類型 */}
+              <div className="billing-radio-group">
+                <label className="billing-radio-label">
                   <input
                     type="radio"
                     name="invoice_type"
-                    value="personal"
                     checked={buyer.invoice_type === "personal"}
-                    onChange={() => setBuyer({ ...buyer, invoice_type: "personal" })}
+                    onChange={() => setBuyer({ ...buyer, invoice_type: "personal", carrier_type: "cloud", carrier_id: "" })}
                   />
-                  個人發票（電子）
+                  個人電子發票
                 </label>
-                <label className="wizard-radio">
+                <label className="billing-radio-label">
                   <input
                     type="radio"
                     name="invoice_type"
-                    value="company"
                     checked={buyer.invoice_type === "company"}
-                    onChange={() => setBuyer({ ...buyer, invoice_type: "company" })}
+                    onChange={() => setBuyer({ ...buyer, invoice_type: "company", carrier_type: "cloud", carrier_id: "" })}
                   />
-                  公司發票（三聯式）
+                  公司統一發票
                 </label>
               </div>
-            </div>
 
-            {buyer.invoice_type === "company" && (
-              <>
-                <div className="wizard-field">
-                  <label htmlFor="company_name">公司抬頭 *</label>
+              {/* 個人：載具選擇 */}
+              {buyer.invoice_type === "personal" && (
+                <div className="billing-carrier-section">
+                  <div className="billing-radio-group">
+                    <label className="billing-radio-label">
+                      <input
+                        type="radio"
+                        name="carrier_type"
+                        checked={buyer.carrier_type === "cloud"}
+                        onChange={() => setBuyer({ ...buyer, carrier_type: "cloud", carrier_id: "" })}
+                      />
+                      雲端發票（自動歸戶，不需載具）
+                    </label>
+                    <label className="billing-radio-label">
+                      <input
+                        type="radio"
+                        name="carrier_type"
+                        checked={buyer.carrier_type === "mobile_barcode"}
+                        onChange={() => setBuyer({ ...buyer, carrier_type: "mobile_barcode", carrier_id: "" })}
+                      />
+                      手機條碼載具
+                    </label>
+                    <label className="billing-radio-label">
+                      <input
+                        type="radio"
+                        name="carrier_type"
+                        checked={buyer.carrier_type === "citizen_digital"}
+                        onChange={() => setBuyer({ ...buyer, carrier_type: "citizen_digital", carrier_id: "" })}
+                      />
+                      自然人憑證載具
+                    </label>
+                  </div>
+                  {buyer.carrier_type !== "cloud" && (
+                    <input
+                      className={`input ${errors.carrier_id ? "is-error" : ""}`}
+                      type="text"
+                      placeholder={buyer.carrier_type === "mobile_barcode" ? "/XXXXXXX（手機條碼）" : "AB12345678901234（自然人憑證）"}
+                      value={buyer.carrier_id}
+                      onChange={(e) => setBuyer({ ...buyer, carrier_id: e.target.value.toUpperCase() })}
+                    />
+                  )}
+                  {errors.carrier_id && <p className="billing-error">{errors.carrier_id}</p>}
+                </div>
+              )}
+
+              {/* 公司：公司名稱 + 統一編號 */}
+              {buyer.invoice_type === "company" && (
+                <div className="billing-company-section">
                   <input
-                    id="company_name"
-                    className="input"
-                    placeholder="Acme 有限公司"
-                    value={buyer.company_name}
+                    className={`input ${errors.company_name ? "is-error" : ""}`}
+                    type="text"
+                    placeholder="公司名稱"
+                    value={buyer.company_name || ""}
                     onChange={(e) => setBuyer({ ...buyer, company_name: e.target.value })}
                   />
-                  {errors.company_name && <p className="wizard-field-error">{errors.company_name}</p>}
-                </div>
-                <div className="wizard-field">
-                  <label htmlFor="tax_id">統一編號 * <span className="wizard-field-hint">8 碼數字</span></label>
+                  {errors.company_name && <p className="billing-error">{errors.company_name}</p>}
                   <input
-                    id="tax_id"
-                    className="input"
-                    placeholder="12345678"
-                    maxLength={8}
-                    value={buyer.tax_id}
+                    className={`input ${errors.tax_id ? "is-error" : ""}`}
+                    type="text"
+                    placeholder="統一編號（8 碼數字）"
+                    value={buyer.tax_id || ""}
                     onChange={(e) => setBuyer({ ...buyer, tax_id: e.target.value.replace(/\D/g, "") })}
-                  />
-                  {errors.tax_id && <p className="wizard-field-error">{errors.tax_id}</p>}
-                </div>
-              </>
-            )}
-
-            {buyer.invoice_type === "personal" && (
-              <div className="wizard-field">
-                <label>電子發票載具 *</label>
-                <div className="wizard-radio-row">
-                  <label className="wizard-radio">
-                    <input
-                      type="radio"
-                      name="carrier_type"
-                      value="cloud"
-                      checked={buyer.carrier_type === "cloud"}
-                      onChange={() => setBuyer({ ...buyer, carrier_type: "cloud", carrier_id: "" })}
-                    />
-                    雲端發票（寄 email）
-                  </label>
-                  <label className="wizard-radio">
-                    <input
-                      type="radio"
-                      name="carrier_type"
-                      value="mobile_barcode"
-                      checked={buyer.carrier_type === "mobile_barcode"}
-                      onChange={() => setBuyer({ ...buyer, carrier_type: "mobile_barcode", carrier_id: "" })}
-                    />
-                    手機條碼
-                  </label>
-                  <label className="wizard-radio">
-                    <input
-                      type="radio"
-                      name="carrier_type"
-                      value="citizen_digital"
-                      checked={buyer.carrier_type === "citizen_digital"}
-                      onChange={() => setBuyer({ ...buyer, carrier_type: "citizen_digital", carrier_id: "" })}
-                    />
-                    自然人憑證
-                  </label>
-                </div>
-                {buyer.carrier_type === "mobile_barcode" && (
-                  <input
-                    className="input mt-2"
-                    placeholder="例：/AB12CDE（首碼 /，8 碼英數）"
                     maxLength={8}
-                    value={buyer.carrier_id}
-                    onChange={(e) =>
-                      setBuyer({ ...buyer, carrier_id: e.target.value.toUpperCase() })
-                    }
                   />
-                )}
-                {buyer.carrier_type === "citizen_digital" && (
-                  <input
-                    className="input mt-2"
-                    placeholder="例：AB12345678901234（前 2 碼英文 + 14 碼數字）"
-                    maxLength={16}
-                    value={buyer.carrier_id}
-                    onChange={(e) =>
-                      setBuyer({ ...buyer, carrier_id: e.target.value.toUpperCase() })
-                    }
-                  />
-                )}
-                {errors.carrier_id && (
-                  <p className="wizard-field-error">{errors.carrier_id}</p>
-                )}
-              </div>
-            )}
+                  {errors.tax_id && <p className="billing-error">{errors.tax_id}</p>}
+                </div>
+              )}
+            </div>
 
             <div className="wizard-field">
               <label className="wizard-checkbox">
