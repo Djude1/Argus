@@ -5314,6 +5314,14 @@ function AdminReviewsPage() {
         <p>{data ? `共 ${data.total} 則，待回覆 ${data.pending_count}` : "載入中…"}</p>
       </header>
 
+      {data && (
+        <div className="admin-stat-grid" style={{ gridTemplateColumns: "repeat(3,1fr)" }}>
+          <AdminStatCard label="總評論數" value={data.total} tone="cyan" />
+          <AdminStatCard label="平均評分" value={data.avg_rating ? `${data.avg_rating} ★` : "—"} tone="green" />
+          <AdminStatCard label="待回覆" value={data.pending_count} tone={data.pending_count > 0 ? "yellow" : "good"} />
+        </div>
+      )}
+
       <div className="admin-filter-bar">
         <label className="admin-checkbox">
           <input
@@ -5857,13 +5865,92 @@ function AdminContentPage() {
 }
 
 function AdminPlansPage() {
+  const [plans, setPlans] = useState([]);
+  const [editing, setEditing] = useState(null);
+  const [form, setForm] = useState({});
+
+  useEffect(() => {
+    api.get("/admin/cms/plans/").then((r) => setPlans(r.data.items || [])).catch(() => {});
+  }, []);
+
+  function openNew() {
+    setForm({ name: "", price_ntd: 0, coin_amount: 100, description: "", badge: "", is_active: true, sort_order: 0 });
+    setEditing("new");
+  }
+  function openEdit(plan) {
+    setForm({ ...plan });
+    setEditing(plan);
+  }
+  async function handleSave() {
+    if (editing === "new") {
+      await api.post("/admin/cms/plans/", form);
+    } else {
+      await api.patch(`/admin/cms/plans/${editing.id}/`, form);
+    }
+    setEditing(null);
+    const r = await api.get("/admin/cms/plans/");
+    setPlans(r.data.items || []);
+  }
+  async function handleDelete(id) {
+    if (!window.confirm("確定刪除此方案？")) return;
+    await api.delete(`/admin/cms/plans/${id}/`);
+    const r = await api.get("/admin/cms/plans/");
+    setPlans(r.data.items || []);
+  }
+
+  const coinPerNtd = (plan) => plan.price_ntd > 0 ? (plan.coin_amount / plan.price_ntd).toFixed(2) : "—";
+
   return (
     <div className="admin-page">
       <header className="admin-page-head">
-        <h1>方案管理</h1>
-        <p>編輯購點方案（前台 /purchase 與結帳 wizard 會即時更新）</p>
+        <h1 className="admin-page-title">方案管理</h1>
+        <button className="admin-add-btn" onClick={openNew}>＋ 新增方案</button>
       </header>
-      <AdminCmsManager schema={PLAN_SCHEMA} />
+
+      <div className="admin-plans-grid">
+        {plans.map((plan) => (
+          <div key={plan.id} className={`admin-plan-card ${plan.is_active ? "" : "is-inactive"}`}>
+            {plan.badge && <span className="admin-plan-badge">{plan.badge}</span>}
+            <h3 className="admin-plan-name">{plan.name}</h3>
+            <p className="admin-plan-price">NT$ {(plan.price_ntd || 0).toLocaleString()}</p>
+            <p className="admin-plan-coin">{(plan.coin_amount || 0).toLocaleString()} Coin</p>
+            <p className="admin-plan-rate">{coinPerNtd(plan)} coin/NT$</p>
+            {plan.description && <p className="admin-plan-desc">{plan.description}</p>}
+            <div className="admin-plan-actions">
+              <button onClick={() => openEdit(plan)}>編輯</button>
+              <button className="danger" onClick={() => handleDelete(plan.id)}>刪除</button>
+              <span className={plan.is_active ? "status-active" : "status-inactive"}>
+                {plan.is_active ? "啟用" : "停用"}
+              </span>
+            </div>
+          </div>
+        ))}
+        {!plans.length && <div className="admin-empty">尚無方案</div>}
+      </div>
+
+      {editing && (
+        <div className="ann-backdrop">
+          <div className="ann-modal" style={{ maxWidth: 480 }}>
+            <header className="ann-modal-header">
+              <h2 className="ann-modal-title">{editing === "new" ? "新增方案" : "編輯方案"}</h2>
+            </header>
+            <div className="ann-modal-body" style={{ display: "flex", flexDirection: "column", gap: ".75rem" }}>
+              <input className="input" placeholder="名稱" value={form.name || ""} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              <div style={{ display: "flex", gap: ".75rem" }}>
+                <input className="input" type="number" placeholder="價格 NT$" value={form.price_ntd || 0} onChange={(e) => setForm({ ...form, price_ntd: Number(e.target.value) })} style={{ width: "50%" }} />
+                <input className="input" type="number" placeholder="Coin 數" value={form.coin_amount || 0} onChange={(e) => setForm({ ...form, coin_amount: Number(e.target.value) })} style={{ width: "50%" }} />
+              </div>
+              <input className="input" placeholder="徽章（選填）" value={form.badge || ""} onChange={(e) => setForm({ ...form, badge: e.target.value })} />
+              <textarea className="input" rows={3} placeholder="描述" value={form.description || ""} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+              <label><input type="checkbox" checked={form.is_active !== false} onChange={(e) => setForm({ ...form, is_active: e.target.checked })} /> 啟用</label>
+            </div>
+            <footer className="ann-modal-footer">
+              <button className="ann-btn-dismiss" onClick={() => setEditing(null)}>取消</button>
+              <button className="ann-btn-confirm" onClick={handleSave}>儲存</button>
+            </footer>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

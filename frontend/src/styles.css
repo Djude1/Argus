@@ -4383,3 +4383,20 @@
   border-radius: 8px; background: transparent; color: #94a3b8; cursor: pointer;
 }
 .admin-sub-tab.active { background: #0891b2; border-color: #0891b2; color: #fff; font-weight: 600; }
+
+/* ===== Admin Plans Cards ===== */
+.admin-plans-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px,1fr)); gap: 1rem; }
+.admin-plan-card {
+  background: var(--bg-card, #1e293b); border: 1px solid rgba(255,255,255,.08);
+  border-radius: 12px; padding: 1.25rem; display: flex; flex-direction: column; gap: .5rem; position: relative;
+}
+.admin-plan-card.is-inactive { opacity: .55; }
+.admin-plan-badge { position: absolute; top: .75rem; right: .75rem; background: #6366f1; color: #fff; font-size: .7rem; padding: .2rem .5rem; border-radius: 4px; }
+.admin-plan-name { font-size: 1.1rem; font-weight: 700; color: #e2e8f0; margin: 0; }
+.admin-plan-price { font-size: 1.5rem; font-weight: 700; color: #818cf8; margin: 0; }
+.admin-plan-coin { color: #22c55e; font-weight: 600; margin: 0; }
+.admin-plan-rate { color: #94a3b8; font-size: .8rem; margin: 0; }
+.admin-plan-desc { color: #64748b; font-size: .8rem; margin: 0; }
+.admin-plan-actions { display: flex; align-items: center; gap: .5rem; margin-top: .5rem; }
+.admin-plan-actions button { padding: .3rem .75rem; border: 1px solid rgba(255,255,255,.15); border-radius: 6px; background: transparent; color: #94a3b8; cursor: pointer; font-size: .85rem; }
+.admin-plan-actions button.danger { border-color: rgba(239,68,68,.3); color: #f87171; }
