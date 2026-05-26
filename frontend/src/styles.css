@@ -4354,3 +4354,24 @@
 .admin-ann-actions button.danger { border-color: rgba(239,68,68,.3); color: #f87171; }
 .status-active { color: #22c55e; font-size: .8rem; }
 .status-inactive { color: #64748b; font-size: .8rem; }
+
+/* ===== SettingsPage ===== */
+.settings-page { max-width: 600px; margin: 0 auto; padding: 2rem 1rem; }
+.settings-title { font-size: 1.5rem; font-weight: 700; color: #e2e8f0; margin-bottom: 2rem; }
+.settings-section { background: var(--bg-card, #1e293b); border: 1px solid rgba(255,255,255,.08); border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; }
+.settings-section-title { font-size: 1rem; font-weight: 600; color: #cbd5e1; margin: 0 0 1rem; }
+.settings-section-title.danger { color: #f87171; }
+.settings-form { display: flex; flex-direction: column; gap: .75rem; }
+.settings-field { display: flex; flex-direction: column; gap: .25rem; }
+.settings-field label { font-size: .8rem; color: #64748b; }
+.settings-field-value { color: #e2e8f0; margin: 0; }
+.settings-save-btn { padding: .6rem 1.25rem; background: #6366f1; border: none; border-radius: 8px; color: #fff; font-weight: 600; cursor: pointer; align-self: flex-start; }
+.settings-save-btn:disabled { opacity: .6; }
+.settings-msg { font-size: .875rem; color: #22c55e; margin: 0; }
+.settings-error { font-size: .875rem; color: #f87171; margin: 0; }
+.settings-danger-zone { border-color: rgba(239, 68, 68, .3); }
+.settings-danger-desc { color: #94a3b8; font-size: .875rem; margin-bottom: 1rem; }
+.settings-danger-btn { padding: .6rem 1.25rem; background: transparent; border: 1px solid #ef4444; border-radius: 8px; color: #f87171; cursor: pointer; font-weight: 600; }
+.settings-wallet-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.settings-wallet-balance { font-size: 1.5rem; font-weight: 700; color: #e2e8f0; margin: 0; }
+.settings-wallet-unit { font-size: .875rem; font-weight: 400; color: #94a3b8; }

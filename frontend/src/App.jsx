@@ -3692,98 +3692,141 @@ function ReviewsPage() {
 
 function SettingsPage() {
   const navigate = useNavigate();
-  const [data, setData] = useState(null);
   const wallet = useArgusStore((s) => s.wallet);
+  const [data, setData] = useState(null);
 
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState("");
+
+  const [oldPwd, setOldPwd] = useState("");
+  const [newPwd, setNewPwd] = useState("");
+  const [confirmPwd, setConfirmPwd] = useState("");
+  const [pwdMsg, setPwdMsg] = useState("");
+  const [pwdError, setPwdError] = useState("");
+
+  const [meData, setMeData] = useState(null);
   useEffect(() => {
+    api.get("/auth/me/").then((r) => {
+      setMeData(r.data);
+      setFirstName(r.data.first_name || "");
+      setLastName(r.data.last_name || "");
+    }).catch(() => {});
     api.get("/dashboard/").then((r) => setData(r.data)).catch(() => {});
   }, []);
 
   const balance = wallet?.balance ?? 0;
   const purchased = wallet?.total_purchased_ntd ?? 0;
   const scansUsed = wallet?.total_scans_used ?? 0;
-
   const totalFindings = data
     ? Object.values(data.severity_totals || {}).reduce((sum, n) => sum + n, 0)
     : 0;
+  const isEmailAccount = meData?.auth_provider === "email";
+
+  async function handleSaveProfile(e) {
+    e.preventDefault();
+    setSaving(true);
+    setSaveMsg("");
+    try {
+      await api.patch("/auth/me/", { first_name: firstName, last_name: lastName });
+      setSaveMsg("已儲存");
+    } catch {
+      setSaveMsg("儲存失敗");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleChangePassword(e) {
+    e.preventDefault();
+    setPwdError("");
+    setPwdMsg("");
+    if (newPwd !== confirmPwd) { setPwdError("兩次密碼不一致"); return; }
+    if (newPwd.length < 8) { setPwdError("新密碼至少 8 個字元"); return; }
+    try {
+      await api.post("/auth/change-password/", { old_password: oldPwd, new_password: newPwd });
+      setPwdMsg("密碼已更新");
+      setOldPwd(""); setNewPwd(""); setConfirmPwd("");
+    } catch (err) {
+      setPwdError(err.response?.data?.detail || "密碼變更失敗");
+    }
+  }
 
   return (
-    <section className="panel space-y-4">
-      <div>
-        <p className="eyebrow">設定</p>
-        <h2 className="section-title">帳號與系統</h2>
-      </div>
+    <div className="settings-page">
+      <h1 className="settings-title">帳號設定</h1>
 
-      {/* 點數錢包總覽 */}
-      <div className="quota-panel">
-        <div className="quota-panel-head">
+      <section className="settings-section">
+        <h2 className="settings-section-title">點數錢包</h2>
+        <div className="settings-wallet-row">
           <div>
-            <p className="quota-label">點數餘額</p>
-            <p className="quota-value">
-              <span className="quota-used">
-                <CountUp value={balance} />
-              </span>
-              <span className="quota-unit">coin</span>
-            </p>
+            <p className="settings-wallet-balance">{balance} <span className="settings-wallet-unit">coin</span></p>
+            <p className="settings-card-hint">累積購買 NT$ {purchased.toLocaleString()} · 累計 {scansUsed} 次掃描</p>
           </div>
-          <button
-            className="primary-button"
-            type="button"
-            onClick={() => navigate("/billing")}
-          >
-            💎 前往購點
+          <button className="settings-save-btn" type="button" onClick={() => navigate("/billing")}>前往購點</button>
+        </div>
+      </section>
+
+      <section className="settings-section">
+        <h2 className="settings-section-title">個人資料</h2>
+        <form className="settings-form" onSubmit={handleSaveProfile}>
+          <div className="settings-field">
+            <label>Email</label>
+            <p className="settings-field-value">{meData?.email || meData?.username}</p>
+          </div>
+          <div className="settings-field">
+            <label>名字</label>
+            <input className="input" value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="名" />
+          </div>
+          <div className="settings-field">
+            <label>姓氏</label>
+            <input className="input" value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="姓" />
+          </div>
+          <button className="settings-save-btn" type="submit" disabled={saving}>
+            {saving ? "儲存中…" : "儲存變更"}
           </button>
-        </div>
-        <p className="settings-card-hint">
-          累積購買 NT$ {purchased.toLocaleString()}・累計完成 {scansUsed} 次掃描・每月 1 日自動發放 200 coin 贈點
-        </p>
-      </div>
+          {saveMsg && <p className="settings-msg">{saveMsg}</p>}
+        </form>
+      </section>
 
-      <div className="settings-grid">
-        <div className="settings-card stat-card-glow">
-          <p className="settings-card-label">累計掃描</p>
-          <p className="settings-card-value">
-            <CountUp value={data?.total_scans || 0} />
-          </p>
-          <p className="settings-card-hint">所有狀態合計</p>
-        </div>
-        <div className="settings-card stat-card-glow">
-          <p className="settings-card-label">累計 Findings</p>
-          <p className="settings-card-value">
-            <CountUp value={totalFindings} />
-          </p>
-          <p className="settings-card-hint">跨所有完成掃描</p>
-        </div>
-        <div className="settings-card">
-          <p className="settings-card-label">登入方式</p>
-          <p className="settings-card-value text-base">Google OAuth</p>
-          <p className="settings-card-hint">DEBUG=true 時可走 dev-login 後門</p>
-        </div>
-        <div className="settings-card">
-          <p className="settings-card-label">資料夾位置</p>
-          <p className="settings-card-value text-base">Docker volume</p>
-          <p className="settings-card-hint">media_data（截圖與報告）</p>
-        </div>
-        <div className="settings-card">
-          <p className="settings-card-label">技術棧</p>
-          <p className="settings-card-value text-base">Django 5 · React 18</p>
-          <p className="settings-card-hint">Playwright · Celery · Postgres</p>
-        </div>
-        <div className="settings-card">
-          <p className="settings-card-label">版本</p>
-          <p className="settings-card-value text-base">Argus MVP</p>
-          <p className="settings-card-hint">授權式網站健檢平台</p>
-        </div>
-      </div>
-
-      <div className="settings-about">
-        <h3 className="text-base font-bold text-slate-900">關於 Argus</h3>
-        <p>授權式 AI 網站健檢平台。同網域爬蟲、SEO/AEO/GEO/被動資安檢查、互動式報告、Word 匯出。</p>
-        <p className="text-xs text-slate-500">
-          所有掃描必須先勾選授權；明顯第三方需再次確認。掃描歷史與授權紀錄可在「活動」頁查看。
+      <section className="settings-section">
+        <h2 className="settings-section-title">登入方式</h2>
+        <p className="settings-field-value">
+          {isEmailAccount ? "Email 帳號" : "Google 帳號（透過 Google 管理密碼）"}
         </p>
-      </div>
-    </section>
+      </section>
+
+      {isEmailAccount && (
+        <section className="settings-section">
+          <h2 className="settings-section-title">更改密碼</h2>
+          <form className="settings-form" onSubmit={handleChangePassword}>
+            <input className="input" type="password" placeholder="目前密碼" value={oldPwd} onChange={(e) => setOldPwd(e.target.value)} autoComplete="current-password" />
+            <input className="input" type="password" placeholder="新密碼（至少 8 字元）" value={newPwd} onChange={(e) => setNewPwd(e.target.value)} autoComplete="new-password" />
+            <input className="input" type="password" placeholder="確認新密碼" value={confirmPwd} onChange={(e) => setConfirmPwd(e.target.value)} autoComplete="new-password" />
+            {pwdError && <p className="settings-error">{pwdError}</p>}
+            {pwdMsg && <p className="settings-msg">{pwdMsg}</p>}
+            <button className="settings-save-btn" type="submit">更新密碼</button>
+          </form>
+        </section>
+      )}
+
+      <section className="settings-section settings-danger-zone">
+        <h2 className="settings-section-title danger">危險操作</h2>
+        <p className="settings-danger-desc">刪除帳號將移除所有掃描紀錄與點數，此操作無法復原。</p>
+        <button
+          className="settings-danger-btn"
+          type="button"
+          onClick={() => {
+            if (window.confirm("確定要刪除帳號嗎？此操作無法復原。")) {
+              alert("請聯絡管理員協助刪除帳號。");
+            }
+          }}
+        >
+          刪除帳號
+        </button>
+      </section>
+    </div>
   );
 }
 
