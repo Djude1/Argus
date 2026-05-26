@@ -7,6 +7,7 @@ from apps.scans.views import (
     ScanJobViewSet,
     audit_log,
     dashboard_summary,
+    estimate_scan,
     findings_by_category,
     origin_history,
 )
@@ -21,5 +22,6 @@ urlpatterns = router.urls + [
     path("history/", origin_history, name="origin-history"),
     path("audit/", audit_log, name="audit-log"),
     path("findings-by-category/", findings_by_category, name="findings-by-category"),
+    path("estimate/", estimate_scan, name="estimate-scan"),
 ]
 

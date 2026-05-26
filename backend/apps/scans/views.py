@@ -438,3 +438,103 @@ def findings_by_category(request):
         result[cat] = {"total_findings": sum(counter.values()), "items": items}
 
     return Response({"categories": result})
+
+
+import re
+from urllib.parse import urljoin, urlparse
+
+import requests as http_requests
+
+
+def _is_safe_url(url: str) -> bool:
+    """拒絕 localhost / 私有 IP / 非 http(s) 協定 / 無效主機名稱。"""
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        return False
+    if parsed.scheme not in {"http", "https"}:
+        return False
+    host = parsed.hostname or ""
+    # 主機名稱必須包含至少一個點（拒絕 "not-a-url"、"localhost" 等裸主機名稱）
+    if not host or "." not in host:
+        return False
+    blocked = re.compile(
+        r"^(localhost|127\.|192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.|0\.0\.0\.0)",
+        re.IGNORECASE,
+    )
+    return not blocked.match(host)
+
+
+def _count_links(html: str, base_url: str) -> int:
+    """計算 HTML 中同域 <a href> 數量（簡易正則）。"""
+    parsed_base = urlparse(base_url)
+    base_domain = parsed_base.netloc
+    hrefs = re.findall(r'href=["\']([^"\'#?]+)["\']', html, re.IGNORECASE)
+    same_domain = set()
+    for href in hrefs:
+        full = urljoin(base_url, href)
+        p = urlparse(full)
+        if p.netloc == base_domain and p.scheme in {"http", "https"}:
+            same_domain.add(full)
+    return len(same_domain)
+
+
+def _try_sitemap(base_url: str, timeout: int = 5) -> int | None:
+    """嘗試取得 sitemap.xml，回傳 <loc> 數量；失敗回傳 None。"""
+    sitemap_url = urljoin(base_url, "/sitemap.xml")
+    try:
+        resp = http_requests.get(sitemap_url, timeout=timeout, allow_redirects=True)
+        if resp.status_code == 200 and "xml" in resp.headers.get("content-type", ""):
+            locs = re.findall(r"<loc>([^<]+)</loc>", resp.text, re.IGNORECASE)
+            return len(locs)
+    except Exception:
+        pass
+    return None
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def estimate_scan(request):
+    """快速估算目標網站的頁數與花費點數（不扣點）。
+
+    策略：
+    1. 嘗試取得 /sitemap.xml → 計算 <loc> 數
+    2. 若無 sitemap → 抓首頁計算同域 <a href> 數量
+    3. 上限 500，回傳估算結果
+    """
+    url = (request.data.get("url") or "").strip()
+    if not url:
+        return Response({"url": "請提供網址。"}, status=status.HTTP_400_BAD_REQUEST)
+    if not url.startswith(("http://", "https://")):
+        url = "https://" + url
+    if not _is_safe_url(url):
+        return Response({"url": "不支援此網址（localhost 或私有 IP 禁止使用）。"}, status=status.HTTP_400_BAD_REQUEST)
+
+    COIN_PER_PAGE = 10
+    MAX_PAGES = 500
+
+    sitemap_count = _try_sitemap(url)
+    if sitemap_count is not None:
+        estimated = min(sitemap_count, MAX_PAGES)
+        return Response({
+            "estimated_pages": estimated,
+            "estimated_cost": estimated * COIN_PER_PAGE,
+            "confidence": "high",
+            "method": "sitemap",
+        })
+
+    try:
+        resp = http_requests.get(url, timeout=8, allow_redirects=True, headers={"User-Agent": "Argus-Estimator/1.0"})
+        count = _count_links(resp.text, url)
+        estimated = min(max(count, 1), MAX_PAGES)
+        confidence = "medium" if count > 0 else "low"
+    except Exception:
+        estimated = 20
+        confidence = "low"
+
+    return Response({
+        "estimated_pages": estimated,
+        "estimated_cost": estimated * COIN_PER_PAGE,
+        "confidence": confidence,
+        "method": "crawl",
+    })

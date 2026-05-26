@@ -535,3 +535,40 @@ class AeoFaqHeuristicTests(APITestCase):
         findings = analyze_aeo(self._page_input(html), parse_html_signals(html))
 
         self.assertEqual(findings, [])
+
+
+class EstimateScanTests(APITestCase):
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        self.user = User.objects.create_user(username="est@test.com", password="pw")
+        from rest_framework_simplejwt.tokens import RefreshToken
+        self.token = str(RefreshToken.for_user(self.user).access_token)
+
+    def test_estimate_requires_auth(self):
+        from django.test import Client
+        c = Client()
+        resp = c.post("/api/estimate/", {"url": "https://example.com"}, content_type="application/json")
+        self.assertEqual(resp.status_code, 401)
+
+    def test_estimate_rejects_invalid_url(self):
+        from django.test import Client
+        c = Client()
+        resp = c.post(
+            "/api/estimate/",
+            {"url": "not-a-url"},
+            content_type="application/json",
+            HTTP_AUTHORIZATION=f"Bearer {self.token}",
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    def test_estimate_rejects_localhost(self):
+        from django.test import Client
+        c = Client()
+        resp = c.post(
+            "/api/estimate/",
+            {"url": "http://localhost/"},
+            content_type="application/json",
+            HTTP_AUTHORIZATION=f"Bearer {self.token}",
+        )
+        self.assertEqual(resp.status_code, 400)
