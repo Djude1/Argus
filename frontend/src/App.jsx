@@ -3092,39 +3092,92 @@ function StarRating({ value, onChange, readOnly = false, size = 24 }) {
   );
 }
 
-function ReviewMessageThread({ messages }) {
-  if (!messages || messages.length === 0) {
-    return <p className="review-empty-thread">尚無對話訊息</p>;
-  }
+// 相對時間 helper：3 分鐘前 / 2 小時前 / 1 天前 / 1 個月前
+function formatRelativeTime(isoString) {
+  if (!isoString) return "";
+  const now = Date.now();
+  const then = new Date(isoString).getTime();
+  const sec = Math.floor((now - then) / 1000);
+  if (sec < 60) return "剛剛";
+  if (sec < 3600) return `${Math.floor(sec / 60)} 分鐘前`;
+  if (sec < 86400) return `${Math.floor(sec / 3600)} 小時前`;
+  const days = Math.floor(sec / 86400);
+  if (days < 30) return `${days} 天前`;
+  if (days < 365) return `${Math.floor(days / 30)} 個月前`;
+  return `${Math.floor(days / 365)} 年前`;
+}
+
+// 取出第一個字當 avatar 縮寫
+function getAvatarLetter(name) {
+  if (!name) return "?";
+  const trimmed = name.trim();
+  return trimmed.charAt(0).toUpperCase();
+}
+
+// 從名字算 hash 取 6 種顏色之一（avatar 背景色）
+function avatarColorFor(name) {
+  const colors = [
+    "#06b6d4", "#6366f1", "#ec4899", "#f59e0b", "#10b981", "#a855f7",
+  ];
+  let h = 0;
+  for (let i = 0; i < (name || "").length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  return colors[h % colors.length];
+}
+
+// 圖片 lightbox modal
+function ImageLightbox({ url, onClose }) {
+  useEffect(() => {
+    function onKey(e) { if (e.key === "Escape") onClose(); }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  if (!url) return null;
   return (
-    <ol className="review-thread">
-      {messages.map((m) => (
-        <li
-          key={m.id}
-          className={`review-msg ${m.is_admin ? "is-admin" : "is-user"}`}
-        >
-          <div className="review-msg-head">
-            <span className="review-msg-author">
-              {m.is_admin ? "🛡️ Argus 官方" : m.author_username}
-            </span>
-            <span className="review-msg-time">
-              {new Date(m.created_at).toLocaleString("zh-Hant")}
-            </span>
-          </div>
-          {m.body && <p className="review-msg-body">{m.body}</p>}
-          {m.image_url && (
-            <a
-              href={m.image_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="review-msg-image-link"
-            >
-              <img src={m.image_url} alt="附件" className="review-msg-image" />
-            </a>
-          )}
-        </li>
-      ))}
-    </ol>
+    <div className="lightbox-backdrop" onClick={onClose}>
+      <button type="button" className="lightbox-close" onClick={onClose} aria-label="關閉">×</button>
+      <img src={url} alt="預覽" className="lightbox-image" onClick={(e) => e.stopPropagation()} />
+    </div>
+  );
+}
+
+function ReviewMessageBubble({ msg, onHelpful, onImageClick }) {
+  const sideClass = msg.is_admin ? "is-admin" : "is-user";
+  const avatar = msg.is_admin ? "🛡️" : getAvatarLetter(msg.author_display);
+  const avatarBg = msg.is_admin ? "#6366f1" : avatarColorFor(msg.author_display);
+  return (
+    <li className={`review-msg ${sideClass}`}>
+      <div className="review-msg-avatar" style={{ background: avatarBg }}>{avatar}</div>
+      <div className="review-msg-content">
+        <div className="review-msg-head">
+          <span className="review-msg-author">
+            {msg.author_display}
+            {msg.is_admin && <span className="review-msg-badge">Argus 官方</span>}
+          </span>
+          <span className="review-msg-time" title={new Date(msg.created_at).toLocaleString("zh-Hant")}>
+            {formatRelativeTime(msg.created_at)}
+          </span>
+        </div>
+        {msg.body && <p className="review-msg-body">{msg.body}</p>}
+        {msg.image_url && (
+          <button
+            type="button"
+            className="review-msg-image-btn"
+            onClick={() => onImageClick(msg.image_url)}
+          >
+            <img src={msg.image_url} alt="附件" className="review-msg-image" />
+          </button>
+        )}
+        <div className="review-msg-actions">
+          <button
+            type="button"
+            className={`helpful-btn ${msg.my_helpful ? "active" : ""}`}
+            onClick={() => onHelpful(msg)}
+          >
+            👍 有幫助 {msg.helpful_count > 0 && <span>· {msg.helpful_count}</span>}
+          </button>
+        </div>
+      </div>
+    </li>
   );
 }
 
@@ -3201,6 +3254,88 @@ function ReviewMessageComposer({ reviewId, onPosted }) {
   );
 }
 
+function ReviewCard({ review, onHelpful, onMessageHelpful, onImageClick, onPosted, loggedIn }) {
+  const [expanded, setExpanded] = useState(review.is_mine);
+  const messageCount = (review.messages || []).length;
+  const avatarBg = avatarColorFor(review.user_display);
+  return (
+    <article
+      className={[
+        "review-card",
+        review.is_mine ? "is-mine" : "",
+        review.is_featured ? "is-featured" : "",
+      ].filter(Boolean).join(" ")}
+    >
+      {review.is_featured && (
+        <span className="review-featured-ribbon">⭐ 精選評論</span>
+      )}
+      <header className="review-card-head">
+        <div className="review-card-author-row">
+          <div className="review-card-avatar" style={{ background: avatarBg }}>
+            {getAvatarLetter(review.user_display)}
+          </div>
+          <div className="review-card-author-meta">
+            <div className="review-card-author">
+              {review.user_display}
+              {review.is_mine && <span className="review-mine-chip">我</span>}
+              {review.verified_buyer && <span className="review-verified-chip">✓ 已購買</span>}
+            </div>
+            <div className="review-card-time" title={new Date(review.created_at).toLocaleString("zh-Hant")}>
+              {formatRelativeTime(review.created_at)}
+            </div>
+          </div>
+        </div>
+        <StarRating value={review.rating} readOnly size={20} />
+      </header>
+
+      {review.comment && (
+        <p className="review-card-body">{review.comment}</p>
+      )}
+
+      <div className="review-card-actions">
+        <button
+          type="button"
+          className={`helpful-btn ${review.my_helpful ? "active" : ""}`}
+          onClick={() => onHelpful(review)}
+          disabled={!loggedIn}
+          title={loggedIn ? "" : "請先登入"}
+        >
+          👍 有幫助 {review.helpful_count > 0 && <span>· {review.helpful_count}</span>}
+        </button>
+        {messageCount > 0 && (
+          <button
+            type="button"
+            className="thread-toggle-btn"
+            onClick={() => setExpanded((v) => !v)}
+          >
+            💬 {messageCount} 則對話 {expanded ? "▴" : "▾"}
+          </button>
+        )}
+      </div>
+
+      {expanded && (
+        <ol className="review-thread">
+          {(review.messages || []).map((m) => (
+            <ReviewMessageBubble
+              key={m.id}
+              msg={m}
+              onHelpful={(msg) => onMessageHelpful(msg)}
+              onImageClick={onImageClick}
+            />
+          ))}
+        </ol>
+      )}
+
+      {loggedIn && review.is_mine && (
+        <ReviewMessageComposer
+          reviewId={review.id}
+          onPosted={() => { onPosted?.(); setExpanded(true); }}
+        />
+      )}
+    </article>
+  );
+}
+
 function ReviewsPage() {
   const [reviews, setReviews] = useState([]);
   const [mine, setMine] = useState(null);
@@ -3208,10 +3343,12 @@ function ReviewsPage() {
   const [initialComment, setInitialComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState(null);
+  const [sort, setSort] = useState("helpful");
+  const [lightboxUrl, setLightboxUrl] = useState(null);
   const accessToken = useArgusStore((s) => s.accessToken);
 
   async function loadAll() {
-    const list = await api.get("/reviews/").catch(() => null);
+    const list = await api.get(`/reviews/?sort=${sort}`).catch(() => null);
     if (list) setReviews(list.data.reviews || []);
     if (accessToken) {
       try {
@@ -3226,7 +3363,34 @@ function ReviewsPage() {
   useEffect(() => {
     loadAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accessToken]);
+  }, [accessToken, sort]);
+
+  async function handleReviewHelpful(review) {
+    if (!accessToken) return;
+    try {
+      const r = await api.post(`/reviews/${review.id}/helpful/`);
+      setReviews((rs) => rs.map((x) =>
+        x.id === review.id
+          ? { ...x, helpful_count: r.data.helpful_count, my_helpful: r.data.my_helpful }
+          : x,
+      ));
+    } catch {}
+  }
+
+  async function handleMessageHelpful(msg) {
+    if (!accessToken) return;
+    try {
+      const r = await api.post(`/reviews/messages/${msg.id}/helpful/`);
+      setReviews((rs) => rs.map((x) => ({
+        ...x,
+        messages: (x.messages || []).map((m) =>
+          m.id === msg.id
+            ? { ...m, helpful_count: r.data.helpful_count, my_helpful: r.data.my_helpful }
+            : m,
+        ),
+      })));
+    } catch {}
+  }
 
   async function handleFirstReview(event) {
     event.preventDefault();
@@ -3332,44 +3496,40 @@ function ReviewsPage() {
         </div>
       )}
 
+      <div className="reviews-toolbar">
+        <span className="text-sm text-slate-600">共 {reviews.length} 則評論</span>
+        <div className="reviews-sort">
+          <button
+            type="button"
+            className={`reviews-sort-btn ${sort === "helpful" ? "active" : ""}`}
+            onClick={() => setSort("helpful")}
+          >最有幫助</button>
+          <button
+            type="button"
+            className={`reviews-sort-btn ${sort === "newest" ? "active" : ""}`}
+            onClick={() => setSort("newest")}
+          >最新</button>
+        </div>
+      </div>
+
       <div className="reviews-list">
         {reviews.length === 0 && (
           <p className="hint-text">尚未有評論。第一個寫下評價吧！</p>
         )}
         {reviews.map((review) => (
-          <article
+          <ReviewCard
             key={review.id}
-            className={`review-card ${review.is_mine ? "is-mine" : ""}`}
-          >
-            <div className="review-card-head">
-              <div>
-                <div className="review-card-author">
-                  {review.user_display}
-                  {review.is_mine && <span className="review-mine-chip">我</span>}
-                </div>
-                <div className="review-card-time">
-                  {new Date(review.created_at).toLocaleDateString("zh-Hant")}
-                </div>
-              </div>
-              <StarRating value={review.rating} readOnly size={18} />
-            </div>
-            {review.comment && (
-              <p className="review-card-body">{review.comment}</p>
-            )}
-
-            {/* Thread */}
-            <ReviewMessageThread messages={review.messages || []} />
-
-            {/* 自己的評論才有 composer */}
-            {accessToken && review.is_mine && (
-              <ReviewMessageComposer
-                reviewId={review.id}
-                onPosted={loadAll}
-              />
-            )}
-          </article>
+            review={review}
+            loggedIn={!!accessToken}
+            onHelpful={handleReviewHelpful}
+            onMessageHelpful={handleMessageHelpful}
+            onImageClick={setLightboxUrl}
+            onPosted={loadAll}
+          />
         ))}
       </div>
+
+      <ImageLightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />
     </section>
   );
 }

@@ -142,3 +142,94 @@ class ReviewMessageTests(APITestCase):
         )
         response = self.client.get(reverse("reviews-list"))
         self.assertEqual(len(response.data["reviews"][0]["messages"]), 1)
+
+
+class ReviewHelpfulTests(APITestCase):
+    """W3 新增的點讚 / 排序 / 精選 / 驗證購買功能。"""
+
+    def setUp(self):
+        self.alice = _make_user("alice")
+        self.bob = _make_user("bob")
+        self.review = PlatformReview.objects.create(user=self.alice, rating=5, comment="好用")
+
+    def test_toggle_review_helpful_creates_and_removes(self):
+        self.client.force_authenticate(self.bob)
+        url = reverse("reviews-helpful", args=[self.review.id])
+        # 第一次點 → 加 1
+        r1 = self.client.post(url)
+        self.assertEqual(r1.status_code, status.HTTP_200_OK)
+        self.assertEqual(r1.data["helpful_count"], 1)
+        self.assertTrue(r1.data["my_helpful"])
+        # 第二次點同一則 → 取消（toggle 回 0）
+        r2 = self.client.post(url)
+        self.assertEqual(r2.data["helpful_count"], 0)
+        self.assertFalse(r2.data["my_helpful"])
+
+    def test_helpful_appears_in_list(self):
+        from apps.reviews.models import ReviewHelpful
+        ReviewHelpful.objects.create(review=self.review, user=self.bob)
+        self.client.force_authenticate(self.bob)
+        response = self.client.get(reverse("reviews-list"))
+        first = response.data["reviews"][0]
+        self.assertEqual(first["helpful_count"], 1)
+        self.assertTrue(first["my_helpful"])
+
+    def test_sort_helpful_pushes_high_helpful_to_top(self):
+        # 多建一則少 helpful 的；alice 的有 helpful，應排前
+        review2 = PlatformReview.objects.create(user=self.bob, rating=3, comment="一般")
+        from apps.reviews.models import ReviewHelpful
+        ReviewHelpful.objects.create(review=self.review, user=self.bob)
+        response = self.client.get(reverse("reviews-list") + "?sort=helpful")
+        rids = [r["id"] for r in response.data["reviews"]]
+        self.assertEqual(rids[0], self.review.id)
+        self.assertIn(review2.id, rids)
+
+    def test_featured_review_always_first(self):
+        review2 = PlatformReview.objects.create(
+            user=self.bob, rating=4, comment="OK", is_featured=True,
+        )
+        response = self.client.get(reverse("reviews-list"))
+        self.assertEqual(response.data["reviews"][0]["id"], review2.id)
+        self.assertTrue(response.data["reviews"][0]["is_featured"])
+
+    def test_verified_buyer_flag(self):
+        from django.utils import timezone
+        from apps.billing.models import PricingPlan, PurchaseOrder
+        plan = PricingPlan.objects.get(code="starter")
+        PurchaseOrder.objects.create(
+            user=self.alice, plan=plan,
+            price_ntd=plan.price_ntd, coin_amount=plan.coin_amount,
+            buyer_name="A", buyer_email="a@x.com",
+            status=PurchaseOrder.Status.PAID,
+            paid_at=timezone.now(),
+        )
+        response = self.client.get(reverse("reviews-list"))
+        first = [r for r in response.data["reviews"] if r["id"] == self.review.id][0]
+        self.assertTrue(first["verified_buyer"])
+
+    def test_message_helpful_toggle(self):
+        msg = ReviewMessage.objects.create(
+            review=self.review, author=self.alice, body="補充", is_admin=False,
+        )
+        self.client.force_authenticate(self.bob)
+        r = self.client.post(reverse("reviews-message-helpful", args=[msg.id]))
+        self.assertEqual(r.status_code, status.HTTP_200_OK)
+        self.assertEqual(r.data["helpful_count"], 1)
+
+
+class ReviewMessageAuthorDisplayTests(APITestCase):
+    """admin 在 thread 顯示真名（不再統一寫「Argus 官方」），由前端用 is_admin 加 badge 區分。"""
+
+    def test_admin_display_uses_real_name_not_argus_official(self):
+        user = _make_user("u")
+        admin = _make_user("admin1", is_staff=True, first_name="王", last_name="管理員")
+        review = PlatformReview.objects.create(user=user, rating=5)
+        ReviewMessage.objects.create(
+            review=review, author=admin, body="官方回覆", is_admin=True,
+        )
+        response = self.client.get(reverse("reviews-list"))
+        msg = response.data["reviews"][0]["messages"][0]
+        self.assertEqual(msg["author_display"], "王 管理員")
+        self.assertTrue(msg["is_admin"])
+        # 不應該寫死「Argus 官方」字串
+        self.assertNotIn("Argus", msg["author_display"])

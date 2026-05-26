@@ -2037,6 +2037,190 @@
     @apply flex flex-wrap items-center justify-between gap-2 font-semibold text-indigo-700 mb-1;
   }
 
+  /* === Trustpilot 風 reviews 大改造 === */
+  .reviews-toolbar {
+    @apply flex flex-wrap items-center justify-between gap-2 mt-1;
+  }
+  .reviews-sort {
+    @apply inline-flex rounded-full p-1;
+    background: #f1f5f9;
+    gap: 2px;
+  }
+  .reviews-sort-btn {
+    @apply rounded-full px-3 py-1 text-xs font-semibold transition cursor-pointer;
+    background: transparent;
+    color: #64748b;
+    border: none;
+  }
+  .reviews-sort-btn:hover { color: #0f172a; }
+  .reviews-sort-btn.active {
+    background: #ffffff;
+    color: #0e7490;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+  }
+
+  .review-card.is-featured {
+    border-color: #fcd34d;
+    background: linear-gradient(180deg, #fffbeb 0%, #ffffff 80%);
+    box-shadow: 0 4px 18px -8px rgba(251, 191, 36, 0.4);
+  }
+  .review-featured-ribbon {
+    @apply absolute -top-2 left-4 rounded-full px-3 py-0.5 text-xs font-bold;
+    background: linear-gradient(135deg, #f59e0b, #facc15);
+    color: #78350f;
+    box-shadow: 0 4px 12px rgba(251, 191, 36, 0.4);
+  }
+  .review-card { position: relative; }
+
+  .review-card-head {
+    @apply mb-3;
+  }
+  .review-card-author-row {
+    @apply flex items-start gap-3 flex-1;
+  }
+  .review-card-avatar {
+    @apply flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-lg font-bold;
+    color: #ffffff;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.15);
+  }
+  .review-card-author-meta {
+    @apply flex flex-col gap-0.5 min-w-0;
+  }
+  .review-card-author {
+    @apply flex flex-wrap items-center gap-1.5 font-semibold text-base;
+    color: #0f172a;
+  }
+  .review-verified-chip {
+    @apply rounded-full px-2 py-0.5 text-xs font-semibold;
+    background: #d1fae5;
+    color: #047857;
+  }
+  .review-card-time { @apply text-xs text-slate-500; }
+
+  .review-card-actions {
+    @apply flex flex-wrap items-center gap-2 mt-3 pt-3;
+    border-top: 1px solid #f1f5f9;
+  }
+  .helpful-btn {
+    @apply inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition cursor-pointer;
+    background: #f8fafc;
+    color: #64748b;
+    border: 1px solid #e2e8f0;
+  }
+  .helpful-btn:hover {
+    background: #ecfeff;
+    color: #0e7490;
+    border-color: #67e8f9;
+  }
+  .helpful-btn.active {
+    background: linear-gradient(135deg, #06b6d4 0%, #6366f1 100%);
+    color: #ffffff;
+    border-color: transparent;
+  }
+  .helpful-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+  .thread-toggle-btn {
+    @apply ml-auto inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition cursor-pointer;
+    background: transparent;
+    color: #4338ca;
+    border: 1px solid #c7d2fe;
+  }
+  .thread-toggle-btn:hover {
+    background: #eef2ff;
+  }
+
+  /* === 對話氣泡（thread）===  */
+  .review-thread {
+    @apply mt-3 space-y-3;
+    list-style: none;
+    padding: 0;
+  }
+  .review-msg {
+    @apply flex gap-3 items-start;
+  }
+  .review-msg-avatar {
+    @apply flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold;
+    color: #ffffff;
+  }
+  .review-msg-content {
+    @apply flex-1 min-w-0 rounded-2xl px-4 py-3;
+    border: 1px solid;
+  }
+  .review-msg.is-user .review-msg-content {
+    background: #f8fafc;
+    border-color: #e2e8f0;
+  }
+  .review-msg.is-admin .review-msg-content {
+    background: linear-gradient(135deg, #ecfeff 0%, #eef2ff 100%);
+    border-color: #a5b4fc;
+  }
+  .review-msg-head {
+    @apply flex flex-wrap items-center justify-between gap-2 mb-1;
+  }
+  .review-msg-author {
+    @apply inline-flex items-center gap-2 text-sm font-semibold;
+    color: #0f172a;
+  }
+  .review-msg-badge {
+    @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs font-bold;
+    background: linear-gradient(135deg, #06b6d4, #6366f1);
+    color: #ffffff;
+  }
+  .review-msg-time { @apply text-xs text-slate-400; }
+  .review-msg-body { @apply mt-1 text-sm text-slate-700 whitespace-pre-line; }
+  .review-msg-image-btn {
+    @apply mt-2 inline-block rounded-lg overflow-hidden cursor-pointer transition;
+    background: transparent;
+    border: 1px solid #e2e8f0;
+    padding: 0;
+  }
+  .review-msg-image-btn:hover { border-color: #67e8f9; transform: scale(1.02); }
+  .review-msg-image {
+    display: block;
+    max-height: 180px;
+    max-width: 100%;
+  }
+  .review-msg-actions {
+    @apply mt-2 flex items-center gap-2;
+  }
+
+  /* === Lightbox === */
+  .lightbox-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.85);
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: zoom-out;
+    padding: 24px;
+  }
+  .lightbox-close {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.15);
+    color: #ffffff;
+    border: none;
+    cursor: pointer;
+    font-size: 24px;
+    line-height: 1;
+  }
+  .lightbox-close:hover { background: rgba(255, 255, 255, 0.3); }
+  .lightbox-image {
+    max-width: 90vw;
+    max-height: 90vh;
+    border-radius: 12px;
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+    cursor: default;
+  }
+
   /* Review thread + composer */
   .reviews-mine-banner {
     @apply flex flex-wrap items-center justify-between gap-2 rounded-xl border px-4 py-2 text-sm;
