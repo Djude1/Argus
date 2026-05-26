@@ -28,7 +28,8 @@ class TeamMemberWriteSerializer(serializers.ModelSerializer):
         model = TeamMember
         fields = [
             "id", "name", "role", "avatar_emoji", "bio",
-            "skills", "email", "github_url",
+            "skills", "skill_levels", "contributions",
+            "email", "github_url",
             "sort_order", "is_active",
             "created_at", "updated_at",
         ]

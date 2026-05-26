@@ -33,6 +33,17 @@ class TeamMember(models.Model):
         default=list, blank=True,
         help_text="技能 chip 列表，例如 ['React', 'Django', 'Figma']",
     )
+    skill_levels = models.JSONField(
+        default=list, blank=True,
+        help_text="技能熟練度列表，每項 {name, level 0-100}，例如 [{name:'React', level: 90}]",
+    )
+    contributions = models.JSONField(
+        default=list, blank=True,
+        help_text=(
+            "分工項目列表，每項 {title, desc}，"
+            "例如 [{title:'Playwright 爬蟲', desc:'BFS + RPS'}]"
+        ),
+    )
     email = models.EmailField(blank=True)
     github_url = models.URLField(blank=True)
     sort_order = models.PositiveSmallIntegerField(default=0)
@@ -45,6 +56,25 @@ class TeamMember(models.Model):
 
     def __str__(self) -> str:
         return f"{self.name} ({self.role})"
+
+
+class ProjectMilestone(models.Model):
+    """專案開發歷程里程碑（/project 頁 timeline 顯示）。"""
+
+    title = models.CharField(max_length=128)
+    date = models.DateField()
+    description = models.TextField(blank=True)
+    icon = models.CharField(max_length=16, blank=True, help_text="emoji，例：🚀 🎯 ✨")
+    sort_order = models.PositiveSmallIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["sort_order", "-date"]
+
+    def __str__(self) -> str:
+        return f"{self.date} {self.title}"
 
 
 class AppRelease(models.Model):

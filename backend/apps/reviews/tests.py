@@ -194,6 +194,7 @@ class ReviewHelpfulTests(APITestCase):
 
     def test_verified_buyer_flag(self):
         from django.utils import timezone
+
         from apps.billing.models import PricingPlan, PurchaseOrder
         plan = PricingPlan.objects.get(code="starter")
         PurchaseOrder.objects.create(

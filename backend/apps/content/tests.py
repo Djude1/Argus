@@ -52,3 +52,25 @@ class ContentAPITests(APITestCase):
         response = self.client.get(reverse("content-releases"))
         versions = [r["version"] for r in response.data["releases"]]
         self.assertNotIn("0.1.0", versions)
+
+    def test_milestones_endpoint_public_and_seeded(self):
+        response = self.client.get(reverse("content-milestones"))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        ms = response.data["milestones"]
+        self.assertGreaterEqual(len(ms), 5)  # seed migration 0006 至少 5 個
+        # 每筆有必要欄位
+        for m in ms:
+            self.assertIn("title", m)
+            self.assertIn("date", m)
+            self.assertIn("icon", m)
+
+    def test_team_member_skill_levels_and_contributions(self):
+        """W2 新增的 skill_levels / contributions 欄位應該回傳給前端。"""
+        response = self.client.get(reverse("content-team"))
+        members = response.data["members"]
+        # data migration 0004 seed 過的 4 個應有 contributions
+        with_contrib = [m for m in members if m.get("contributions")]
+        self.assertGreaterEqual(len(with_contrib), 1)
+        for m in with_contrib:
+            self.assertIsInstance(m["contributions"], list)
+            self.assertIsInstance(m["skill_levels"], list)

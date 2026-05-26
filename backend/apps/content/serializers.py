@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from apps.content.models import AppRelease, ProjectFeature, TeamMember
+from apps.content.models import AppRelease, ProjectFeature, ProjectMilestone, TeamMember
 
 
 class ProjectFeatureSerializer(serializers.ModelSerializer):
@@ -14,8 +14,15 @@ class TeamMemberSerializer(serializers.ModelSerializer):
         model = TeamMember
         fields = [
             "id", "name", "role", "avatar_emoji", "bio",
-            "skills", "email", "github_url", "sort_order",
+            "skills", "skill_levels", "contributions",
+            "email", "github_url", "sort_order",
         ]
+
+
+class ProjectMilestoneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProjectMilestone
+        fields = ["id", "title", "date", "description", "icon", "sort_order"]
 
 
 class AppReleaseSerializer(serializers.ModelSerializer):

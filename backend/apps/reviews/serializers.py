@@ -37,7 +37,7 @@ class ReviewMessageSerializer(serializers.ModelSerializer):
         }
 
     def get_author_display(self, obj: ReviewMessage) -> str:
-        """非 admin 顯示使用者名稱；admin 顯示真名（不再統一寫「Argus 官方」，前台用 is_admin 加 badge 區分）。"""
+        """顯示真名（admin 也是真名，前台用 is_admin 加 badge 區分）。"""
         return _user_display_name(obj.author)
 
     def get_image_url(self, obj: ReviewMessage):

@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from apps.content.models import AppRelease, ProjectFeature, TeamMember
+from apps.content.models import AppRelease, ProjectFeature, ProjectMilestone, TeamMember
 
 
 @admin.register(ProjectFeature)
@@ -31,6 +31,14 @@ class TeamMemberAdmin(admin.ModelAdmin):
         if not obj.skills:
             return "—"
         return " · ".join(obj.skills[:5])
+
+
+@admin.register(ProjectMilestone)
+class ProjectMilestoneAdmin(admin.ModelAdmin):
+    list_display = ["sort_order", "date", "icon", "title", "is_active"]
+    list_editable = ["is_active"]
+    search_fields = ["title", "description"]
+    ordering = ["sort_order", "-date"]
 
 
 @admin.register(AppRelease)

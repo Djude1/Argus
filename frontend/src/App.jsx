@@ -3767,10 +3767,61 @@ const TECH_STACK_CHIPS = [
   { label: "PWA", colour: "#6366f1" },
 ];
 
+const PROJECT_PLATFORM_STATS = [
+  { label: "Django Apps", value: "7", hint: "accounts / scans / agent / billing / reviews / admin_api / content" },
+  { label: "資料模型", value: "20+", hint: "ScanJob、Finding、CoinWallet、PurchaseOrder…" },
+  { label: "自動化測試", value: "210+", hint: "API / 權限 / billing 流程 / 圖片上傳" },
+  { label: "REST 端點", value: "40+", hint: "billing / reviews / content / admin / scans" },
+];
+
+function ProjectScanDemo() {
+  return (
+    <div className="project-demo">
+      <div className="project-demo-window">
+        <div className="project-demo-title-bar">
+          <span className="project-demo-dot project-demo-dot-r" />
+          <span className="project-demo-dot project-demo-dot-y" />
+          <span className="project-demo-dot project-demo-dot-g" />
+          <span className="project-demo-url">argus.example.com / 掃描中…</span>
+        </div>
+        <div className="project-demo-body">
+          <div className="project-demo-phase">
+            <span className="project-demo-phase-icon">🕷️</span>
+            <span>爬蟲中… 12 / 50 頁</span>
+            <span className="project-demo-progress">
+              <span className="project-demo-progress-fill" />
+            </span>
+          </div>
+          <ul className="project-demo-findings">
+            <li className="project-demo-finding sev-high">
+              <span className="project-demo-finding-sev">HIGH</span>
+              <span className="project-demo-finding-title">頁面未使用 HTTPS</span>
+            </li>
+            <li className="project-demo-finding sev-medium">
+              <span className="project-demo-finding-sev">MED</span>
+              <span className="project-demo-finding-title">缺少 JSON-LD 結構化資料</span>
+            </li>
+            <li className="project-demo-finding sev-low">
+              <span className="project-demo-finding-sev">LOW</span>
+              <span className="project-demo-finding-title">圖片缺 alt 屬性 ×3</span>
+            </li>
+            <li className="project-demo-finding sev-info">
+              <span className="project-demo-finding-sev">INFO</span>
+              <span className="project-demo-finding-title">建議加 llms.txt 給 AI 爬蟲</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ProjectPage() {
   const [features, setFeatures] = useState([]);
+  const [milestones, setMilestones] = useState([]);
   useEffect(() => {
     api.get("/content/features/").then((r) => setFeatures(r.data.features || [])).catch(() => {});
+    api.get("/content/milestones/").then((r) => setMilestones(r.data.milestones || [])).catch(() => {});
   }, []);
   return (
     <div className="public-page">
@@ -3799,6 +3850,30 @@ function ProjectPage() {
 
       <section className="public-section">
         <header className="public-section-head">
+          <h2>平台規模</h2>
+          <p>不是 demo 玩具，是真實量產規格</p>
+        </header>
+        <div className="project-stats-grid">
+          {PROJECT_PLATFORM_STATS.map((s) => (
+            <div key={s.label} className="project-stat-card">
+              <div className="project-stat-value">{s.value}</div>
+              <div className="project-stat-label">{s.label}</div>
+              <div className="project-stat-hint">{s.hint}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="public-section">
+        <header className="public-section-head">
+          <h2>它怎麼運作</h2>
+          <p>輸入網址 → 爬蟲 → 四維掃描 → 互動報告</p>
+        </header>
+        <ProjectScanDemo />
+      </section>
+
+      <section className="public-section">
+        <header className="public-section-head">
           <h2>核心功能</h2>
           <p>從爬蟲到 LLM Agent，端到端解決方案</p>
         </header>
@@ -3816,6 +3891,33 @@ function ProjectPage() {
         </div>
       </section>
 
+      {milestones.length > 0 && (
+        <section className="public-section">
+          <header className="public-section-head">
+            <h2>開發歷程</h2>
+            <p>從 MVP 到上線的關鍵里程碑</p>
+          </header>
+          <ol className="project-timeline">
+            {milestones.map((m, idx) => (
+              <li key={m.id} className={`project-timeline-item ${idx === 0 ? "is-first" : ""}`}>
+                <div className="project-timeline-marker">
+                  <span className="project-timeline-icon">{m.icon || "🚩"}</span>
+                </div>
+                <div className="project-timeline-body">
+                  <div className="project-timeline-date">
+                    {new Date(m.date).toLocaleDateString("zh-Hant", { year: "numeric", month: "long", day: "numeric" })}
+                  </div>
+                  <div className="project-timeline-title">{m.title}</div>
+                  {m.description && (
+                    <p className="project-timeline-desc">{m.description}</p>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
+
       <section className="public-section">
         <header className="public-section-head">
           <h2>技術棧</h2>
@@ -3831,7 +3933,93 @@ function ProjectPage() {
           ))}
         </div>
       </section>
+
+      <section className="public-section public-final-cta-wrap">
+        <div className="public-final-cta">
+          <div>
+            <h2 className="public-final-cta-title">準備好健檢你的網站了嗎？</h2>
+            <p className="public-final-cta-sub">新會員每月送 200 coin，最小規模試用免費。</p>
+          </div>
+          <NavLink to="/purchase" className="public-cta-primary public-final-cta-btn">
+            查看方案 →
+          </NavLink>
+        </div>
+      </section>
     </div>
+  );
+}
+
+function TeamMemberCard({ member }) {
+  const m = member;
+  return (
+    <article className="public-team-card-pro">
+      <header className="public-team-card-head">
+        <div className="public-team-avatar-wrap">
+          <span className="public-team-avatar-ring" aria-hidden="true" />
+          <span className="public-team-avatar-glyph">{m.avatar_emoji || "🧑"}</span>
+        </div>
+        <div className="public-team-card-meta">
+          <div className="public-team-name">{m.name}</div>
+          <div className="public-team-role">{m.role}</div>
+          {m.bio && <p className="public-team-bio">{m.bio}</p>}
+        </div>
+      </header>
+
+      {Array.isArray(m.skill_levels) && m.skill_levels.length > 0 && (
+        <div className="public-team-skill-bars">
+          {m.skill_levels.map((s) => (
+            <div key={s.name} className="public-team-skill-row">
+              <div className="public-team-skill-row-head">
+                <span>{s.name}</span>
+                <span className="public-team-skill-pct">{s.level}%</span>
+              </div>
+              <div className="public-team-skill-track">
+                <div
+                  className="public-team-skill-fill"
+                  style={{ width: `${Math.max(0, Math.min(100, s.level))}%` }}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {Array.isArray(m.contributions) && m.contributions.length > 0 && (
+        <div className="public-team-contrib">
+          <div className="public-team-contrib-label">負責項目</div>
+          <ul className="public-team-contrib-list">
+            {m.contributions.map((c, i) => (
+              <li key={i}>
+                <span className="public-team-contrib-bullet" aria-hidden="true" />
+                <div>
+                  <div className="public-team-contrib-title">{c.title}</div>
+                  {c.desc && <div className="public-team-contrib-desc">{c.desc}</div>}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {Array.isArray(m.skills) && m.skills.length > 0 && (
+        <div className="public-team-skills">
+          {m.skills.map((s) => (
+            <span key={s} className="public-team-skill-chip">{s}</span>
+          ))}
+        </div>
+      )}
+
+      {(m.email || m.github_url) && (
+        <div className="public-team-links">
+          {m.email && <a href={`mailto:${m.email}`}>✉ {m.email}</a>}
+          {m.github_url && (
+            <a href={m.github_url} target="_blank" rel="noopener noreferrer">
+              🐙 GitHub
+            </a>
+          )}
+        </div>
+      )}
+    </article>
   );
 }
 
@@ -3846,40 +4034,38 @@ function TeamPage() {
         <div className="public-hero-bg" aria-hidden="true">
           <span className="hero-orb hero-orb-1" />
           <span className="hero-orb hero-orb-2" />
+          <span className="hero-orb hero-orb-3" />
         </div>
         <div className="public-hero-content">
           <span className="public-hero-eyebrow">TEAM · 團隊</span>
-          <h1 className="public-hero-title">打造 Argus 的<span className="hero-grad">人們</span></h1>
-          <p className="public-hero-sub">跨領域協作，從爬蟲、AI 到 UI 一手包辦。</p>
+          <h1 className="public-hero-title">
+            打造 Argus 的<span className="hero-grad">人們</span>
+          </h1>
+          <p className="public-hero-sub">
+            {members.length} 位成員跨領域協作，從 Playwright 爬蟲、LLM Agent
+            到 Tailwind UI 與 Docker 部署，一手包辦。
+          </p>
+          <div className="public-team-stats">
+            <div className="public-team-stat">
+              <div className="public-team-stat-value">{members.length}</div>
+              <div className="public-team-stat-label">核心成員</div>
+            </div>
+            <div className="public-team-stat">
+              <div className="public-team-stat-value">7</div>
+              <div className="public-team-stat-label">Django apps</div>
+            </div>
+            <div className="public-team-stat">
+              <div className="public-team-stat-value">210+</div>
+              <div className="public-team-stat-label">自動化測試</div>
+            </div>
+          </div>
         </div>
       </section>
 
       <section className="public-section">
-        <div className="public-team-grid">
+        <div className="public-team-grid-pro">
           {members.map((m) => (
-            <article key={m.id} className="public-team-card">
-              <div className="public-team-avatar">{m.avatar_emoji || "🧑"}</div>
-              <div className="public-team-name">{m.name}</div>
-              <div className="public-team-role">{m.role}</div>
-              {m.bio && <p className="public-team-bio">{m.bio}</p>}
-              {m.skills && m.skills.length > 0 && (
-                <div className="public-team-skills">
-                  {m.skills.map((s) => (
-                    <span key={s} className="public-team-skill-chip">{s}</span>
-                  ))}
-                </div>
-              )}
-              {(m.email || m.github_url) && (
-                <div className="public-team-links">
-                  {m.email && <a href={`mailto:${m.email}`}>✉ {m.email}</a>}
-                  {m.github_url && (
-                    <a href={m.github_url} target="_blank" rel="noopener noreferrer">
-                      🐙 GitHub
-                    </a>
-                  )}
-                </div>
-              )}
-            </article>
+            <TeamMemberCard key={m.id} member={m} />
           ))}
           {members.length === 0 && (
             <p className="public-empty">尚未設定團隊成員。</p>
@@ -3909,6 +4095,41 @@ const PURCHASE_FAQ = [
   },
 ];
 
+const COMPARE_ROWS = [
+  {
+    feature: "全站爬蟲（同網域、深度 3、最多 50 頁）",
+    argus: true, self: "技術門檻高", competitor: "通常另計",
+  },
+  {
+    feature: "SEO + AEO + GEO + 資安四維掃描",
+    argus: true, self: "工具多套需自己整合", competitor: "多為單一維度",
+  },
+  {
+    feature: "AI Agent 擬真使用者 UX 測試",
+    argus: true, self: "無", competitor: "罕見",
+  },
+  {
+    feature: "可互動報告（截圖紅框 + 雙向跳轉）",
+    argus: true, self: "Lighthouse 純文字", competitor: "PDF 為主",
+  },
+  {
+    feature: "Word 報告自動匯出",
+    argus: true, self: "手寫", competitor: "額外加購",
+  },
+  {
+    feature: "結構化問題 Prompt 帶去 ChatGPT 修",
+    argus: true, self: "需要自己整理", competitor: "—",
+  },
+  {
+    feature: "按頁付費（用多少付多少）",
+    argus: true, self: "—", competitor: "月費綁約",
+  },
+  {
+    feature: "首月免費 200 coin",
+    argus: true, self: "—", competitor: "需信用卡綁定試用",
+  },
+];
+
 function PurchasePage() {
   const [plans, setPlans] = useState([]);
   const [openFaq, setOpenFaq] = useState(0);
@@ -3930,12 +4151,17 @@ function PurchasePage() {
             <span className="hero-grad">按頁付費</span>，永久有效
           </h1>
           <p className="public-hero-sub">
-            每爬一頁 10 coin，新會員每月自動贈送 200 coin。買越多越划算。
+            每爬一頁 10 coin，新會員每月自動贈送 200 coin；買越多越划算，
+            點數不會過期，失敗或取消自動全額退回。
           </p>
         </div>
       </section>
 
       <section className="public-section">
+        <header className="public-section-head">
+          <h2>方案一覽</h2>
+          <p>四個方案任選，全部一次看清楚</p>
+        </header>
         <div className="public-plan-grid">
           {plans.map((p) => {
             const featured = p.code === "advanced";
@@ -3951,15 +4177,46 @@ function PurchasePage() {
                 <div className="public-plan-price">NT$ {p.price_ntd.toLocaleString()}</div>
                 <div className="public-plan-rate">{p.coin_per_ntd?.toFixed(2)} coin / NT$</div>
                 {p.description && <p className="public-plan-desc">{p.description}</p>}
-                <button
-                  type="button"
-                  className="public-plan-cta"
-                  onClick={() => navigate("/billing")}
-                >立即購買 →</button>
               </div>
             );
           })}
           {plans.length === 0 && <p className="public-empty">尚未設定方案。</p>}
+        </div>
+        <p className="public-plan-note">
+          ※ 想結帳請點下方「前往結帳」進入 3 步驟結帳流程
+        </p>
+      </section>
+
+      <section className="public-section">
+        <header className="public-section-head">
+          <h2>為什麼選 Argus</h2>
+          <p>我們、自己做、市面其他工具的對比</p>
+        </header>
+        <div className="public-compare-wrap">
+          <table className="public-compare-table">
+            <thead>
+              <tr>
+                <th className="public-compare-feature">功能</th>
+                <th className="public-compare-argus">
+                  <div className="public-compare-brand">⟡ ARGUS</div>
+                </th>
+                <th>自己做</th>
+                <th>競品工具</th>
+              </tr>
+            </thead>
+            <tbody>
+              {COMPARE_ROWS.map((row, idx) => (
+                <tr key={idx}>
+                  <td className="public-compare-feature">{row.feature}</td>
+                  <td className="public-compare-argus">
+                    {row.argus === true ? <span className="check-yes">✓</span> : row.argus}
+                  </td>
+                  <td className="public-compare-cell">{row.self}</td>
+                  <td className="public-compare-cell">{row.competitor}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </section>
 
@@ -3979,6 +4236,22 @@ function PurchasePage() {
               <p>{item.a}</p>
             </details>
           ))}
+        </div>
+      </section>
+
+      <section className="public-section public-final-cta-wrap">
+        <div className="public-final-cta">
+          <div>
+            <h2 className="public-final-cta-title">準備好了嗎？</h2>
+            <p className="public-final-cta-sub">3 步驟結帳，30 秒入帳，馬上開始健檢你的網站。</p>
+          </div>
+          <button
+            type="button"
+            className="public-cta-primary public-final-cta-btn"
+            onClick={() => navigate("/billing")}
+          >
+            前往結帳 →
+          </button>
         </div>
       </section>
     </div>
