@@ -482,101 +482,6 @@ function ScoreBadge({ score }) {
 // 登入相關
 // ============================================================
 
-function LoginForm() {
-  const setToken = useArgusStore((state) => state.setToken);
-  const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const [error, setError] = useState("");
-  const clientId = import.meta.env.GOOGLE_OAUTH_CLIENT_ID || "";
-
-  // 被 401 interceptor 踢回登入頁時保留 next，登入成功後回到原頁面（含 deep link 與 query）
-  function nextDestination() {
-    const next = searchParams.get("next");
-    if (next && next.startsWith("/")) {
-      return next;
-    }
-    return "/scans";
-  }
-
-  async function handleGoogleSuccess(credentialResponse) {
-    setError("");
-    try {
-      const response = await api.post("/auth/google/", {
-        credential: credentialResponse.credential,
-      });
-      setToken(response.data.access);
-      navigate(nextDestination(), { replace: true });
-    } catch (errorResponse) {
-      const data = errorResponse.response?.data;
-      setError(
-        (data && (data.credential || data.config)) || "Google 登入失敗,請稍後再試。",
-      );
-    }
-  }
-
-  // DEV LOGIN BACKDOOR — REMOVE WHEN GOOGLE OAUTH IS FULLY WORKING
-  async function handleDevLogin() {
-    setError("");
-    try {
-      const response = await api.post("/auth/dev-login/", {});
-      setToken(response.data.access);
-      navigate(nextDestination(), { replace: true });
-    } catch (errorResponse) {
-      setError(
-        errorResponse.response?.data?.detail ||
-          "Dev login 失敗,後端可能不在 DEBUG 模式或 bootstrap 帳號不存在。",
-      );
-    }
-  }
-
-  return (
-    <section className="panel space-y-4">
-      <div>
-        <p className="eyebrow">登入 / 註冊</p>
-        <h2 className="section-title">使用 Argus</h2>
-        <p className="mt-2 text-sm text-slate-600">
-          使用 Google 帳號登入或註冊；首次使用會自動建立對應帳號。
-        </p>
-      </div>
-      {!clientId ? (
-        <p className="error-text">
-          尚未設定 <code>GOOGLE_OAUTH_CLIENT_ID</code>，請在專案根目錄 .env
-          填入後重新啟動前端。
-        </p>
-      ) : (
-        <div className="flex justify-center">
-          <GoogleLogin
-            onSuccess={handleGoogleSuccess}
-            onError={() => setError("Google 登入流程被中斷或失敗。")}
-          />
-        </div>
-      )}
-      {error && <p className="error-text">{error}</p>}
-
-      {/* DEV LOGIN BACKDOOR — REMOVE WHEN GOOGLE OAUTH IS FULLY WORKING */}
-      <div className="mt-2 border-t border-slate-200 pt-3">
-        <button
-          className="secondary-button w-full"
-          type="button"
-          onClick={handleDevLogin}
-        >
-          🛠️ 跳過 Google 登入（開發用，待移除）
-        </button>
-        <p className="mt-2 text-xs text-slate-500">
-          僅在後端 <code>DEBUG=true</code> 時生效，以 bootstrap superuser
-          (<code>1124</code>) 登入。
-          Google OAuth 的 Authorized origins 生效後，請依 code 內
-          <code> DEV LOGIN BACKDOOR </code>註解移除整塊。
-        </p>
-      </div>
-
-      <p className="text-xs text-slate-500">
-        系統管理員仍透過 <code>/admin/</code> 以 username/password 登入。
-      </p>
-    </section>
-  );
-}
-
 function AccountBar() {
   const { accessToken, setToken, wallet, fetchWallet, me, fetchMe } = useArgusStore();
   const navigate = useNavigate();
@@ -609,17 +514,6 @@ function AccountBar() {
         >
           <span aria-hidden="true">⬇</span>
           <span>安裝 APP</span>
-        </button>
-      )}
-      {me?.is_staff && (
-        <button
-          className="admin-entry-chip"
-          type="button"
-          onClick={() => navigate("/admin/overview")}
-          title="進入管理後台"
-        >
-          <span aria-hidden="true">🛡️</span>
-          <span>後台</span>
         </button>
       )}
       <button
@@ -1798,16 +1692,198 @@ function ScanLayout() {
 }
 
 function LoginPage() {
-  const accessToken = useArgusStore((state) => state.accessToken);
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const accessToken = useArgusStore((s) => s.accessToken);
+  const setToken = useArgusStore((s) => s.setToken);
+  const [tab, setTab] = useState("google"); // "google" | "login" | "register"
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const next = searchParams.get("next");
+  const redirect = (!next || next === "/login" || !next.startsWith("/")) ? "/dashboard" : next;
+
+  // 已登入則直接跳轉
   if (accessToken) {
-    const next = searchParams.get("next");
-    const target = next && next.startsWith("/") ? next : "/scans";
-    return <Navigate to={target} replace />;
+    return <Navigate to={redirect} replace />;
   }
+
+  function handleToken(access) {
+    setToken(access);
+    navigate(redirect, { replace: true });
+  }
+
+  async function handleEmailLogin(e) {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    try {
+      const res = await api.post("/auth/email-login/", { email, password });
+      handleToken(res.data.access);
+    } catch (err) {
+      setError(err.response?.data?.detail || "登入失敗，請確認 Email 與密碼。");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleRegister(e) {
+    e.preventDefault();
+    setError("");
+    if (password !== confirmPassword) {
+      setError("兩次密碼輸入不一致。");
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await api.post("/auth/register/", { email, password });
+      handleToken(res.data.access);
+    } catch (err) {
+      const d = err.response?.data || {};
+      setError(d.email || d.password || d.detail || "註冊失敗。");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleDevLogin() {
+    setLoading(true);
+    try {
+      const response = await api.post("/auth/dev-login/", {});
+      handleToken(response.data.access);
+    } catch {
+      setError("Dev login 失敗，後端可能不在 DEBUG 模式或 bootstrap 帳號不存在。");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
-    <div className="mx-auto max-w-md">
-      <LoginForm />
+    <div className="login-page">
+      <div className="login-card">
+        <div className="login-brand">
+          <span className="login-brand-glyph">⟡</span>
+          <span className="login-brand-name">ARGUS</span>
+        </div>
+        <p className="login-sub">授權式 AI 網站健檢平台</p>
+
+        <div className="login-tabs">
+          {[
+            { key: "google", label: "Google 登入" },
+            { key: "login", label: "Email 登入" },
+            { key: "register", label: "新帳號" },
+          ].map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              className={`login-tab ${tab === t.key ? "active" : ""}`}
+              onClick={() => { setTab(t.key); setError(""); }}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {error && <p className="login-error">{error}</p>}
+
+        {tab === "google" && (
+          <div className="login-google-wrap">
+            <GoogleLogin
+              onSuccess={(credentialResponse) => {
+                api.post("/auth/google/", { credential: credentialResponse.credential })
+                  .then((res) => handleToken(res.data.access))
+                  .catch(() => setError("Google 登入失敗，請稍後再試。"));
+              }}
+              onError={() => setError("Google 登入元件錯誤，請重新整理。")}
+              useOneTap={false}
+              theme="filled_black"
+              shape="pill"
+            />
+          </div>
+        )}
+
+        {tab === "login" && (
+          <form className="login-form" onSubmit={handleEmailLogin}>
+            <input
+              className="input"
+              type="email"
+              placeholder="Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              autoComplete="email"
+            />
+            <input
+              className="input"
+              type="password"
+              placeholder="密碼"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              autoComplete="current-password"
+            />
+            <button className="login-submit" type="submit" disabled={loading}>
+              {loading ? "登入中…" : "登入"}
+            </button>
+            <p className="login-forgot-hint">
+              忘記密碼？請聯絡管理員協助重設。
+            </p>
+          </form>
+        )}
+
+        {tab === "register" && (
+          <form className="login-form" onSubmit={handleRegister}>
+            <input
+              className="input"
+              type="email"
+              placeholder="Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              autoComplete="email"
+            />
+            <input
+              className="input"
+              type="password"
+              placeholder="密碼（至少 8 字元）"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              autoComplete="new-password"
+            />
+            <input
+              className="input"
+              type="password"
+              placeholder="確認密碼"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              required
+              autoComplete="new-password"
+            />
+            <button className="login-submit" type="submit" disabled={loading}>
+              {loading ? "建立中…" : "建立帳號"}
+            </button>
+          </form>
+        )}
+
+        {import.meta.env.DEV && (
+          <button
+            type="button"
+            className="login-dev-btn"
+            onClick={handleDevLogin}
+            disabled={loading}
+          >
+            [DEV] 跳過登入
+          </button>
+        )}
+
+        <p className="login-notice">
+          系統管理員透過 <code>/django-admin/</code> 以 username/password 登入。
+        </p>
+      </div>
     </div>
   );
 }
