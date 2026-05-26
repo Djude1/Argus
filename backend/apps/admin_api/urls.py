@@ -1,8 +1,16 @@
-from django.urls import path
+from django.urls import include, path
+from rest_framework.routers import DefaultRouter
 
-from apps.admin_api import views
+from apps.admin_api import cms_views, views
+
+cms_router = DefaultRouter()
+cms_router.register("features", cms_views.ProjectFeatureViewSet, basename="admin-feature")
+cms_router.register("team", cms_views.TeamMemberViewSet, basename="admin-team-member")
+cms_router.register("releases", cms_views.AppReleaseViewSet, basename="admin-release")
+cms_router.register("plans", cms_views.PricingPlanViewSet, basename="admin-plan")
 
 urlpatterns = [
+    path("cms/", include(cms_router.urls)),
     path("me/", views.me, name="admin-me"),
     path("overview/", views.overview, name="admin-overview"),
     path("users/", views.users_list, name="admin-users"),

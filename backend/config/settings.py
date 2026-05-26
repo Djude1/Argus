@@ -38,8 +38,6 @@ DEBUG = env_bool("DJANGO_DEBUG", default=False)
 ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1")
 
 INSTALLED_APPS = [
-    # jazzmin 必須在 django.contrib.admin 之前才能套用主題
-    "jazzmin",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -169,9 +167,11 @@ ARGUS_MONTHLY_BONUS_COINS = int(os.getenv("ARGUS_MONTHLY_BONUS_COINS", "200"))
 ARGUS_COIN_PER_PAGE = int(os.getenv("ARGUS_COIN_PER_PAGE", "10"))
 
 # ============================================================
-# django-jazzmin 後台主題：把 Django Admin 變漂亮（深色側邊欄、icon、卡片化）
+# Django Admin：保留 `/django-admin/` 為 superuser 應急後門（樣式預設、刻意樸素）
+# 主要管理介面已搬到 React `/admin/*`（admin_api 提供 CRUD endpoint）
+# 以下舊 jazzmin 設定已禁用（套件已 uv remove），保留註解供未來如需 demo Django admin 顏色可參考
 # ============================================================
-JAZZMIN_SETTINGS = {
+_JAZZMIN_SETTINGS_DEPRECATED = {
     "site_title": "Argus 後台",
     "site_header": "Argus 管理後台",
     "site_brand": "Argus",
@@ -230,7 +230,7 @@ JAZZMIN_SETTINGS = {
     "language_chooser": False,
 }
 
-JAZZMIN_UI_TWEAKS = {
+_JAZZMIN_UI_TWEAKS_DEPRECATED = {
     "navbar_small_text": False,
     "footer_small_text": False,
     "body_small_text": False,

@@ -250,6 +250,97 @@ class ScansEndpointTests(APITestCase):
         self.assertEqual(response.data["warning_summary"]["blocked_urls"], ["x"])
 
 
+class CmsCrudTests(APITestCase):
+    """admin_api 的 CMS CRUD endpoints（features / team / releases / plans）。"""
+
+    def setUp(self):
+        self.admin = _make_user("admin", staff=True)
+        self.client.force_authenticate(self.admin)
+
+    def test_features_list_returns_items(self):
+        response = self.client.get("/api/admin/cms/features/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("items", response.data)
+        # seed migration 至少 6 個
+        self.assertGreaterEqual(len(response.data["items"]), 6)
+
+    def test_features_create_and_audit(self):
+        from apps.admin_api.models import AdminAuditLog
+        from apps.content.models import ProjectFeature
+        response = self.client.post(
+            "/api/admin/cms/features/",
+            {
+                "icon": "🔥",
+                "title": "新功能",
+                "description": "測試新增",
+                "sort_order": 99,
+                "is_active": True,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(ProjectFeature.objects.filter(title="新功能").exists())
+        # 寫了 audit log
+        self.assertTrue(AdminAuditLog.objects.filter(admin_actor=self.admin).exists())
+
+    def test_features_update(self):
+        from apps.content.models import ProjectFeature
+        f = ProjectFeature.objects.create(title="待改", description="x", sort_order=10)
+        response = self.client.put(
+            f"/api/admin/cms/features/{f.id}/",
+            {
+                "icon": "✨",
+                "title": "改完",
+                "description": "y",
+                "sort_order": 11,
+                "is_active": True,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        f.refresh_from_db()
+        self.assertEqual(f.title, "改完")
+
+    def test_features_delete(self):
+        from apps.content.models import ProjectFeature
+        f = ProjectFeature.objects.create(title="要刪", description="x")
+        response = self.client.delete(f"/api/admin/cms/features/{f.id}/")
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(ProjectFeature.objects.filter(id=f.id).exists())
+
+    def test_plans_crud(self):
+        from apps.billing.models import PricingPlan
+        # 新增
+        response = self.client.post(
+            "/api/admin/cms/plans/",
+            {
+                "code": "trial", "name": "試用", "price_ntd": 50,
+                "coin_amount": 50, "sort_order": 0, "is_active": True,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        plan = PricingPlan.objects.get(code="trial")
+        # 改價
+        self.client.put(
+            f"/api/admin/cms/plans/{plan.id}/",
+            {
+                "code": "trial", "name": "試用", "price_ntd": 80,
+                "coin_amount": 100, "sort_order": 0, "is_active": True,
+            },
+            format="json",
+        )
+        plan.refresh_from_db()
+        self.assertEqual(plan.price_ntd, 80)
+        self.assertEqual(plan.coin_amount, 100)
+
+    def test_non_staff_blocked(self):
+        normal = _make_user("normal_user")
+        self.client.force_authenticate(normal)
+        response = self.client.get("/api/admin/cms/features/")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+
 class MeEndpointTests(APITestCase):
     def test_me_returns_is_staff_flag(self):
         admin = _make_user("admin", staff=True)

@@ -3952,6 +3952,7 @@ const ADMIN_NAV_ITEMS = [
   { to: "/admin/overview", label: "概覽", emoji: "📊" },
   { to: "/admin/users", label: "使用者", emoji: "👥" },
   { to: "/admin/transactions", label: "交易", emoji: "💎" },
+  { to: "/admin/plans", label: "方案", emoji: "💼" },
   { to: "/admin/content", label: "內容", emoji: "📝" },
   // /admin/audit-log 入口為條件渲染：只有 superuser 顯示，故不放在這裡
   // 而是在 AdminLayout 內 me.is_superuser 時動態加進去
@@ -4930,126 +4931,343 @@ function AdminScanDetailPage() {
 
 // ------ AdminContentPage：內容速覽（編輯走 Jazzmin Django Admin） ------
 
+// ------ 通用 CMS CRUD 元件 ------
+function AdminCmsManager({ schema }) {
+  const [items, setItems] = useState([]);
+  const [editing, setEditing] = useState(null); // null 或 item or "new"
+  const [draft, setDraft] = useState({});
+  const [feedback, setFeedback] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  async function load() {
+    const r = await api.get(schema.endpoint);
+    setItems(r.data.items || []);
+  }
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [schema.endpoint]);
+
+  function startNew() {
+    const blank = {};
+    for (const f of schema.fields) {
+      blank[f.key] = f.default !== undefined ? f.default :
+        (f.type === "boolean" ? false :
+        (f.type === "number" ? 0 :
+        (f.type === "json" ? [] : "")));
+    }
+    setDraft(blank);
+    setEditing("new");
+    setFeedback(null);
+  }
+
+  function startEdit(item) {
+    setDraft({ ...item });
+    setEditing(item);
+    setFeedback(null);
+  }
+
+  function cancel() {
+    setEditing(null);
+    setDraft({});
+    setFeedback(null);
+  }
+
+  async function save(e) {
+    e?.preventDefault();
+    setBusy(true);
+    setFeedback(null);
+    try {
+      // 處理 JSON 欄位（skills 等存 array）
+      const payload = { ...draft };
+      for (const f of schema.fields) {
+        if (f.type === "json" && typeof payload[f.key] === "string") {
+          payload[f.key] = payload[f.key]
+            .split(/[,，\s]+/).map((s) => s.trim()).filter(Boolean);
+        }
+      }
+      if (editing === "new") {
+        await api.post(schema.endpoint, payload);
+      } else {
+        await api.put(`${schema.endpoint}${editing.id}/`, payload);
+      }
+      setFeedback({ tone: "good", message: "已儲存" });
+      await load();
+      setTimeout(() => cancel(), 600);
+    } catch (err) {
+      const data = err?.response?.data;
+      const msg = data
+        ? Object.entries(data).map(([k, v]) =>
+            `${k}：${Array.isArray(v) ? v.join(",") : v}`).join("；")
+        : "儲存失敗";
+      setFeedback({ tone: "bad", message: msg });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(item) {
+    if (!window.confirm(`確定刪除「${item[schema.titleField || "name"] || "#" + item.id}」？`)) return;
+    await api.delete(`${schema.endpoint}${item.id}/`);
+    await load();
+  }
+
+  return (
+    <section className="admin-panel">
+      <div className="admin-panel-head-row">
+        <h3>{schema.title}（{items.length}）</h3>
+        <button type="button" className="admin-btn primary" onClick={startNew}>
+          + 新增
+        </button>
+      </div>
+
+      {/* 列表 */}
+      <table className="admin-table">
+        <thead>
+          <tr>
+            {schema.displayFields.map((f) => (
+              <th key={f.key} className={f.num ? "num" : ""}>{f.label}</th>
+            ))}
+            <th style={{ width: 120 }}>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((item) => (
+            <tr key={item.id}>
+              {schema.displayFields.map((f) => (
+                <td key={f.key} className={f.num ? "num" : ""}>
+                  {f.render ? f.render(item) : (item[f.key] ?? "—")}
+                </td>
+              ))}
+              <td>
+                <button type="button" className="admin-btn" onClick={() => startEdit(item)}
+                  style={{ padding: "4px 10px", fontSize: 12, marginRight: 4 }}>編輯</button>
+                <button type="button" className="admin-btn" onClick={() => remove(item)}
+                  style={{ padding: "4px 10px", fontSize: 12, color: "#dc2626", borderColor: "#fecaca" }}>刪</button>
+              </td>
+            </tr>
+          ))}
+          {items.length === 0 && (
+            <tr><td colSpan={schema.displayFields.length + 1} className="admin-empty">
+              尚無資料，點上方「+ 新增」開始
+            </td></tr>
+          )}
+        </tbody>
+      </table>
+
+      {/* 編輯 form modal */}
+      {editing && (
+        <div className="admin-modal-backdrop" onClick={cancel}>
+          <form className="admin-modal" onClick={(e) => e.stopPropagation()} onSubmit={save}>
+            <div className="admin-modal-head">
+              <h4>{editing === "new" ? `新增${schema.title}` : `編輯 #${editing.id}`}</h4>
+              <button type="button" className="admin-modal-close" onClick={cancel}>×</button>
+            </div>
+            <div className="admin-modal-body">
+              {schema.fields.map((f) => (
+                <div key={f.key} className="wizard-field">
+                  <label htmlFor={`cms-${f.key}`}>
+                    {f.label}{f.required && " *"}
+                    {f.hint && <span className="wizard-field-hint">{f.hint}</span>}
+                  </label>
+                  {f.type === "textarea" ? (
+                    <textarea
+                      id={`cms-${f.key}`}
+                      className="admin-input"
+                      rows={f.rows || 3}
+                      value={draft[f.key] ?? ""}
+                      onChange={(e) => setDraft({ ...draft, [f.key]: e.target.value })}
+                    />
+                  ) : f.type === "boolean" ? (
+                    <label className="admin-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={!!draft[f.key]}
+                        onChange={(e) => setDraft({ ...draft, [f.key]: e.target.checked })}
+                      /> 啟用
+                    </label>
+                  ) : f.type === "select" ? (
+                    <select
+                      id={`cms-${f.key}`}
+                      className="admin-input"
+                      value={draft[f.key] ?? ""}
+                      onChange={(e) => setDraft({ ...draft, [f.key]: e.target.value })}
+                    >
+                      {f.options.map((o) => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                  ) : f.type === "json" ? (
+                    <input
+                      id={`cms-${f.key}`}
+                      className="admin-input"
+                      placeholder="用逗號分隔，例：React,Django,Figma"
+                      value={Array.isArray(draft[f.key]) ? draft[f.key].join(", ") : (draft[f.key] || "")}
+                      onChange={(e) => setDraft({ ...draft, [f.key]: e.target.value })}
+                    />
+                  ) : (
+                    <input
+                      id={`cms-${f.key}`}
+                      className="admin-input"
+                      type={f.type === "number" ? "number" : (f.type === "datetime" ? "datetime-local" : "text")}
+                      value={draft[f.key] ?? ""}
+                      onChange={(e) => setDraft({ ...draft, [f.key]:
+                        f.type === "number" ? Number(e.target.value) : e.target.value })}
+                    />
+                  )}
+                </div>
+              ))}
+              {feedback && (
+                <div className={`admin-feedback tone-${feedback.tone}`}>{feedback.message}</div>
+              )}
+            </div>
+            <div className="admin-modal-foot">
+              <button type="button" className="admin-btn" onClick={cancel}>取消</button>
+              <button type="submit" className="admin-btn primary" disabled={busy}>
+                {busy ? "儲存中…" : "儲存"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+    </section>
+  );
+}
+
+const FEATURE_SCHEMA = {
+  endpoint: "/admin/cms/features/",
+  title: "專案特色",
+  titleField: "title",
+  fields: [
+    { key: "icon", label: "圖示 emoji", type: "text", hint: "例：🕷️ 🔍 🤖" },
+    { key: "title", label: "標題", type: "text", required: true },
+    { key: "description", label: "描述", type: "textarea", required: true, rows: 4 },
+    { key: "sort_order", label: "排序", type: "number", default: 0 },
+    { key: "is_active", label: "啟用", type: "boolean", default: true },
+  ],
+  displayFields: [
+    { key: "sort_order", label: "順序", num: true },
+    { key: "icon", label: "圖示", render: (i) => <span style={{ fontSize: 22 }}>{i.icon}</span> },
+    { key: "title", label: "標題" },
+    { key: "is_active", label: "啟用", render: (i) => i.is_active ? "✓" : "—" },
+  ],
+};
+
+const TEAM_SCHEMA = {
+  endpoint: "/admin/cms/team/",
+  title: "團隊成員",
+  titleField: "name",
+  fields: [
+    { key: "name", label: "姓名", type: "text", required: true },
+    { key: "role", label: "角色", type: "text", required: true },
+    { key: "avatar_emoji", label: "頭像 emoji", type: "text", hint: "例：🧑‍💻 🎨" },
+    { key: "bio", label: "簡介", type: "textarea", rows: 3 },
+    { key: "skills", label: "技能（逗號分隔）", type: "json" },
+    { key: "email", label: "email", type: "text" },
+    { key: "github_url", label: "GitHub URL", type: "text" },
+    { key: "sort_order", label: "排序", type: "number", default: 0 },
+    { key: "is_active", label: "啟用", type: "boolean", default: true },
+  ],
+  displayFields: [
+    { key: "sort_order", label: "順序", num: true },
+    { key: "avatar_emoji", label: "頭像", render: (i) => <span style={{ fontSize: 22 }}>{i.avatar_emoji}</span> },
+    { key: "name", label: "姓名" },
+    { key: "role", label: "角色" },
+    { key: "is_active", label: "啟用", render: (i) => i.is_active ? "✓" : "—" },
+  ],
+};
+
+const RELEASE_SCHEMA = {
+  endpoint: "/admin/cms/releases/",
+  title: "APP / PWA 版本",
+  titleField: "version",
+  fields: [
+    { key: "version", label: "版本", type: "text", required: true, hint: "例：1.0.0" },
+    { key: "platform", label: "平台", type: "select", default: "pwa",
+      options: [
+        { value: "pwa", label: "PWA（瀏覽器安裝）" },
+        { value: "android", label: "Android" },
+        { value: "ios", label: "iOS" },
+        { value: "desktop", label: "桌面" },
+      ] },
+    { key: "release_notes", label: "更新說明", type: "textarea", rows: 4 },
+    { key: "download_url", label: "下載連結", type: "text", hint: "PWA 留空" },
+    { key: "icon_url", label: "圖示 URL", type: "text" },
+    { key: "is_latest", label: "標記為最新版", type: "boolean", default: false },
+    { key: "is_active", label: "啟用", type: "boolean", default: true },
+    { key: "released_at", label: "發布時間", type: "datetime", required: true },
+  ],
+  displayFields: [
+    { key: "version", label: "版本" },
+    { key: "platform", label: "平台" },
+    { key: "is_latest", label: "最新", render: (i) => i.is_latest ? "✓" : "—" },
+    { key: "is_active", label: "啟用", render: (i) => i.is_active ? "✓" : "—" },
+  ],
+};
+
+const PLAN_SCHEMA = {
+  endpoint: "/admin/cms/plans/",
+  title: "購點方案",
+  titleField: "name",
+  fields: [
+    { key: "code", label: "code（系統識別，建立後勿改）", type: "text", required: true },
+    { key: "name", label: "名稱", type: "text", required: true },
+    { key: "price_ntd", label: "價格（NT$）", type: "number", required: true },
+    { key: "coin_amount", label: "coin 數量", type: "number", required: true },
+    { key: "badge", label: "徽章", type: "text", hint: "例：-20%、最熱門" },
+    { key: "description", label: "描述", type: "text" },
+    { key: "sort_order", label: "排序", type: "number", default: 0 },
+    { key: "is_active", label: "啟用", type: "boolean", default: true },
+  ],
+  displayFields: [
+    { key: "sort_order", label: "順序", num: true },
+    { key: "name", label: "名稱" },
+    { key: "price_ntd", label: "價格 NT$", num: true },
+    { key: "coin_amount", label: "coin", num: true },
+    { key: "badge", label: "徽章" },
+    { key: "is_active", label: "啟用", render: (i) => i.is_active ? "✓" : "—" },
+  ],
+};
+
+const CONTENT_TABS = [
+  { key: "features", label: "📌 專案特色", schema: FEATURE_SCHEMA },
+  { key: "team", label: "👥 團隊成員", schema: TEAM_SCHEMA },
+  { key: "releases", label: "📱 APP / PWA 版本", schema: RELEASE_SCHEMA },
+];
+
 function AdminContentPage() {
-  const [data, setData] = useState({ features: [], members: [], releases: [] });
-  useEffect(() => {
-    Promise.all([
-      api.get("/content/features/"),
-      api.get("/content/team/"),
-      api.get("/content/releases/"),
-    ])
-      .then(([f, t, r]) =>
-        setData({
-          features: f.data.features || [],
-          members: t.data.members || [],
-          releases: r.data.releases || [],
-        }),
-      )
-      .catch(() => {});
-  }, []);
-
-  const CARDS = [
-    {
-      title: "專案特色",
-      count: data.features.length,
-      desc: "/project 頁的卡片列表",
-      editUrl: "/django-admin/content/projectfeature/",
-      tone: "cyan",
-    },
-    {
-      title: "團隊成員",
-      count: data.members.length,
-      desc: "/team 頁的成員 grid",
-      editUrl: "/django-admin/content/teammember/",
-      tone: "violet",
-    },
-    {
-      title: "PWA / APP 版本",
-      count: data.releases.length,
-      desc: "/download 頁的版本資訊",
-      editUrl: "/django-admin/content/apprelease/",
-      tone: "amber",
-    },
-  ];
-
+  const [tab, setTab] = useState("features");
+  const active = CONTENT_TABS.find((t) => t.key === tab);
   return (
     <div className="admin-page">
       <header className="admin-page-head">
         <h1>內容管理</h1>
-        <p>編輯前台公開頁的卡片內容（在 Django Admin 編輯，存檔後即生效）</p>
+        <p>編輯前台公開頁的卡片內容；存檔後前台即時生效</p>
       </header>
 
-      <div className="admin-stat-grid">
-        {CARDS.map((c) => (
-          <div key={c.title} className={`admin-stat-card tone-${c.tone}`}>
-            <div className="admin-stat-label">{c.title}</div>
-            <div className="admin-stat-value">{c.count}</div>
-            <div className="admin-stat-hint">{c.desc}</div>
-            <a
-              href={c.editUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="admin-btn"
-              style={{ marginTop: 12, display: "inline-flex" }}
-            >
-              在 Django Admin 編輯 →
-            </a>
-          </div>
+      <div className="admin-tab-row">
+        {CONTENT_TABS.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            className={`admin-tab ${tab === t.key ? "active" : ""}`}
+            onClick={() => setTab(t.key)}
+          >
+            {t.label}
+          </button>
         ))}
       </div>
 
-      <section className="admin-panel">
-        <h3>專案特色預覽</h3>
-        <table className="admin-table compact">
-          <thead><tr><th>順序</th><th>圖示</th><th>標題</th><th>描述</th></tr></thead>
-          <tbody>
-            {data.features.map((f) => (
-              <tr key={f.id}>
-                <td className="num">{f.sort_order}</td>
-                <td style={{ fontSize: 20 }}>{f.icon}</td>
-                <td className="admin-cell-primary">{f.title}</td>
-                <td className="admin-cell-secondary truncate" title={f.description}>{f.description}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
+      <AdminCmsManager key={tab} schema={active.schema} />
+    </div>
+  );
+}
 
-      <section className="admin-panel">
-        <h3>團隊成員預覽</h3>
-        <table className="admin-table compact">
-          <thead><tr><th>順序</th><th>頭像</th><th>姓名</th><th>角色</th><th>技能</th></tr></thead>
-          <tbody>
-            {data.members.map((m) => (
-              <tr key={m.id}>
-                <td className="num">{m.sort_order}</td>
-                <td style={{ fontSize: 20 }}>{m.avatar_emoji}</td>
-                <td className="admin-cell-primary">{m.name}</td>
-                <td>{m.role}</td>
-                <td className="admin-cell-secondary">{(m.skills || []).join(" · ")}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
-
-      <section className="admin-panel">
-        <h3>版本資訊預覽</h3>
-        <table className="admin-table compact">
-          <thead><tr><th>版本</th><th>平台</th><th>最新</th><th>發布時間</th><th>說明</th></tr></thead>
-          <tbody>
-            {data.releases.map((r) => (
-              <tr key={r.id}>
-                <td className="admin-cell-primary">v{r.version}</td>
-                <td>{r.platform_label}</td>
-                <td>{r.is_latest ? "✓" : "—"}</td>
-                <td>{new Date(r.released_at).toLocaleDateString("zh-Hant")}</td>
-                <td className="admin-cell-secondary truncate" title={r.release_notes}>{r.release_notes}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
+function AdminPlansPage() {
+  return (
+    <div className="admin-page">
+      <header className="admin-page-head">
+        <h1>方案管理</h1>
+        <p>編輯購點方案（前台 /purchase 與結帳 wizard 會即時更新）</p>
+      </header>
+      <AdminCmsManager schema={PLAN_SCHEMA} />
     </div>
   );
 }
@@ -5231,6 +5449,7 @@ function AppShell() {
             <Route path="/admin/scans" element={<AdminScansPage />} />
             <Route path="/admin/scans/:scanId" element={<AdminScanDetailPage />} />
             <Route path="/admin/content" element={<AdminContentPage />} />
+            <Route path="/admin/plans" element={<AdminPlansPage />} />
             <Route path="/admin/audit-log" element={<AdminAuditLogPage />} />
           </Route>
           <Route
