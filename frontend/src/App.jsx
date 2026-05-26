@@ -580,6 +580,7 @@ function LoginForm() {
 function AccountBar() {
   const { accessToken, setToken, wallet, fetchWallet, me, fetchMe } = useArgusStore();
   const navigate = useNavigate();
+  const { canInstall, installed, trigger } = useInstallPrompt();
   // 登入後立刻載入錢包與 me；其他頁面更新（購點、扣 coin）會另外觸發 fetchWallet
   useEffect(() => {
     if (accessToken && !wallet) {
@@ -599,6 +600,17 @@ function AccountBar() {
   const balance = wallet?.balance;
   return (
     <div className="account-bar">
+      {canInstall && !installed && (
+        <button
+          className="install-chip"
+          type="button"
+          onClick={trigger}
+          title="把 Argus 安裝到主畫面，像 APP 一樣使用"
+        >
+          <span aria-hidden="true">⬇</span>
+          <span>安裝 APP</span>
+        </button>
+      )}
       {me?.is_staff && (
         <button
           className="admin-entry-chip"
@@ -654,9 +666,12 @@ function clearScanDraft() {
   window.localStorage.removeItem(SCAN_DRAFT_KEY);
 }
 
+const SITE_PAGE_PRESETS = [10, 30, 50, 100, 200];
+
 function ScanJobForm({ onCreated }) {
   // 從 localStorage 還原草稿，避免 F5 後重打網址
   const initial = loadScanDraft() || {};
+  const [scope, setScope] = useState(initial.scope || "site"); // "single" | "site"
   const [url, setUrl] = useState(initial.url || "");
   const [authorizationConfirmed, setAuthorizationConfirmed] = useState(
     initial.authorizationConfirmed || false,
@@ -674,13 +689,14 @@ function ScanJobForm({ onCreated }) {
   const fetchWallet = useArgusStore((s) => s.fetchWallet);
 
   const coinPerPage = wallet?.coin_per_page ?? 10;
-  const estimatedCost = Math.max(1, Number(maxPages) || 0) * coinPerPage;
+  const effectivePages = scope === "single" ? 1 : Math.max(1, Number(maxPages) || 0);
+  const estimatedCost = effectivePages * coinPerPage;
   const balance = wallet?.balance ?? 0;
   const insufficient = balance < estimatedCost;
 
-  // 任何欄位改變都即時存草稿，使用者真的不小心 F5 也不會白打
   useEffect(() => {
     saveScanDraft({
+      scope,
       url,
       authorizationConfirmed,
       thirdPartyReconfirmed,
@@ -688,9 +704,8 @@ function ScanJobForm({ onCreated }) {
       activeAuthorized,
       maxPages,
     });
-  }, [url, authorizationConfirmed, thirdPartyReconfirmed, activeMode, activeAuthorized, maxPages]);
+  }, [scope, url, authorizationConfirmed, thirdPartyReconfirmed, activeMode, activeAuthorized, maxPages]);
 
-  // 提交中時，瀏覽器原生攔截 F5 / 關閉分頁
   useEffect(() => {
     if (!submitting) return undefined;
     const handler = (event) => {
@@ -706,28 +721,30 @@ function ScanJobForm({ onCreated }) {
     setError("");
     setSubmitting(true);
     try {
-      const response = await api.post("/scans/", {
+      // 單頁掃描：max_pages=1, max_depth=1（不走連結）
+      // 整站掃描：max_pages 由使用者選, max_depth=3
+      const payload = {
         url,
         authorization_confirmed: authorizationConfirmed,
         third_party_reconfirmed: thirdPartyReconfirmed,
         scan_mode: activeMode ? "active" : "passive",
         active_testing_authorized: activeMode && activeAuthorized,
-        max_pages: Math.max(1, Number(maxPages) || 50),
-      });
-      // 成功後清空欄位與草稿
+        max_pages: scope === "single" ? 1 : Math.max(1, Number(maxPages) || 50),
+        max_depth: scope === "single" ? 1 : 3,
+      };
+      const response = await api.post("/scans/", payload);
       setUrl("");
       setAuthorizationConfirmed(false);
       setThirdPartyReconfirmed(false);
       setActiveMode(false);
       setActiveAuthorized(false);
       setMaxPages(50);
+      setScope("site");
       clearScanDraft();
-      // 預扣已發生，更新錢包餘額
       fetchWallet();
       onCreated(response.data);
     } catch (errorResponse) {
       const data = errorResponse.response?.data;
-      // 後端 coin 不足會回 {coin: "..."}；其他情境保留 JSON
       setError(
         (data && (data.coin || data.detail)) || JSON.stringify(data || "建立掃描失敗。"),
       );
@@ -745,26 +762,73 @@ function ScanJobForm({ onCreated }) {
           表單會自動存草稿；F5 或不小心關閉分頁後再回來，欄位會保留。
         </p>
       </div>
-      <input
-        className="input"
-        placeholder="https://example.com/"
-        value={url}
-        onChange={(event) => setUrl(event.target.value)}
-      />
+
+      {/* 掃描範圍：兩張卡片擇一 */}
       <div>
-        <label className="text-xs text-slate-500" htmlFor="scan-max-pages">
-          最大頁數（影響預扣 coin）
+        <p className="text-xs font-semibold text-slate-600 mb-2">掃描範圍</p>
+        <div className="scope-grid">
+          <button
+            type="button"
+            className={`scope-card ${scope === "single" ? "active" : ""}`}
+            onClick={() => setScope("single")}
+          >
+            <span className="scope-icon" aria-hidden="true">🎯</span>
+            <span className="scope-title">單一頁面</span>
+            <span className="scope-desc">只掃描你輸入的這一頁，最快、最省 coin</span>
+            <span className="scope-meta">1 頁 = {coinPerPage} coin</span>
+          </button>
+          <button
+            type="button"
+            className={`scope-card ${scope === "site" ? "active" : ""}`}
+            onClick={() => setScope("site")}
+          >
+            <span className="scope-icon" aria-hidden="true">🌐</span>
+            <span className="scope-title">整個網站</span>
+            <span className="scope-desc">從入口出發爬同網域多頁，產出完整健檢報告</span>
+            <span className="scope-meta">{maxPages} 頁 = {maxPages * coinPerPage} coin</span>
+          </button>
+        </div>
+      </div>
+
+      <div>
+        <label className="text-xs text-slate-500" htmlFor="scan-url">
+          {scope === "single" ? "目標頁面網址" : "網站入口網址"}
         </label>
         <input
-          id="scan-max-pages"
+          id="scan-url"
           className="input"
-          type="number"
-          min="1"
-          max="200"
-          value={maxPages}
-          onChange={(event) => setMaxPages(Number(event.target.value) || 1)}
+          placeholder="https://example.com/"
+          value={url}
+          onChange={(event) => setUrl(event.target.value)}
         />
       </div>
+
+      {scope === "site" && (
+        <div>
+          <label className="text-xs text-slate-500">最大頁數上限</label>
+          <div className="page-preset-row">
+            {SITE_PAGE_PRESETS.map((n) => (
+              <button
+                key={n}
+                type="button"
+                className={`page-preset ${maxPages === n ? "active" : ""}`}
+                onClick={() => setMaxPages(n)}
+              >
+                {n} 頁
+              </button>
+            ))}
+            <input
+              className="input page-preset-custom"
+              type="number"
+              min="1"
+              max="200"
+              value={maxPages}
+              onChange={(e) => setMaxPages(Number(e.target.value) || 1)}
+            />
+          </div>
+        </div>
+      )}
+
       <div className={`coin-estimate ${insufficient ? "is-insufficient" : ""}`}>
         <div className="coin-estimate-row">
           <span>本次掃描預扣</span>
@@ -787,6 +851,7 @@ function ScanJobForm({ onCreated }) {
           完成後依實際爬到的頁數退回未使用的 coin；失敗或取消全額退回。
         </p>
       </div>
+
       <label className="checkbox-row">
         <input
           type="checkbox"
@@ -2132,6 +2197,7 @@ const NAV_ITEMS = [
   { to: "/history", label: "歷史", emoji: "📈" },
   { to: "/billing", label: "購點", emoji: "💎" },
   { to: "/reviews", label: "評論", emoji: "⭐" },
+  { to: "/download", label: "下載", emoji: "📱" },
   { to: "/settings", label: "設定", emoji: "⚙️" },
 ];
 
@@ -2579,6 +2645,8 @@ function BillingPage() {
     invoice_type: "personal",
     company_name: "",
     tax_id: "",
+    carrier_type: "cloud",
+    carrier_id: "",
     agree_terms: false,
   });
 
@@ -2613,6 +2681,17 @@ function BillingPage() {
     if (buyer.invoice_type === "company") {
       if (!buyer.company_name.trim()) errs.company_name = "公司發票須填公司抬頭";
       if (!/^\d{8}$/.test(buyer.tax_id)) errs.tax_id = "統一編號需為 8 碼數字";
+    } else {
+      // 個人發票：驗證載具
+      if (buyer.carrier_type === "mobile_barcode") {
+        if (!/^\/[0-9A-Z+\-.]{7}$/.test(buyer.carrier_id.trim().toUpperCase())) {
+          errs.carrier_id = "手機條碼格式錯誤（首碼 / + 7 碼英數，例 /AB12CDE）";
+        }
+      } else if (buyer.carrier_type === "citizen_digital") {
+        if (!/^[A-Z]{2}\d{14}$/.test(buyer.carrier_id.trim().toUpperCase())) {
+          errs.carrier_id = "自然人憑證格式錯誤（2 碼英文 + 14 碼數字）";
+        }
+      }
     }
     if (!buyer.agree_terms) errs.agree_terms = "請勾選同意購買條款";
     return errs;
@@ -2637,6 +2716,11 @@ function BillingPage() {
         invoice_type: buyer.invoice_type,
         company_name: buyer.invoice_type === "company" ? buyer.company_name.trim() : "",
         tax_id: buyer.invoice_type === "company" ? buyer.tax_id.trim() : "",
+        carrier_type:
+          buyer.invoice_type === "company" ? "cloud" : buyer.carrier_type,
+        carrier_id:
+          buyer.invoice_type === "company" ? "" :
+          (buyer.carrier_type === "cloud" ? "" : buyer.carrier_id.trim().toUpperCase()),
         agree_terms: buyer.agree_terms,
       });
       await fetchWallet();
@@ -2678,6 +2762,12 @@ function BillingPage() {
             <dt>入帳點數</dt><dd>+{completedOrder.coin_amount.toLocaleString()} coin</dd>
             <dt>當前餘額</dt><dd className="hl-balance">{wallet?.balance?.toLocaleString()} coin</dd>
             <dt>發票類型</dt><dd>{completedOrder.invoice_type_label}{completedOrder.invoice_type === "company" ? `（${completedOrder.company_name} / ${completedOrder.tax_id}）` : ""}</dd>
+            {completedOrder.invoice_type === "personal" && completedOrder.carrier_type !== "cloud" && (
+              <>
+                <dt>載具</dt>
+                <dd>{completedOrder.carrier_type_label}：{completedOrder.carrier_id}</dd>
+              </>
+            )}
             <dt>收據寄送</dt><dd>{completedOrder.buyer_email}</dd>
           </dl>
           <div className="wizard-success-actions">
@@ -2826,6 +2916,69 @@ function BillingPage() {
               </>
             )}
 
+            {buyer.invoice_type === "personal" && (
+              <div className="wizard-field">
+                <label>電子發票載具 *</label>
+                <div className="wizard-radio-row">
+                  <label className="wizard-radio">
+                    <input
+                      type="radio"
+                      name="carrier_type"
+                      value="cloud"
+                      checked={buyer.carrier_type === "cloud"}
+                      onChange={() => setBuyer({ ...buyer, carrier_type: "cloud", carrier_id: "" })}
+                    />
+                    雲端發票（寄 email）
+                  </label>
+                  <label className="wizard-radio">
+                    <input
+                      type="radio"
+                      name="carrier_type"
+                      value="mobile_barcode"
+                      checked={buyer.carrier_type === "mobile_barcode"}
+                      onChange={() => setBuyer({ ...buyer, carrier_type: "mobile_barcode", carrier_id: "" })}
+                    />
+                    手機條碼
+                  </label>
+                  <label className="wizard-radio">
+                    <input
+                      type="radio"
+                      name="carrier_type"
+                      value="citizen_digital"
+                      checked={buyer.carrier_type === "citizen_digital"}
+                      onChange={() => setBuyer({ ...buyer, carrier_type: "citizen_digital", carrier_id: "" })}
+                    />
+                    自然人憑證
+                  </label>
+                </div>
+                {buyer.carrier_type === "mobile_barcode" && (
+                  <input
+                    className="input mt-2"
+                    placeholder="例：/AB12CDE（首碼 /，8 碼英數）"
+                    maxLength={8}
+                    value={buyer.carrier_id}
+                    onChange={(e) =>
+                      setBuyer({ ...buyer, carrier_id: e.target.value.toUpperCase() })
+                    }
+                  />
+                )}
+                {buyer.carrier_type === "citizen_digital" && (
+                  <input
+                    className="input mt-2"
+                    placeholder="例：AB12345678901234（前 2 碼英文 + 14 碼數字）"
+                    maxLength={16}
+                    value={buyer.carrier_id}
+                    onChange={(e) =>
+                      setBuyer({ ...buyer, carrier_id: e.target.value.toUpperCase() })
+                    }
+                  />
+                )}
+                {errors.carrier_id && (
+                  <p className="wizard-field-error">{errors.carrier_id}</p>
+                )}
+              </div>
+            )}
+
             <div className="wizard-field">
               <label className="wizard-checkbox">
                 <input
@@ -2879,6 +3032,16 @@ function BillingPage() {
                   ? `公司發票（${buyer.company_name} / 統編 ${buyer.tax_id}）`
                   : "個人電子發票"}
               </dd>
+              {buyer.invoice_type === "personal" && (
+                <>
+                  <dt>載具</dt>
+                  <dd>
+                    {buyer.carrier_type === "cloud" && "雲端發票（寄 email）"}
+                    {buyer.carrier_type === "mobile_barcode" && `手機條碼 ${buyer.carrier_id}`}
+                    {buyer.carrier_type === "citizen_digital" && `自然人憑證 ${buyer.carrier_id}`}
+                  </dd>
+                </>
+              )}
             </dl>
           </div>
 

@@ -320,6 +320,68 @@ class PurchaseOrderTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data["orders"]), 2)
 
+    def test_personal_invoice_accepts_mobile_barcode(self):
+        from apps.billing.models import PurchaseOrder
+        response = self.client.post(
+            reverse("billing-purchase"),
+            self._payload(carrier_type="mobile_barcode", carrier_id="/AB12CDE"),
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        order = PurchaseOrder.objects.get(user=self.user)
+        self.assertEqual(order.carrier_type, "mobile_barcode")
+        self.assertEqual(order.carrier_id, "/AB12CDE")
+
+    def test_mobile_barcode_invalid_format_rejected(self):
+        response = self.client.post(
+            reverse("billing-purchase"),
+            self._payload(carrier_type="mobile_barcode", carrier_id="ABCD1234"),
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("carrier_id", response.data)
+
+    def test_personal_invoice_accepts_citizen_digital(self):
+        from apps.billing.models import PurchaseOrder
+        response = self.client.post(
+            reverse("billing-purchase"),
+            self._payload(
+                carrier_type="citizen_digital",
+                carrier_id="AB12345678901234",
+            ),
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        order = PurchaseOrder.objects.get(user=self.user)
+        self.assertEqual(order.carrier_type, "citizen_digital")
+        self.assertEqual(order.carrier_id, "AB12345678901234")
+
+    def test_citizen_digital_invalid_rejected(self):
+        response = self.client.post(
+            reverse("billing-purchase"),
+            self._payload(carrier_type="citizen_digital", carrier_id="abc123"),
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_company_invoice_ignores_carrier_fields(self):
+        from apps.billing.models import PurchaseOrder
+        response = self.client.post(
+            reverse("billing-purchase"),
+            self._payload(
+                invoice_type="company",
+                company_name="Acme",
+                tax_id="12345678",
+                carrier_type="mobile_barcode",
+                carrier_id="/AB12CDE",  # 即使送了也會被清空
+            ),
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        order = PurchaseOrder.objects.get(user=self.user)
+        self.assertEqual(order.carrier_type, "cloud")  # 強制 cloud
+        self.assertEqual(order.carrier_id, "")
+
     def test_my_orders_does_not_leak_other_users(self):
         other = _make_user("other")
         self.client.force_authenticate(other)

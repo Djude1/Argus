@@ -57,6 +57,8 @@ class PurchaseView(views.APIView):
             invoice_type=data["invoice_type"],
             company_name=data.get("company_name", ""),
             tax_id=data.get("tax_id", ""),
+            carrier_type=data.get("carrier_type", PurchaseOrder.CarrierType.CLOUD),
+            carrier_id=data.get("carrier_id", ""),
             status=PurchaseOrder.Status.PENDING,
             note=f"3 步驟結帳：{data['buyer_name']}",
         )

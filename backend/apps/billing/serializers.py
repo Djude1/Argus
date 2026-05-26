@@ -5,6 +5,10 @@ from rest_framework import serializers
 from apps.billing.models import CoinTransaction, CoinWallet, PricingPlan, PurchaseOrder
 
 TAX_ID_PATTERN = re.compile(r"^\d{8}$")  # 台灣統編 8 碼數字
+# 手機條碼：首碼 /，後 7 碼為大寫字母/數字/+-.（共 8 碼）
+MOBILE_BARCODE_PATTERN = re.compile(r"^/[0-9A-Z+\-.]{7}$")
+# 自然人憑證：前 2 碼大寫英文 + 14 碼數字
+CITIZEN_DIGITAL_PATTERN = re.compile(r"^[A-Z]{2}\d{14}$")
 
 
 class PricingPlanSerializer(serializers.ModelSerializer):
@@ -94,6 +98,13 @@ class PurchaseRequestSerializer(serializers.Serializer):
     )
     company_name = serializers.CharField(max_length=128, allow_blank=True, required=False)
     tax_id = serializers.CharField(max_length=16, allow_blank=True, required=False)
+    # 個人發票載具；公司發票時忽略
+    carrier_type = serializers.ChoiceField(
+        choices=PurchaseOrder.CarrierType.choices,
+        default=PurchaseOrder.CarrierType.CLOUD,
+        required=False,
+    )
+    carrier_id = serializers.CharField(max_length=32, allow_blank=True, required=False)
     agree_terms = serializers.BooleanField()
 
     def validate_plan_code(self, value: str) -> str:
@@ -122,10 +133,29 @@ class PurchaseRequestSerializer(serializers.Serializer):
                 )
             attrs["company_name"] = company_name
             attrs["tax_id"] = tax_id
+            # 公司發票不需個人載具
+            attrs["carrier_type"] = PurchaseOrder.CarrierType.CLOUD
+            attrs["carrier_id"] = ""
         else:
-            # 個人發票：忽略 company 欄位內容，避免誤存
             attrs["company_name"] = ""
             attrs["tax_id"] = ""
+            # 個人發票才檢查載具
+            carrier_type = attrs.get("carrier_type") or PurchaseOrder.CarrierType.CLOUD
+            carrier_id = (attrs.get("carrier_id") or "").strip().upper()
+            if carrier_type == PurchaseOrder.CarrierType.MOBILE_BARCODE:
+                if not MOBILE_BARCODE_PATTERN.match(carrier_id):
+                    raise serializers.ValidationError({
+                        "carrier_id": "手機條碼格式錯誤（首碼為 / + 7 碼英數，例 /AB12CDE）。",
+                    })
+            elif carrier_type == PurchaseOrder.CarrierType.CITIZEN_DIGITAL:
+                if not CITIZEN_DIGITAL_PATTERN.match(carrier_id):
+                    raise serializers.ValidationError({
+                        "carrier_id": "自然人憑證格式錯誤（2 碼英文 + 14 碼數字，共 16 碼）。",
+                    })
+            else:
+                carrier_id = ""  # cloud 不需要 carrier_id
+            attrs["carrier_type"] = carrier_type
+            attrs["carrier_id"] = carrier_id
         return attrs
 
 
@@ -133,6 +163,9 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
     status_label = serializers.CharField(source="get_status_display", read_only=True)
     invoice_type_label = serializers.CharField(
         source="get_invoice_type_display", read_only=True,
+    )
+    carrier_type_label = serializers.CharField(
+        source="get_carrier_type_display", read_only=True,
     )
     plan_name = serializers.CharField(source="plan.name", read_only=True)
     plan_code = serializers.CharField(source="plan.code", read_only=True)
@@ -146,6 +179,7 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
             "buyer_name", "buyer_email",
             "invoice_type", "invoice_type_label",
             "company_name", "tax_id",
+            "carrier_type", "carrier_type_label", "carrier_id",
             "status", "status_label",
             "transaction",
             "note",

@@ -75,6 +75,11 @@ class PurchaseOrder(models.Model):
         PERSONAL = "personal", "個人發票"
         COMPANY = "company", "公司發票"
 
+    class CarrierType(models.TextChoices):
+        CLOUD = "cloud", "雲端發票（寄 email）"
+        MOBILE_BARCODE = "mobile_barcode", "手機條碼"
+        CITIZEN_DIGITAL = "citizen_digital", "自然人憑證"
+
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
@@ -98,6 +103,14 @@ class PurchaseOrder(models.Model):
     )
     company_name = models.CharField(max_length=128, blank=True)
     tax_id = models.CharField(max_length=16, blank=True)  # 台灣統編 8 碼數字
+    # 個人發票載具（公司發票時忽略）
+    carrier_type = models.CharField(
+        max_length=24,
+        choices=CarrierType.choices,
+        default=CarrierType.CLOUD,
+        blank=True,
+    )
+    carrier_id = models.CharField(max_length=32, blank=True)
     status = models.CharField(
         max_length=16,
         choices=Status.choices,
