@@ -155,6 +155,7 @@ class MeView(views.APIView):
             "is_staff": user.is_staff,
             "date_joined": user.date_joined,
             "last_login": user.last_login,
+            # 注意：以 has_usable_password() 判斷；若管理員在 Django Admin 手動為 Google 使用者設密碼則會誤判
             "auth_provider": "google" if not user.has_usable_password() else "email",
         })
 
@@ -176,6 +177,12 @@ class ChangePasswordView(views.APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
+        # Google 帳號沒有可用密碼，不支援此端點
+        if not request.user.has_usable_password():
+            return Response(
+                {"detail": "Google 帳號不支援密碼變更，請透過 Google 帳號設定管理密碼。"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         old_password = request.data.get("old_password") or ""
         new_password = request.data.get("new_password") or ""
         if not request.user.check_password(old_password):
