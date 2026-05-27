@@ -4483,12 +4483,15 @@ function PurchasePage() {
         <section className="dev-cheat-panel">
           <div className="dev-cheat-inner">
             <div className="dev-cheat-header">
-              <span className="dev-cheat-badge">⚠ TEST ONLY</span>
-              <span className="dev-cheat-title">開發者惡搞工具</span>
-              <span className="dev-cheat-sub">僅限測試環境・上線前必須移除</span>
+              <span className="dev-cheat-badge">🔐 DEVELOPER SECRET ROOM · 測試服限定 🔐</span>
+              <span className="dev-cheat-title">⚔ 上古神器 · 造物主模式 ⚔</span>
+              <span className="dev-cheat-subtitle">「能力越大，責任越大——但這裡不管那個」</span>
             </div>
+            <p className="dev-cheat-warning">
+              ⚡ 此能力由宇宙最強開發者賦予 · 凡人勿試 · 正式版即消失 ⚡
+            </p>
             <div className="dev-cheat-balance">
-              目前餘額：<strong>{wallet?.balance?.toLocaleString() ?? "—"} coin</strong>
+              💰 靈石儲量：<strong>{wallet?.balance?.toLocaleString() ?? "—"} coin</strong>
             </div>
             <div className="dev-cheat-btns">
               <button
@@ -4497,8 +4500,9 @@ function PurchasePage() {
                 disabled={cheatLoading}
                 onClick={() => handleCheat("set_max")}
               >
-                SET INT32_MAX<br />
-                <small>2,147,483,647 coin</small>
+                <span className="dev-cheat-btn-label">💎 召喚命運之石</span>
+                <span className="dev-cheat-btn-value">獲得 2,147,483,647 COIN</span>
+                <span className="dev-cheat-btn-flavor">「此乃凡間整數之巔，32bit 的極限！」</span>
               </button>
               <button
                 type="button"
@@ -4506,11 +4510,12 @@ function PurchasePage() {
                 disabled={cheatLoading}
                 onClick={() => handleCheat("add_max")}
               >
-                ∞ 無限疊加<br />
-                <small>再加 INT32_MAX</small>
+                <span className="dev-cheat-btn-label">👑 突破次元壁壘</span>
+                <span className="dev-cheat-btn-value">∞ 無限疊加 · 超越神界</span>
+                <span className="dev-cheat-btn-flavor">「只要按下去，數學也攔不住你」</span>
               </button>
             </div>
-            {cheatMsg && <p className="dev-cheat-msg">{cheatMsg}</p>}
+            {cheatMsg && <p className="dev-cheat-msg">🌟 {cheatMsg}</p>}
           </div>
         </section>
       )}
