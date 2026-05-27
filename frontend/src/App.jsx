@@ -4334,10 +4334,32 @@ const COMPARE_ROWS = [
 function PurchasePage() {
   const [plans, setPlans] = useState([]);
   const [openFaq, setOpenFaq] = useState(0);
+  const [cheatLoading, setCheatLoading] = useState(false);
+  const [cheatMsg, setCheatMsg] = useState("");
   const navigate = useNavigate();
+  const accessToken = useArgusStore((s) => s.accessToken);
+  const wallet = useArgusStore((s) => s.wallet);
+  const fetchWallet = useArgusStore((s) => s.fetchWallet);
   useEffect(() => {
     api.get("/billing/plans/").then((r) => setPlans(r.data.plans || [])).catch(() => {});
   }, []);
+
+  const handleCheat = async (mode) => {
+    setCheatLoading(true);
+    setCheatMsg("");
+    try {
+      const r = await api.post("/billing/dev-cheat/", { mode });
+      await fetchWallet();
+      const bal = r.data.balance?.toLocaleString() ?? "?";
+      setCheatMsg(mode === "set_max"
+        ? `✓ 已設為 ${bal} coin（INT32_MAX）`
+        : `✓ 已疊加，現為 ${bal} coin`);
+    } catch {
+      setCheatMsg("✗ 失敗（確認已登入且 DEBUG=True）");
+    } finally {
+      setCheatLoading(false);
+    }
+  };
   return (
     <div className="public-page">
       <section className="public-hero compact">
@@ -4455,6 +4477,43 @@ function PurchasePage() {
           </button>
         </div>
       </section>
+
+      {/* ── [TEST ONLY] 測試用惡搞面板 ── 上線前必須拆除 ── */}
+      {accessToken && (
+        <section className="dev-cheat-panel">
+          <div className="dev-cheat-inner">
+            <div className="dev-cheat-header">
+              <span className="dev-cheat-badge">⚠ TEST ONLY</span>
+              <span className="dev-cheat-title">開發者惡搞工具</span>
+              <span className="dev-cheat-sub">僅限測試環境・上線前必須移除</span>
+            </div>
+            <div className="dev-cheat-balance">
+              目前餘額：<strong>{wallet?.balance?.toLocaleString() ?? "—"} coin</strong>
+            </div>
+            <div className="dev-cheat-btns">
+              <button
+                type="button"
+                className="dev-cheat-btn dev-cheat-btn-max"
+                disabled={cheatLoading}
+                onClick={() => handleCheat("set_max")}
+              >
+                SET INT32_MAX<br />
+                <small>2,147,483,647 coin</small>
+              </button>
+              <button
+                type="button"
+                className="dev-cheat-btn dev-cheat-btn-inf"
+                disabled={cheatLoading}
+                onClick={() => handleCheat("add_max")}
+              >
+                ∞ 無限疊加<br />
+                <small>再加 INT32_MAX</small>
+              </button>
+            </div>
+            {cheatMsg && <p className="dev-cheat-msg">{cheatMsg}</p>}
+          </div>
+        </section>
+      )}
     </div>
   );
 }
