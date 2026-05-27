@@ -378,7 +378,57 @@ $env:PLAYWRIGHT_BROWSERS_PATH=".ms-playwright"; uv run playwright install chromi
 | Flutter 修改 | `flutter analyze`（靜態檢查）+ 提醒實機測試 |
 | git 操作 | 確認 status / log 符合預期後才執行 |
 | 設定檔修改 | 重新載入並確認生效 |
+| **cloudflared `config.yml` 修改** | **見下方「cloudflared 設定檔雙路徑陷阱」,絕對不要只改 user 版** |
 | 規則/MD 檔案修改 | 執行下方「MD 修改強制核對清單」，每項逐一確認 |
+
+---
+
+## ⚠ cloudflared 設定檔雙路徑陷阱（這台機器特有，絕對不要再忘）
+
+**這台機器的 `cloudflared` 是 Windows service,真正讀的 `config.yml` 是 SYSTEM 帳號路徑**：
+
+```
+C:\Windows\System32\config\systemprofile\.cloudflared\config.yml
+```
+
+**不是** `C:\Users\ntub\.cloudflared\config.yml`！只改 user 版的 config.yml 完全沒效,service 永遠讀不到。
+
+確認真實路徑:
+```powershell
+sc.exe qc Cloudflared   # 看 BINARY_PATH_NAME 的 --config 參數
+```
+
+### 強制流程:改 cloudflared ingress 一律走以下步驟
+
+1. **編輯 user 版**(IDE 友善):`C:\Users\ntub\.cloudflared\config.yml`
+2. **UAC 提升,把 user 版 copy 到 system 版**:
+   ```powershell
+   Copy-Item C:\Users\ntub\.cloudflared\config.yml `
+             C:\Windows\System32\config\systemprofile\.cloudflared\config.yml -Force
+   ```
+3. **UAC 提升,重啟 service**:
+   ```powershell
+   sc.exe stop Cloudflared
+   Start-Sleep 3
+   taskkill /IM cloudflared.exe /F
+   sc.exe start Cloudflared
+   ```
+4. **驗證 ingress 真的生效**(必做):
+   - `curl.exe -sI http://<hostname>/` 確認**不是** cloudflared 的 catch-all 404
+   - cloudflared 自家 404 特徵:`Connection: keep-alive` 但**沒有** `Server: cloudflare`
+   - 正常經過 Cloudflare 邊緣的回應(200 / 後端 404 都算)會帶 `Server: cloudflare` + `CF-RAY`
+
+### cloudflared CLI 跨 zone 也是地雷
+
+`cloudflared tunnel route dns <id> <hostname>` 對**非 origincert 對應 zone** 的 hostname 會 silently 把它 append 到預設 zone(不會報錯,但 DNS 建到錯位的 zone)。
+
+例子:origincert = `aiglasses.qzz.io`,跑 `cloudflared tunnel route dns ... xn--gst.tw` → 結果建了 `xn--gst.tw.aiglasses.qzz.io` CNAME,不是在 巧.tw zone 上!
+
+**跨 zone 建 DNS → 一律去 Cloudflare Dashboard 手動加 CNAME**,目標 `<tunnel-uuid>.cfargotunnel.com`,Proxy 橘雲開。**永遠不要對跨 zone hostname 跑 `cloudflared tunnel route dns`。**
+
+跑了之後也要看 log 訊息「Added CNAME <full-hostname>」確認 hostname 是預期值,別只看到 "Added" 就放心。
+
+---
 
 **MD 修改強制核對清單（修改任何規則/MD 後必須逐項執行，不可跳過）：**
 
@@ -409,16 +459,16 @@ $env:PLAYWRIGHT_BROWSERS_PATH=".ms-playwright"; uv run playwright install chromi
 <!-- RTK-RULES-START -->
 ## RTK (Rust Token Killer) 使用規則
 
-**安裝位置**：`D:\RTK\bin\rtk.exe`（v0.39.0，**未加入系統 PATH**，獨立本地安裝，未污染全域環境）
+**安裝位置**：`C:\Users\ntub\scoop\shims\rtk.exe`（v0.42.0，透過 scoop 安裝，shim 已在 PATH 內，可直接用 `rtk` 呼叫）
 
 **核心目的**：壓縮 git/test/build/docker 等命令輸出，節省 60-90% LLM token
 
 ### 呼叫格式
 
-PowerShell 必須用絕對路徑：
+PowerShell 直接呼叫即可（shim 已在 PATH）：
 
 ```powershell
-& "D:\RTK\bin\rtk.exe" <subcommand> <args>
+rtk <subcommand> <args>
 ```
 
 ### 何時必須使用 rtk
@@ -427,16 +477,16 @@ PowerShell 必須用絕對路徑：
 
 | 原始命令 | 改用 |
 |---------|------|
-| `git status` / `git diff` / `git log` / `git show` | `& "D:\RTK\bin\rtk.exe" git <sub>` |
-| `git add` / `git commit` / `git push` / `git pull` | `& "D:\RTK\bin\rtk.exe" git <sub>` |
-| `gh pr view` / `gh run list` / `gh issue list` | `& "D:\RTK\bin\rtk.exe" gh <sub>` |
-| `jest` / `vitest` / `playwright test` | `& "D:\RTK\bin\rtk.exe" <runner>` |
-| `pytest` / `cargo test` / `go test` | `& "D:\RTK\bin\rtk.exe" <runner>` |
-| `tsc` / `eslint` / `prettier --check` | `& "D:\RTK\bin\rtk.exe" tsc` / `lint` / `prettier` |
-| `cargo build` / `cargo clippy` / `next build` | `& "D:\RTK\bin\rtk.exe" cargo <sub>` / `next build` |
-| `docker ps` / `docker logs` / `kubectl get` | `& "D:\RTK\bin\rtk.exe" docker <sub>` / `kubectl <sub>` |
-| `curl <url>` 大型 JSON | `& "D:\RTK\bin\rtk.exe" curl <url>` |
-| 觀察大型 log 檔 | `& "D:\RTK\bin\rtk.exe" log <file>` |
+| `git status` / `git diff` / `git log` / `git show` | `rtk git <sub>` |
+| `git add` / `git commit` / `git push` / `git pull` | `rtk git <sub>` |
+| `gh pr view` / `gh run list` / `gh issue list` | `rtk gh <sub>` |
+| `jest` / `vitest` / `playwright test` | `rtk <runner>` |
+| `pytest` / `cargo test` / `go test` | `rtk <runner>` |
+| `tsc` / `eslint` / `prettier --check` | `rtk tsc` / `rtk lint` / `rtk prettier` |
+| `cargo build` / `cargo clippy` / `next build` | `rtk cargo <sub>` / `rtk next build` |
+| `docker ps` / `docker logs` / `kubectl get` | `rtk docker <sub>` / `rtk kubectl <sub>` |
+| `curl <url>` 大型 JSON | `rtk curl <url>` |
+| 觀察大型 log 檔 | `rtk log <file>` |
 
 ### 何時**不要**用 rtk
 
@@ -455,11 +505,11 @@ PowerShell 沒有 `&&`，每段都要獨立包：
 git add . && git commit -m "msg"
 
 # 正確
-& "D:\RTK\bin\rtk.exe" git add . ; if ($?) { & "D:\RTK\bin\rtk.exe" git commit -m "msg" }
+rtk git add . ; if ($?) { rtk git commit -m "msg" }
 ```
 
 ### 卸載
 
-`Remove-Item -Recurse -Force D:\RTK`（從未動 PATH 或其他全域設定，刪除即完整移除；同時移除本區塊規則）。
+`scoop uninstall rtk`（透過 scoop 統一管理，刪除即完整移除；同時移除本區塊規則）。
 <!-- RTK-RULES-END -->
 
