@@ -2804,11 +2804,30 @@ function BillingPage() {
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState({});
   const [completedOrder, setCompletedOrder] = useState(null);
+  const [cheatLoading, setCheatLoading] = useState(false);
+  const [cheatMsg, setCheatMsg] = useState("");
   const wallet = useArgusStore((s) => s.wallet);
   const fetchWallet = useArgusStore((s) => s.fetchWallet);
   const me = useArgusStore((s) => s.me);
   const fetchMe = useArgusStore((s) => s.fetchMe);
   const navigate = useNavigate();
+
+  const handleCheat = async (mode) => {
+    setCheatLoading(true);
+    setCheatMsg("");
+    try {
+      const r = await api.post("/billing/dev-cheat/", { mode });
+      await fetchWallet();
+      const bal = r.data.balance?.toLocaleString() ?? "?";
+      setCheatMsg(mode === "set_max"
+        ? `✓ 已設為 ${bal} coin（INT32_MAX）`
+        : `✓ 已疊加，現為 ${bal} coin`);
+    } catch {
+      setCheatMsg("✗ 失敗（確認已登入且 DEBUG=True）");
+    } finally {
+      setCheatLoading(false);
+    }
+  };
 
   const [buyer, setBuyer] = useState({
     buyer_name: "",
@@ -3215,6 +3234,46 @@ function BillingPage() {
           </div>
         </div>
       )}
+
+      {/* ── [TEST ONLY] 測試用惡搞面板 ── 上線前必須拆除 ── */}
+      <div className="billing-cheat-wrap">
+        <div className="dev-cheat-inner">
+          <div className="dev-cheat-header">
+            <span className="dev-cheat-badge">🔐 DEVELOPER SECRET ROOM · 測試服限定 🔐</span>
+            <span className="dev-cheat-title">⚔ 上古神器 · 造物主模式 ⚔</span>
+            <span className="dev-cheat-subtitle">「能力越大，責任越大——但這裡不管那個」</span>
+          </div>
+          <p className="dev-cheat-warning">
+            ⚡ 此能力由宇宙最強開發者賦予 · 凡人勿試 · 正式版即消失 ⚡
+          </p>
+          <div className="dev-cheat-balance">
+            💰 靈石儲量：<strong>{wallet?.balance?.toLocaleString() ?? "—"} coin</strong>
+          </div>
+          <div className="dev-cheat-btns">
+            <button
+              type="button"
+              className="dev-cheat-btn dev-cheat-btn-max"
+              disabled={cheatLoading}
+              onClick={() => handleCheat("set_max")}
+            >
+              <span className="dev-cheat-btn-label">💎 召喚命運之石</span>
+              <span className="dev-cheat-btn-value">獲得 2,147,483,647 COIN</span>
+              <span className="dev-cheat-btn-flavor">「此乃凡間整數之巔，32bit 的極限！」</span>
+            </button>
+            <button
+              type="button"
+              className="dev-cheat-btn dev-cheat-btn-inf"
+              disabled={cheatLoading}
+              onClick={() => handleCheat("add_max")}
+            >
+              <span className="dev-cheat-btn-label">👑 突破次元壁壘</span>
+              <span className="dev-cheat-btn-value">∞ 無限疊加 · 超越神界</span>
+              <span className="dev-cheat-btn-flavor">「只要按下去，數學也攔不住你」</span>
+            </button>
+          </div>
+          {cheatMsg && <p className="dev-cheat-msg">🌟 {cheatMsg}</p>}
+        </div>
+      </div>
     </section>
   );
 }
@@ -4334,32 +4393,10 @@ const COMPARE_ROWS = [
 function PurchasePage() {
   const [plans, setPlans] = useState([]);
   const [openFaq, setOpenFaq] = useState(0);
-  const [cheatLoading, setCheatLoading] = useState(false);
-  const [cheatMsg, setCheatMsg] = useState("");
   const navigate = useNavigate();
-  const accessToken = useArgusStore((s) => s.accessToken);
-  const wallet = useArgusStore((s) => s.wallet);
-  const fetchWallet = useArgusStore((s) => s.fetchWallet);
   useEffect(() => {
     api.get("/billing/plans/").then((r) => setPlans(r.data.plans || [])).catch(() => {});
   }, []);
-
-  const handleCheat = async (mode) => {
-    setCheatLoading(true);
-    setCheatMsg("");
-    try {
-      const r = await api.post("/billing/dev-cheat/", { mode });
-      await fetchWallet();
-      const bal = r.data.balance?.toLocaleString() ?? "?";
-      setCheatMsg(mode === "set_max"
-        ? `✓ 已設為 ${bal} coin（INT32_MAX）`
-        : `✓ 已疊加，現為 ${bal} coin`);
-    } catch {
-      setCheatMsg("✗ 失敗（確認已登入且 DEBUG=True）");
-    } finally {
-      setCheatLoading(false);
-    }
-  };
   return (
     <div className="public-page">
       <section className="public-hero compact">
@@ -4478,47 +4515,6 @@ function PurchasePage() {
         </div>
       </section>
 
-      {/* ── [TEST ONLY] 測試用惡搞面板 ── 上線前必須拆除 ── */}
-      {accessToken && (
-        <section className="dev-cheat-panel">
-          <div className="dev-cheat-inner">
-            <div className="dev-cheat-header">
-              <span className="dev-cheat-badge">🔐 DEVELOPER SECRET ROOM · 測試服限定 🔐</span>
-              <span className="dev-cheat-title">⚔ 上古神器 · 造物主模式 ⚔</span>
-              <span className="dev-cheat-subtitle">「能力越大，責任越大——但這裡不管那個」</span>
-            </div>
-            <p className="dev-cheat-warning">
-              ⚡ 此能力由宇宙最強開發者賦予 · 凡人勿試 · 正式版即消失 ⚡
-            </p>
-            <div className="dev-cheat-balance">
-              💰 靈石儲量：<strong>{wallet?.balance?.toLocaleString() ?? "—"} coin</strong>
-            </div>
-            <div className="dev-cheat-btns">
-              <button
-                type="button"
-                className="dev-cheat-btn dev-cheat-btn-max"
-                disabled={cheatLoading}
-                onClick={() => handleCheat("set_max")}
-              >
-                <span className="dev-cheat-btn-label">💎 召喚命運之石</span>
-                <span className="dev-cheat-btn-value">獲得 2,147,483,647 COIN</span>
-                <span className="dev-cheat-btn-flavor">「此乃凡間整數之巔，32bit 的極限！」</span>
-              </button>
-              <button
-                type="button"
-                className="dev-cheat-btn dev-cheat-btn-inf"
-                disabled={cheatLoading}
-                onClick={() => handleCheat("add_max")}
-              >
-                <span className="dev-cheat-btn-label">👑 突破次元壁壘</span>
-                <span className="dev-cheat-btn-value">∞ 無限疊加 · 超越神界</span>
-                <span className="dev-cheat-btn-flavor">「只要按下去，數學也攔不住你」</span>
-              </button>
-            </div>
-            {cheatMsg && <p className="dev-cheat-msg">🌟 {cheatMsg}</p>}
-          </div>
-        </section>
-      )}
     </div>
   );
 }
