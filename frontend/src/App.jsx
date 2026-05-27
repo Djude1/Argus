@@ -1429,6 +1429,27 @@ function FindingsWorkspace({ scan }) {
         </div>
       )}
 
+      {/* 掃描執行 Log */}
+      {scan.scan_log?.length > 0 && (
+        <details className="scan-log-panel">
+          <summary className="scan-log-summary">
+            執行日誌
+            <span className="scan-log-count">{scan.scan_log.length} 筆</span>
+          </summary>
+          <div className="scan-log-body">
+            {scan.scan_log.map((entry, i) => (
+              <div key={i} className={`scan-log-entry scan-log-${entry.lvl}`}>
+                <span className="scan-log-time">
+                  {new Date(entry.t).toLocaleTimeString("zh-TW", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                </span>
+                <span className="scan-log-lvl">{entry.lvl === "error" ? "ERR" : entry.lvl === "warn" ? "WRN" : "INF"}</span>
+                <span className="scan-log-msg">{entry.msg}</span>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
+
       {/* 頁面 tabs：依不同頁面切換中間截圖區與右側 findings 範圍 */}
       {pages.length > 0 && (
         <div className="page-tabs">

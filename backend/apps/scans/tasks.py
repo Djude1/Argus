@@ -11,6 +11,7 @@ from apps.scans.cancellation import ScanCancelled, is_cancelled, raise_if_cancel
 from apps.scans.crawler import crawl_site
 from apps.scans.katana_scanner import run_katana
 from apps.scans.models import Finding, Page, ScanJob
+from apps.scans.scan_logger import append_log
 from apps.scans.scanners import (
     PageAnalysisInput,
     analyze_page,
@@ -40,13 +41,15 @@ def run_scan_job(self, scan_job_id: int) -> dict:
     crawl_phase_started = now.isoformat()
     scan_job.status = ScanJob.Status.CRAWLING
     scan_job.started_at = now
+    scan_job.scan_log = []  # 每次重新開始清空舊 log
     scan_job.progress = {
         "pages_done": 0,
         "pages_total": 1,
         "phase": "crawling",
         "phase_started_at": crawl_phase_started,
     }
-    scan_job.save(update_fields=["status", "started_at", "progress", "updated_at"])
+    scan_job.save(update_fields=["status", "started_at", "scan_log", "progress", "updated_at"])
+    append_log(scan_job_id, f"掃描任務啟動 — 目標：{scan_job.normalized_url}，模式：{scan_job.scan_mode}")
 
     try:
         # crawler callback：在 async loop 內透過 sync_to_async 寫 DB；
@@ -60,6 +63,7 @@ def run_scan_job(self, scan_job_id: int) -> dict:
             if cancelled:
                 raise ScanCancelled()
 
+        append_log(scan_job_id, f"開始爬取，最大深度 {scan_job.max_depth}，最大頁數 {scan_job.max_pages}")
         crawled_pages, warnings, site_signals = asyncio.run(
             crawl_site(
                 start_url=scan_job.normalized_url,
@@ -72,6 +76,10 @@ def run_scan_job(self, scan_job_id: int) -> dict:
                 progress_callback=_crawl_progress,
             )
         )
+        append_log(scan_job_id, f"爬取完成，共 {len(crawled_pages)} 頁")
+        if warnings:
+            for k, v in warnings.items():
+                append_log(scan_job_id, f"爬取警告 [{k}]: {v}", level="warn")
         # 進入 scanning 前再檢查一次：避免使用者剛 cancel 就被 worker 覆蓋回 SCANNING
         raise_if_cancelled(scan_job_id)
         scan_phase_started = timezone.now().isoformat()
@@ -84,6 +92,7 @@ def run_scan_job(self, scan_job_id: int) -> dict:
             "phase_started_at": scan_phase_started,
         }
         scan_job.save(update_fields=["status", "warning_summary", "progress", "updated_at"])
+        append_log(scan_job_id, f"開始分析，共 {len(crawled_pages)} 頁待掃描")
 
         all_findings: list[dict] = []
         scanning_total = max(len(crawled_pages), 1)
@@ -130,10 +139,18 @@ def run_scan_job(self, scan_job_id: int) -> dict:
                 total=scanning_total,
                 phase_started_at=scan_phase_started,
             )
+            blocked = f"（阻擋：{page_data['blocked_reason']}）" if page_data["blocked_reason"] else ""
+            findings_count = len(page_findings) if not page_data["blocked_reason"] else 0
+            append_log(
+                scan_job_id,
+                f"[{scanned_idx}/{scanning_total}] {page_data['url']} "
+                f"HTTP {page_data['status_code']} {blocked}→ {findings_count} 項問題",
+            )
             raise_if_cancelled(scan_job_id)
 
         # Katana 補充掃描：JS 秘鑰偵測、技術棧識別、JS 端點挖掘
         # 靜默失敗：Docker 不可用或 Katana 超時時僅記錄警告，不影響主掃描
+        append_log(scan_job_id, "Katana 補充掃描開始（JS 秘鑰 / 技術棧 / 端點）")
         try:
             katana_findings, katana_tech = run_katana(
                 scan_job.normalized_url,
@@ -148,20 +165,27 @@ def run_scan_job(self, scan_job_id: int) -> dict:
                 updated_warnings["tech_stack"] = katana_tech
                 scan_job.warning_summary = updated_warnings
                 scan_job.save(update_fields=["warning_summary", "updated_at"])
-        except Exception:  # noqa: BLE001 — Katana 失敗不應讓整個掃描失敗
-            pass
+            append_log(
+                scan_job_id,
+                f"Katana 完成：{len(katana_findings)} 項資安發現"
+                + (f"，技術棧：{', '.join(katana_tech)}" if katana_tech else ""),
+            )
+        except Exception as exc:  # noqa: BLE001 — Katana 失敗不應讓整個掃描失敗
+            append_log(scan_job_id, f"Katana 略過（{exc.__class__.__name__}）", level="warn")
 
         # 站台層級的 GEO FAST 檢查（llms.txt、AI 爬蟲可存取性）
         site_findings = analyze_site_signals(site_signals)
         for finding in site_findings:
             Finding.objects.create(scan_job=scan_job, page=None, **finding)
         all_findings.extend(site_findings)
+        append_log(scan_job_id, f"站台訊號分析完成：{len(site_findings)} 項發現")
 
         # T14 主動式資安：只在 active 模式 + 額外授權下執行；RPS 限制由 RateLimitedClient 強制
         if (
             scan_job.scan_mode == ScanJob.ScanMode.ACTIVE
             and scan_job.active_testing_authorized
         ):
+            append_log(scan_job_id, "主動式資安探測開始（路徑枚舉 / 目錄 / SQLi）")
             active_findings = run_active_probes(
                 origin=scan_job.origin,
                 pages=scan_job.pages.all(),
@@ -169,6 +193,7 @@ def run_scan_job(self, scan_job_id: int) -> dict:
             for finding in active_findings:
                 Finding.objects.create(scan_job=scan_job, page=None, **finding)
             all_findings.extend(active_findings)
+            append_log(scan_job_id, f"主動探測完成：{len(active_findings)} 項發現")
 
         # Phase 2：可選的 Hermes-Agent 動態 UX 測試
         # 預設 ARGUS_AGENT_ENABLED=False；只在使用者明確啟用時才跑，避免每次掃描都消耗 LLM token。
@@ -215,6 +240,10 @@ def run_scan_job(self, scan_job_id: int) -> dict:
                 agent_meta = {"status": "error", "error": exc.__class__.__name__}
 
         overall_score, category_scores, top_actions = calculate_scores(all_findings)
+        append_log(
+            scan_job_id,
+            f"掃描完成 — 總分 {overall_score}，共 {len(all_findings)} 項發現",
+        )
         scan_job.status = ScanJob.Status.COMPLETED
         scan_job.overall_score = overall_score
         scan_job.category_scores = category_scores
@@ -249,9 +278,7 @@ def run_scan_job(self, scan_job_id: int) -> dict:
             "agent": agent_meta,
         }
     except ScanCancelled:
-        # 使用者主動終止：API 已經把 status 設為 CANCELLED，這裡補上 completed_at
-        # 與清空 progress；不算失敗，不再 raise（避免 Celery 把它標為 task 失敗）。
-        # cancel 的退款由 API 端在使用者按下時即時執行（避免 worker 還沒走到 except）。
+        append_log(scan_job_id, "掃描已被使用者終止", level="warn")
         ScanJob.objects.filter(id=scan_job_id).update(
             status=ScanJob.Status.CANCELLED,
             completed_at=timezone.now(),
@@ -264,11 +291,14 @@ def run_scan_job(self, scan_job_id: int) -> dict:
             pass
         return {"status": "cancelled"}
     except Exception as exc:
-        scan_job.status = ScanJob.Status.FAILED
-        # 只存類別名（"Error"）會讓使用者在 UI 看到「掃描失敗：Error」，無法診斷。
-        # 帶上 str(exc) 截斷至 500 字（避免完整 traceback 灌爆欄位、洩漏內部路徑）。
         detail = str(exc).strip()[:500]
         class_name = exc.__class__.__name__
+        append_log(
+            scan_job_id,
+            f"掃描失敗：{class_name}: {detail}" if detail else f"掃描失敗：{class_name}",
+            level="error",
+        )
+        scan_job.status = ScanJob.Status.FAILED
         scan_job.error_message = f"{class_name}: {detail}" if detail else class_name
         scan_job.completed_at = timezone.now()
         scan_job.progress = {}

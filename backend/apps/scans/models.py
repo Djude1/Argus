@@ -51,6 +51,8 @@ class ScanJob(models.Model):
     # {pages_done: int, pages_total: int, phase: "crawling"|"scanning"|"agent_testing",
     #  phase_started_at: ISO8601 str}
     progress = models.JSONField(default=dict, blank=True)
+    # 掃描執行日誌（worker 寫入；每筆 {t: ISO8601, lvl: "info"|"warn"|"error", msg: str}）
+    scan_log = models.JSONField(default=list, blank=True)
     error_message = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
