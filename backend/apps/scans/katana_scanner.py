@@ -335,7 +335,7 @@ def _extract_endpoint_finding(record: dict[str, Any]) -> dict | None:
 
     if any(low.endswith(ext) for ext in skip_exts):
         return None
-    if any(low.contains(p) if hasattr(low, 'contains') else p in low for p in skip_prefixes):
+    if any(p in low for p in skip_prefixes):
         return None
 
     # 只回報 /api/ 路徑（明確的 API 端點）
