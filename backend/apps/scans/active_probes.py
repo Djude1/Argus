@@ -146,33 +146,79 @@ def _make_finding(
 
 # ----- admin path enumeration -----
 
+# soft 404 判斷：body 長度差異低於此比例視為相同頁面（SPA catch-all）
+_SOFT_404_SIMILARITY_THRESHOLD = 0.10
+
+
+def _detect_soft_404_body_len(origin: str, client: RateLimitedClient) -> int | None:
+    """打一個隨機 canary 路徑確認站台是否為 soft 404（SPA catch-all）。
+
+    若 canary 回傳 HTTP 200，表示站台對所有不存在路徑都回傳相同頁面，
+    回傳 canary 回應的 body 長度作為比較基準；否則回傳 None。
+    """
+    canary = "__argus_canary_probe_7f3a9b2c__"
+    url = urljoin(origin.rstrip("/") + "/", canary)
+    resp = client.get(url)
+    if resp is not None and resp.status_code == 200:
+        return len(resp.text or "")
+    return None
+
 
 def probe_admin_paths(origin: str, client: RateLimitedClient) -> list[dict]:
-    """對 origin 探測常見後台路徑；命中即建立 finding。"""
+    """對 origin 探測常見後台路徑；命中即建立 finding。
+
+    soft 404 偵測：若站台對任意路徑回傳 200（SPA / catch-all），
+    改用 GET 比較 body 長度；與 canary 頁面相近的 200 視為 soft 404，略過。
+    401/403 無論如何都視為真實命中（伺服器主動拒絕，代表路徑存在）。
+    """
     findings: list[dict] = []
+    soft_404_len = _detect_soft_404_body_len(origin, client)
+
     for path in ADMIN_PATH_DICTIONARY:
         url = urljoin(origin.rstrip("/") + "/", path)
-        resp = client.head(url, allow_redirects=False)
-        if resp is None:
-            continue
-        status = resp.status_code
-        if status in {200, 301, 302, 401, 403}:
-            findings.append(
-                _make_finding(
-                    severity="medium" if status in {401, 403} else "high",
-                    title=f"偵測到可能暴露的後台或敏感路徑：/{path}",
-                    description=(
-                        f"路徑 {url} 回傳 HTTP {status}，可能是後台、設定檔備份或內部端點。"
-                        "外部使用者若能枚舉到這類路徑，會增加被暴力嘗試或資訊洩漏的風險。"
-                    ),
-                    remediation=(
-                        "確認此路徑是否真的需對公開網路開放；若否，限制存取（IP 白名單、"
-                        "VPN、移除備份檔）。若是必要端點，加強認證與速率限制，並避免可被列舉的命名。"
-                    ),
-                    evidence=f"HEAD {url} → HTTP {status}",
-                    impact_area="path_enumeration",
-                )
+
+        if soft_404_len is not None:
+            # Soft 404 站台：HEAD 只用來快速排除非 2xx/3xx/4xx，200 需 GET 複驗
+            head_resp = client.head(url, allow_redirects=False)
+            if head_resp is None:
+                continue
+            status = head_resp.status_code
+            if status not in {200, 301, 302, 401, 403}:
+                continue
+            if status == 200:
+                # 做 GET 取得實際 body，與 canary 比較
+                get_resp = client.get(url)
+                if get_resp is None:
+                    continue
+                body_len = len(get_resp.text or "")
+                # body 長度與 canary 差異 < 10%，視為 soft 404，略過
+                diff_ratio = abs(body_len - soft_404_len) / max(soft_404_len, 1)
+                if diff_ratio < _SOFT_404_SIMILARITY_THRESHOLD:
+                    continue
+        else:
+            head_resp = client.head(url, allow_redirects=False)
+            if head_resp is None:
+                continue
+            status = head_resp.status_code
+            if status not in {200, 301, 302, 401, 403}:
+                continue
+
+        findings.append(
+            _make_finding(
+                severity="medium" if status in {401, 403} else "high",
+                title=f"偵測到可能暴露的後台或敏感路徑：/{path}",
+                description=(
+                    f"路徑 {url} 回傳 HTTP {status}，可能是後台、設定檔備份或內部端點。"
+                    "外部使用者若能枚舉到這類路徑，會增加被暴力嘗試或資訊洩漏的風險。"
+                ),
+                remediation=(
+                    "確認此路徑是否真的需對公開網路開放；若否，限制存取（IP 白名單、"
+                    "VPN、移除備份檔）。若是必要端點，加強認證與速率限制，並避免可被列舉的命名。"
+                ),
+                evidence=f"HEAD {url} → HTTP {status}",
+                impact_area="path_enumeration",
             )
+        )
     return findings
 
 
