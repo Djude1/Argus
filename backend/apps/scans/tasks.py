@@ -9,6 +9,7 @@ from apps.billing.services import refund_full_for_scan, settle_scan_actual
 from apps.scans.active_probes import run_active_probes
 from apps.scans.cancellation import ScanCancelled, is_cancelled, raise_if_cancelled
 from apps.scans.crawler import crawl_site
+from apps.scans.katana_scanner import run_katana
 from apps.scans.models import Finding, Page, ScanJob
 from apps.scans.scanners import (
     PageAnalysisInput,
@@ -130,6 +131,25 @@ def run_scan_job(self, scan_job_id: int) -> dict:
                 phase_started_at=scan_phase_started,
             )
             raise_if_cancelled(scan_job_id)
+
+        # Katana 補充掃描：JS 秘鑰偵測、技術棧識別、JS 端點挖掘
+        # 靜默失敗：Docker 不可用或 Katana 超時時僅記錄警告，不影響主掃描
+        try:
+            katana_findings, katana_tech = run_katana(
+                scan_job.normalized_url,
+                max_depth=scan_job.max_depth,
+                max_pages=scan_job.max_pages,
+            )
+            for finding in katana_findings:
+                Finding.objects.create(scan_job=scan_job, page=None, **finding)
+            all_findings.extend(katana_findings)
+            if katana_tech:
+                updated_warnings = dict(scan_job.warning_summary or {})
+                updated_warnings["tech_stack"] = katana_tech
+                scan_job.warning_summary = updated_warnings
+                scan_job.save(update_fields=["warning_summary", "updated_at"])
+        except Exception:  # noqa: BLE001 — Katana 失敗不應讓整個掃描失敗
+            pass
 
         # 站台層級的 GEO FAST 檢查（llms.txt、AI 爬蟲可存取性）
         site_findings = analyze_site_signals(site_signals)
