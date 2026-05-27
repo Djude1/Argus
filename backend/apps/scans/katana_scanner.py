@@ -1,9 +1,9 @@
 """Katana 補充型爬蟲整合。
 
 透過 Docker 執行 projectdiscovery/katana，提供：
-- JS 秘鑰偵測（-kb-secrets）
-- 技術棧識別（-td）
-- JS 端點挖掘（-jc）
+- JS 端點挖掘（-jc）：從 JS 原始碼解析出隱藏 API 路由
+- JS 秘鑰解析（-jsl）：jsluice 深度分析 JS 檔案中的秘鑰與端點
+- 技術棧識別（-td）：識別框架/版本，存入 warning_summary.tech_stack
 
 設計原則：
 - Docker 不可用或 Katana 失敗時靜默回傳空結果，不影響主掃描流程。
@@ -21,6 +21,18 @@ from typing import Any
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
+
+# Vite dev server 路徑特徵：這些路徑若回傳 200 代表原始碼暴露
+_VITE_DEV_SIGNATURES = (
+    "/@vite/",
+    "/@react-refresh",
+    "/node_modules/.vite/",
+    "/node_modules/vite/",
+    "/@fs/",
+)
+
+# 原始碼路徑特徵：.jsx/.tsx/.vue 暴露代表 dev server 在 production
+_SOURCE_EXT_SIGNATURES = (".jsx", ".tsx", ".vue", ".svelte")
 
 # 秘鑰類型嚴重度映射
 _SECRET_SEVERITY: dict[str, str] = {
@@ -62,10 +74,10 @@ def run_katana(
         image,
         "-u", url,
         "-d", str(max_depth),
-        "-jc",
-        "-td",
-        "-kb-secrets",
-        "-j",
+        "-jc",           # JS 端點解析
+        "-jsl",          # jsluice 深度 JS 秘鑰挖掘
+        "-td",           # 技術棧識別
+        "-j",            # JSONL 輸出
         "-silent",
         "-timeout", "10",
         "-rl", "10",
@@ -105,6 +117,7 @@ def _parse_jsonl_lines(lines: list[str]) -> tuple[list[dict], list[str]]:
     """解析 Katana JSONL 輸出，回傳 (findings, tech_stack)。"""
     findings: list[dict] = []
     tech_set: set[str] = set()
+    vite_dev_reported = False  # 同一次掃描只回報一次 Vite dev server 警告
 
     for line in lines:
         line = line.strip()
@@ -119,10 +132,17 @@ def _parse_jsonl_lines(lines: list[str]) -> tuple[list[dict], list[str]]:
         for tech in _extract_technologies(record):
             tech_set.add(tech)
 
-        # 秘鑰 findings
-        findings.extend(_extract_secret_findings(record))
+        # jsluice 秘鑰 findings
+        findings.extend(_extract_jsluice_findings(record))
 
-        # JS 端點 findings
+        # Vite dev server 暴露偵測
+        if not vite_dev_reported:
+            vite_finding = _detect_vite_dev_exposure(record)
+            if vite_finding:
+                findings.append(vite_finding)
+                vite_dev_reported = True
+
+        # 隱藏 API 端點偵測
         endpoint_finding = _extract_endpoint_finding(record)
         if endpoint_finding:
             findings.append(endpoint_finding)
@@ -131,49 +151,36 @@ def _parse_jsonl_lines(lines: list[str]) -> tuple[list[dict], list[str]]:
 
 
 def _extract_technologies(record: dict[str, Any]) -> list[str]:
-    """從 JSONL 記錄提取技術棧清單。"""
-    techs: list[str] = []
+    """從 JSONL 記錄提取技術棧清單（response.technologies 為字串列表）。"""
     response = record.get("response") or {}
-
-    # Katana -td 輸出：response.technologies 為字串列表
     raw = response.get("technologies") or []
     if isinstance(raw, list):
-        for item in raw:
-            if isinstance(item, str) and item.strip():
-                techs.append(item.strip())
-    return techs
+        return [item.strip() for item in raw if isinstance(item, str) and item.strip()]
+    return []
 
 
-def _extract_secret_findings(record: dict[str, Any]) -> list[dict]:
-    """從 JSONL 記錄提取秘鑰 finding。
+def _extract_jsluice_findings(record: dict[str, Any]) -> list[dict]:
+    """從 jsluice 欄位提取秘鑰 finding。
 
-    Katana -kb-secrets 可能將秘鑰放在以下欄位之一（版本差異）：
-    - record["knowledge_base"]["secrets"]
-    - record["secrets"]
-    - record["response"]["body_parsed"]["secrets"]
+    Katana -jsl 輸出的秘鑰資訊可能在：
+    - record["jsluice"]
+    - record["jsluice"]["secrets"]
     """
     findings: list[dict] = []
     endpoint = (record.get("request") or {}).get("endpoint", "")
 
-    # 嘗試多個可能的秘鑰欄位路徑
+    jsluice = record.get("jsluice")
+    if not jsluice:
+        return findings
+
+    # jsluice 可能是列表或 dict
     candidates: list[Any] = []
-
-    kb = record.get("knowledge_base") or {}
-    if isinstance(kb, dict):
-        s = kb.get("secrets") or []
+    if isinstance(jsluice, list):
+        candidates = jsluice
+    elif isinstance(jsluice, dict):
+        s = jsluice.get("secrets") or []
         if isinstance(s, list):
-            candidates.extend(s)
-
-    s = record.get("secrets") or []
-    if isinstance(s, list):
-        candidates.extend(s)
-
-    response = record.get("response") or {}
-    body_parsed = response.get("body_parsed") or {}
-    if isinstance(body_parsed, dict):
-        s = body_parsed.get("secrets") or []
-        if isinstance(s, list):
-            candidates.extend(s)
+            candidates = s
 
     for secret in candidates:
         if not isinstance(secret, dict):
@@ -187,9 +194,9 @@ def _extract_secret_findings(record: dict[str, Any]) -> list[dict]:
 
 def _build_secret_finding(secret: dict[str, Any], endpoint: str) -> dict | None:
     """將單筆 secret 記錄轉為 Argus finding dict。"""
-    secret_type = str(secret.get("type") or secret.get("name") or "secret").strip()
-    match_val = str(secret.get("match") or secret.get("value") or "").strip()
-    line_no = secret.get("line") or ""
+    secret_type = str(secret.get("type") or secret.get("name") or secret.get("kind") or "secret").strip()
+    match_val = str(secret.get("match") or secret.get("value") or secret.get("secret") or "").strip()
+    line_no = secret.get("line") or secret.get("line_number") or ""
 
     if not secret_type and not match_val:
         return None
@@ -239,54 +246,125 @@ def _build_secret_finding(secret: dict[str, Any], endpoint: str) -> dict | None:
     }
 
 
-def _extract_endpoint_finding(record: dict[str, Any]) -> dict | None:
-    """偵測可疑的隱藏 JS 端點（API 路由、內部路徑）。"""
+def _detect_vite_dev_exposure(record: dict[str, Any]) -> dict | None:
+    """偵測 Vite/Webpack dev server 原始碼暴露（生產環境誤用 dev server）。"""
     request = record.get("request") or {}
-    endpoint = request.get("endpoint", "")
     response = record.get("response") or {}
-    status = response.get("status_code", 0)
+    endpoint = request.get("endpoint", "")
+    status = response.get("status_code")
 
-    if not endpoint:
+    if not endpoint or not status:
         return None
 
-    # 只關注從 JS 解析出來的（非 HTML 連結）且回應成功的端點
+    try:
+        status_int = int(status)
+    except (ValueError, TypeError):
+        return None
+
+    if status_int not in range(200, 300):
+        return None
+
+    # 檢查 Vite dev server 特徵路徑
+    is_vite = any(sig in endpoint for sig in _VITE_DEV_SIGNATURES)
+    # 檢查原始 .jsx/.tsx/.vue 暴露
+    is_source = any(endpoint.endswith(ext) for ext in _SOURCE_EXT_SIGNATURES)
+
+    if not (is_vite or is_source):
+        return None
+
+    return {
+        "category": "security",
+        "severity": "critical",
+        "title": "生產環境暴露 Vite Dev Server 原始碼",
+        "description": (
+            f"偵測到 {endpoint} 回傳 HTTP {status_int}，"
+            "這表示網站在生產環境中執行了 Vite/開發用伺服器，導致完整前端原始碼（.jsx/.tsx、"
+            "node_modules 依賴快取）對外公開。攻擊者可直接讀取應用程式邏輯、路由結構、"
+            "API 端點，大幅降低逆向工程的難度。"
+        ),
+        "remediation": (
+            "立即將前端改以 `vite build` 打包後部署 `dist/` 目錄，不應在正式環境執行 `vite dev`。"
+            "確認 Web Server（Nginx/Cloudflare）只提供 `dist/` 目錄下的靜態檔案，"
+            "並封鎖對 `/src/`、`/node_modules/`、`/@vite/`、`/@react-refresh` 等路徑的存取。"
+        ),
+        "evidence": f"Katana 偵測：GET {endpoint} → HTTP {status_int}（應回傳 404）",
+        "selector": "",
+        "bounding_box": None,
+        "impact_area": "source_code_exposure",
+        "confidence": 0.95,
+        "priority_score": 95.0,
+        "ai_handoff_prompt": (
+            "我的網站在生產環境暴露了 Vite dev server 原始碼，請協助分析影響與修復：\n"
+            f"- 暴露端點範例：{endpoint}\n"
+            "請說明：1) 攻擊者能從原始碼中取得什麼資訊 "
+            "2) 正確的生產部署流程 3) 如何確認修復後原始碼不再外洩。"
+        ),
+    }
+
+
+def _extract_endpoint_finding(record: dict[str, Any]) -> dict | None:
+    """偵測可疑的隱藏 API 端點（非頁面、非靜態資源的路徑）。"""
+    request = record.get("request") or {}
+    response = record.get("response") or {}
+    endpoint = request.get("endpoint", "")
+    status = response.get("status_code")
     source = request.get("source", "")
-    is_js_discovered = "js" in source.lower() if isinstance(source, str) else False
-    if not is_js_discovered:
+
+    if not endpoint or not status or not source:
         return None
 
-    # 過濾掉靜態資源
+    # 只看 JS 中解析出來的端點（source 是某個頁面/JS 檔）
+    # 排除 source 就是自身的情況（直接爬到）
+    if endpoint == source:
+        return None
+
+    try:
+        status_int = int(status)
+    except (ValueError, TypeError):
+        return None
+
+    if status_int not in range(200, 300):
+        return None
+
     low = endpoint.lower()
-    if any(low.endswith(ext) for ext in (".js", ".css", ".png", ".jpg", ".svg", ".woff", ".woff2")):
+
+    # 排除靜態資源和已知開發模組
+    skip_exts = (".js", ".css", ".png", ".jpg", ".svg", ".woff", ".woff2", ".ico", ".map",
+                 ".jsx", ".tsx", ".vue", ".ts")
+    skip_prefixes = ("/@vite", "/@react", "/node_modules", "@vite", "@react")
+
+    if any(low.endswith(ext) for ext in skip_exts):
+        return None
+    if any(low.contains(p) if hasattr(low, 'contains') else p in low for p in skip_prefixes):
         return None
 
-    # 只回報回應 200-299 的可疑路徑（避免大量 404 雜訊）
-    if not (200 <= int(status) < 300):
+    # 只回報 /api/ 路徑（明確的 API 端點）
+    if "/api/" not in low and not low.endswith("/api"):
         return None
 
     return {
         "category": "security",
         "severity": "medium",
-        "title": f"JS 中發現隱藏端點：{endpoint}",
+        "title": f"JS 中發現隱藏 API 端點：{endpoint}",
         "description": (
-            f"Katana 從 JavaScript 原始碼中解析出端點 {endpoint}，"
-            "且該端點回應 HTTP {status}。此類端點可能是未公開的 API 路由或內部服務，"
+            f"Katana 從 JavaScript 原始碼中解析出 API 端點 {endpoint}，"
+            f"且該端點回應 HTTP {status_int}。此類端點可能未在文件中公開，"
             "若缺乏適當的存取控制，可能成為攻擊面。"
-        ).format(status=status),
+        ),
         "remediation": (
             "確認此端點是否需要對公開網路開放；若否，加上認證中介軟體或 IP 白名單。"
-            "建議將敏感端點路徑避免直接寫入前端 JS，改為後端動態產生。"
+            "建議對所有 API 端點實施統一的認證與授權策略。"
         ),
-        "evidence": f"Katana JS 解析：{endpoint} → HTTP {status}",
+        "evidence": f"Katana JS 解析：{endpoint} → HTTP {status_int}（來源：{source}）",
         "selector": "",
         "bounding_box": None,
         "impact_area": "exposed_endpoints",
-        "confidence": 0.7,
-        "priority_score": 55.0,
+        "confidence": 0.75,
+        "priority_score": 60.0,
         "ai_handoff_prompt": (
-            "我網站的 JS 檔案中發現隱藏端點，請協助評估風險：\n"
+            "我網站的 JS 檔案中發現隱藏 API 端點，請協助評估風險：\n"
             f"- 端點：{endpoint}\n"
-            f"- HTTP 狀態：{status}\n"
+            f"- HTTP 狀態：{status_int}\n"
             "請說明此類端點的常見攻擊向量與防護方式。"
         ),
     }
