@@ -2,7 +2,7 @@
 # gen_argus_v3.py  生成 Argus 系統手冊 v3（初審版，大學部，第1-8章）
 # 執行: uv run --project C:\Users\ntub\Desktop\Argus python gen_argus_v3.py
 
-import os, io
+import os, io, re
 from docx import Document
 from docx.shared import Pt, Cm, RGBColor, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
@@ -95,19 +95,21 @@ def _cell_add_para(cell, text, size=Pt(11), bold=False,
 # ── 段落層級工具 ────────────────────────────────────
 
 def add_chapter(doc, text):
-    p = doc.add_paragraph()
+    p = doc.add_paragraph(style='Heading 1')
     p.alignment = WD_ALIGN_PARAGRAPH.LEFT
     run = p.add_run(text)
     _set_run_font(run, CHAP_SIZE, bold=True)
-    _set_para_spacing(p, before=24, after=12, ls=1.5)
+    run.font.color.rgb = RGBColor(0, 0, 0)   # 取消 Heading 預設藍色
+    _set_para_spacing(p, before=18, after=10)
 
 
 def add_section(doc, text):
-    p = doc.add_paragraph()
+    p = doc.add_paragraph(style='Heading 2')
     p.alignment = WD_ALIGN_PARAGRAPH.LEFT
     run = p.add_run(text)
     _set_run_font(run, SEC_SIZE, bold=True)
-    _set_para_spacing(p, before=18, after=6, ls=1.5)
+    run.font.color.rgb = RGBColor(0, 0, 0)
+    _set_para_spacing(p, before=12, after=6)
 
 
 def add_body(doc, text, indent=False, bold=False):
@@ -137,20 +139,60 @@ def add_bullet(doc, text, level=0):
     _set_para_spacing(p, before=0, after=3, ls=1.5)
 
 
-def add_fig_caption(doc, text):
+def _add_field(paragraph, instr, default_text="（請按 F9 更新欄位）"):
+    """插入 Word 欄位（begin/instrText/separate/text/end）"""
+    run = paragraph.add_run()
+    r = run._r
+    fc1 = OxmlElement('w:fldChar'); fc1.set(qn('w:fldCharType'), 'begin'); r.append(fc1)
+    it = OxmlElement('w:instrText'); it.set(qn('xml:space'), 'preserve'); it.text = instr; r.append(it)
+    fc2 = OxmlElement('w:fldChar'); fc2.set(qn('w:fldCharType'), 'separate'); r.append(fc2)
+    t = OxmlElement('w:t'); t.text = default_text; r.append(t)
+    fc3 = OxmlElement('w:fldChar'); fc3.set(qn('w:fldCharType'), 'end'); r.append(fc3)
+    _set_run_font(run, BODY_SIZE)
+
+
+def _add_seq_caption(doc, prefix, chapter_no, text, above):
+    """圖/表標號：prefix='圖'|'表'；章碼固定、章內流水以 SEQ 自動編號。
+    呈現為『圖 3-1　名稱』（章-SEQ）；套 Caption 樣式供圖/表目錄欄位收集。"""
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run = p.add_run(text)
+    try:
+        p.style = doc.styles['Caption']
+    except KeyError:
+        pass
+    run = p.add_run(f"{prefix} {chapter_no}-")
     _set_run_font(run, BODY_SIZE)
-    _set_para_spacing(p, before=4, after=12, ls=1.0)
+    seqrun = p.add_run()
+    # SEQ 識別碼固定為「圖」/「表」（供圖表目錄 \c 收集）；\s 1 使每遇 Heading 1 重置 → 章內流水
+    for tag, txt in [('begin', None), (None, f' SEQ {prefix} \\s 1 \\* ARABIC '), ('end', None)]:
+        if tag:
+            fc = OxmlElement('w:fldChar'); fc.set(qn('w:fldCharType'), tag); seqrun._r.append(fc)
+        else:
+            it = OxmlElement('w:instrText'); it.set(qn('xml:space'), 'preserve'); it.text = txt; seqrun._r.append(it)
+    _set_run_font(seqrun, BODY_SIZE)
+    tail = p.add_run("　" + text)
+    _set_run_font(tail, BODY_SIZE)
+    _set_para_spacing(p, before=(12 if above else 4), after=(4 if above else 12))
+    return p
+
+
+def _parse_caption(full):
+    """從『圖 3-1-1　名稱』解析出 (prefix, 章碼, 名稱)。"""
+    m = re.match(r'^(圖|表)\s*(\d+)-\d+-\d+\s*[　 ]\s*(.*)$', full)
+    if m:
+        return m.group(1), m.group(2), m.group(3)
+    m2 = re.match(r'^(圖|表)\s*[　 ]\s*(.*)$', full)
+    return (m2.group(1), "0", m2.group(2)) if m2 else ("圖", "0", full)
+
+
+def add_fig_caption(doc, text):
+    prefix, ch, body = _parse_caption(text)
+    _add_seq_caption(doc, prefix, ch, body, above=False)
 
 
 def add_table_caption(doc, text):
-    p = doc.add_paragraph()
-    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run = p.add_run(text)
-    _set_run_font(run, BODY_SIZE)
-    _set_para_spacing(p, before=12, after=4, ls=1.0)
+    prefix, ch, body = _parse_caption(text)
+    _add_seq_caption(doc, prefix, ch, body, above=True)
 
 
 def add_placeholder(doc, caption, width=Cm(14)):
@@ -334,133 +376,30 @@ def add_cover(doc):
 # ── 目錄 / 圖目錄 / 表目錄 ────────────────────────────
 
 def add_toc_pages(doc):
-    # ── 目錄 ──
-    p = doc.add_paragraph()
-    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run = p.add_run("目　　錄")
-    _set_run_font(run, CHAP_SIZE, bold=True)
-    _set_para_spacing(p, before=12, after=12, ls=1.5)
-
-    toc = [
-        ("第1章　前言", True),
-        ("　1-1　背景介紹", False),
-        ("　1-2　動機", False),
-        ("　1-3　系統目的與目標", False),
-        ("　1-4　預期成果", False),
-        ("第2章　營運計畫", True),
-        ("　2-1　可行性分析", False),
-        ("　2-2　商業模式（Business Model）", False),
-        ("　2-3　市場分析（STP）", False),
-        ("　2-4　競爭力分析（SWOT-TOWS 分析）", False),
-        ("第3章　系統規格", True),
-        ("　3-1　系統架構", False),
-        ("　3-2　系統軟、硬體需求與技術平台", False),
-        ("　3-3　使用標準與工具", False),
-        ("第4章　專案時程與組織分工", True),
-        ("　4-1　專案時程", False),
-        ("　4-2　專案組織與分工", False),
-        ("　4-3　上傳 GitHub 紀錄", False),
-        ("第5章　需求模型", True),
-        ("　5-1　使用者需求", False),
-        ("　5-2　使用個案圖（Use Case Diagram）", False),
-        ("　5-3　使用個案描述（Activity Diagram）", False),
-        ("　5-4　分析類別圖（Analysis Class Diagram）", False),
-        ("第6章　設計模型", True),
-        ("　6-1　循序圖（Sequential Diagram）", False),
-        ("　6-2　設計類別圖（Design Class Diagram）", False),
-        ("第7章　實作模型", True),
-        ("　7-1　佈署圖（Deployment Diagram）", False),
-        ("　7-2　套件圖（Package Diagram）", False),
-        ("　7-3　元件圖（Component Diagram）", False),
-        ("　7-4　狀態機（State Machine）", False),
-        ("第8章　資料庫設計", True),
-        ("　8-1　資料庫關聯表", False),
-        ("　8-2　表格及其 Meta Data", False),
-        ("參考資料", True),
-    ]
-    for title, bold in toc:
+    def heading(title):
         p = doc.add_paragraph()
-        p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
         run = p.add_run(title)
-        _set_run_font(run, BODY_SIZE, bold=bold)
-        _set_para_spacing(p, before=0, after=1, ls=1.5)
+        _set_run_font(run, CHAP_SIZE, bold=True)
+        run.font.color.rgb = RGBColor(0, 0, 0)
+        _set_para_spacing(p, before=12, after=12)
+
+    # ── 目錄（TOC 欄位，收集 Heading 1-2）──
+    heading("目　　錄")
+    p = doc.add_paragraph()
+    _add_field(p, 'TOC \\o "1-2" \\h \\z \\u')
     doc.add_page_break()
 
-    # ── 圖目錄 ──
+    # ── 圖目錄（Table of Figures，收集 SEQ 圖）──
+    heading("圖 目 錄")
     p = doc.add_paragraph()
-    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run = p.add_run("圖 目 錄")
-    _set_run_font(run, CHAP_SIZE, bold=True)
-    _set_para_spacing(p, before=12, after=12, ls=1.5)
-
-    figs = [
-        "圖 1-2-1　各平台功能比較雷達圖",
-        "圖 2-1-1　主要競品月費比較（2024年）",
-        "圖 2-1-2　目標市場區隔分布（估計）",
-        "圖 2-2-1　商業模式畫布（Business Model Canvas）",
-        "圖 2-4-1　競爭力分析 SWOT-TOWS 矩陣",
-        "圖 3-1-1　Argus 系統架構圖（PlantUML）",
-        "圖 4-1-1　專案甘特圖（114/09–115/06）",
-        "圖 4-3-1　GitHub 提交紀錄截圖",
-        "圖 5-2-1　使用個案圖（Use Case Diagram）",
-        "圖 5-3-1　活動圖：提交掃描任務（Activity Diagram）",
-        "圖 5-4-1　分析類別圖（Analysis Class Diagram）",
-        "圖 6-1-1　掃描任務循序圖（Sequential Diagram）",
-        "圖 6-2-1　設計類別圖（Design Class Diagram）",
-        "圖 7-1-1　Docker Compose 佈署圖（Deployment Diagram）",
-        "圖 7-2-1　套件架構圖（Package Diagram）",
-        "圖 7-3-1　系統元件圖（Component Diagram）",
-        "圖 7-4-1　ScanJob 狀態機圖（State Machine）",
-        "圖 8-1-1　資料庫 ER 圖（Entity-Relationship Diagram）",
-    ]
-    for f in figs:
-        p = doc.add_paragraph()
-        run = p.add_run(f)
-        _set_run_font(run, BODY_SIZE)
-        _set_para_spacing(p, before=0, after=1, ls=1.5)
+    _add_field(p, 'TOC \\h \\z \\c "圖"')
     doc.add_page_break()
 
-    # ── 表目錄 ──
+    # ── 表目錄（Table of Figures，收集 SEQ 表）──
+    heading("表 目 錄")
     p = doc.add_paragraph()
-    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run = p.add_run("表 目 錄")
-    _set_run_font(run, CHAP_SIZE, bold=True)
-    _set_para_spacing(p, before=12, after=12, ls=1.5)
-
-    tbls = [
-        "表 1-2-1　各平台功能特性比較表",
-        "表 2-1-1　技術可行性評估表",
-        "表 2-2-1　商業模式畫布（Business Model Canvas）",
-        "表 2-3-1　STP 市場分析",
-        "表 2-4-1　競爭力分析 SWOT-TOWS 矩陣",
-        "表 3-2-1　硬體環境需求規格",
-        "表 3-2-2　軟體環境需求規格",
-        "表 3-3-1　使用標準與工具表",
-        "表 4-1-1　專案甘特圖",
-        "表 4-2-1　專案組織分工表",
-        "表 4-2-2　專題成果工作內容與貢獻度表",
-        "表 5-1-1　功能需求清單",
-        "表 5-1-2　非功能需求清單",
-        "表 5-3-1　使用個案描述",
-        "表 6-2-1　設計類別主要屬性與方法規格",
-        "表 7-1-1　容器通訊規格",
-        "表 7-4-1　ScanJob 狀態說明",
-        "表 8-2-1　auth_user 資料表",
-        "表 8-2-2　billing_coinwallet 資料表",
-        "表 8-2-3　billing_cointransaction 資料表",
-        "表 8-2-4　billing_pricingplan 資料表",
-        "表 8-2-5　billing_purchaseorder 資料表",
-        "表 8-2-6　scans_scanjob 資料表",
-        "表 8-2-7　scans_page 資料表",
-        "表 8-2-8　scans_finding 資料表",
-        "表 8-2-9　reviews_platformreview 資料表",
-        "表 8-2-10　admin_api_adminauditlog 資料表",
-    ]
-    for t in tbls:
-        p = doc.add_paragraph()
-        run = p.add_run(t)
-        _set_run_font(run, BODY_SIZE)
-        _set_para_spacing(p, before=0, after=1, ls=1.5)
+    _add_field(p, 'TOC \\h \\z \\c "表"')
     doc.add_page_break()
 
 # ── 第1章　前言 ─────────────────────────────────────
@@ -2015,6 +1954,11 @@ def main():
     ch7(doc); doc.add_page_break()
     ch8(doc); doc.add_page_break()
     add_references(doc)
+
+    # 開啟文件時自動更新欄位（目錄/圖目錄/表目錄頁碼）
+    settings = doc.settings.element
+    upd = OxmlElement('w:updateFields'); upd.set(qn('w:val'), 'true')
+    settings.append(upd)
 
     doc.save(OUT_DOCX)
     print(f"[OK] 已儲存：{OUT_DOCX}")
