@@ -9,18 +9,22 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from apps.billing.models import CoinWallet
-from apps.scans.crawler import classify_blocked, compute_min_interval
+from apps.scans.crawler import classify_blocked, classify_cf_challenge, compute_min_interval
 from apps.scans.models import AuthorizationConsent, Finding, Page, ScanJob
 from apps.scans.scanners import (
     PageAnalysisInput,
     analyze_aeo,
+    analyze_data_exposure,
     analyze_geo_fast,
     analyze_page,
     analyze_site_signals,
     calculate_scores,
     detect_faq_structure,
+    detect_pii_in_text,
     is_admin_path,
     is_binary_resource,
+    is_valid_luhn,
+    is_valid_tw_national_id,
     parse_html_signals,
 )
 
@@ -248,6 +252,177 @@ class CrawlerHelperTests(APITestCase):
         self.assertEqual(classify_blocked(200), "")
         self.assertEqual(classify_blocked(404), "")
         self.assertEqual(classify_blocked(None), "")
+
+    def test_classify_cf_challenge_detects_js_challenge(self):
+        html = (
+            "<html><head><title>Just a moment...</title>"
+            '<script src="/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1"></script>'
+            "</head><body></body></html>"
+        )
+        self.assertEqual(
+            classify_cf_challenge(html),
+            "Cloudflare JavaScript 驗證，自動掃描無法通過",
+        )
+
+    def test_classify_cf_challenge_detects_browser_verification(self):
+        html = '<div id="cf-browser-verification">驗證中</div>'
+        self.assertEqual(
+            classify_cf_challenge(html),
+            "Cloudflare JavaScript 驗證，自動掃描無法通過",
+        )
+
+    def test_classify_cf_challenge_detects_turnstile(self):
+        html = '<div class="cf-turnstile" data-sitekey="xxx"></div>'
+        self.assertEqual(
+            classify_cf_challenge(html),
+            "Cloudflare Turnstile 驗證，需使用者互動才能通過",
+        )
+
+    def test_classify_cf_challenge_turnstile_takes_priority_over_js(self):
+        # 兩種標記並存時 Turnstile 較嚴重（必擋），應優先回報
+        html = (
+            '<script src="/cdn-cgi/challenge-platform/x.js"></script>'
+            '<div class="cf-turnstile"></div>'
+        )
+        self.assertEqual(
+            classify_cf_challenge(html),
+            "Cloudflare Turnstile 驗證，需使用者互動才能通過",
+        )
+
+    def test_classify_cf_challenge_ignores_normal_html(self):
+        html = "<html><body><h1>歡迎</h1><p>這是正常頁面內容</p></body></html>"
+        self.assertEqual(classify_cf_challenge(html), "")
+
+    def test_classify_cf_challenge_handles_empty_input(self):
+        self.assertEqual(classify_cf_challenge(""), "")
+        self.assertEqual(classify_cf_challenge(None), "")
+
+    def test_classify_cf_challenge_ignores_just_a_moment_phrase(self):
+        # 不收錄「Just a moment」短語標記，避免正常文章正文出現該短語時誤判
+        html = "<p>Just a moment, please wait while I finish typing...</p>"
+        self.assertEqual(classify_cf_challenge(html), "")
+
+
+class PiiDetectionTests(APITestCase):
+    """PII 偵測測試：含檢查碼驗證、false positive 緩解、警示文字。"""
+
+    # --- 身分證檢查碼 ---
+    def test_is_valid_tw_national_id_accepts_known_valid(self):
+        # 範例為自構符合內政部演算法的合法格式（非真實人物）
+        self.assertTrue(is_valid_tw_national_id("A123456789"))
+        self.assertTrue(is_valid_tw_national_id("B100000002"))
+
+    def test_is_valid_tw_national_id_rejects_invalid_checksum(self):
+        # 格式對但檢查碼錯誤
+        self.assertFalse(is_valid_tw_national_id("A123456788"))
+        self.assertFalse(is_valid_tw_national_id("A000000000"))
+
+    def test_is_valid_tw_national_id_rejects_malformed(self):
+        self.assertFalse(is_valid_tw_national_id(""))
+        self.assertFalse(is_valid_tw_national_id("A12345678"))  # 太短
+        self.assertFalse(is_valid_tw_national_id("A1234567890"))  # 太長
+        self.assertFalse(is_valid_tw_national_id("1234567890"))  # 缺字母
+
+    # --- Luhn 信用卡 ---
+    def test_is_valid_luhn_accepts_known_test_cards(self):
+        # Visa / MasterCard 測試卡號（業界公開測試用）
+        self.assertTrue(is_valid_luhn("4111111111111111"))
+        self.assertTrue(is_valid_luhn("5555555555554444"))
+
+    def test_is_valid_luhn_rejects_invalid(self):
+        self.assertFalse(is_valid_luhn("4111111111111112"))  # 末位錯
+        self.assertFalse(is_valid_luhn("1234567890123456"))  # 隨機 16 位
+        self.assertFalse(is_valid_luhn("123"))  # 太短
+
+    # --- detect_pii_in_text 整合 ---
+    def test_detect_pii_finds_email(self):
+        result = detect_pii_in_text("聯絡 a@b.com 或 admin@example.tw 謝謝")
+        self.assertIn("a@b.com", result["email"])
+        self.assertIn("admin@example.tw", result["email"])
+
+    def test_detect_pii_finds_taiwan_mobile(self):
+        result = detect_pii_in_text("手機 0912345678 或 0987-654-321")
+        self.assertIn("0912345678", result["mobile"])
+        self.assertIn("0987-654-321", result["mobile"])
+
+    def test_detect_pii_ignores_mobile_embedded_in_long_digits(self):
+        # 09 開頭但是更長數字串的一部分（例如商品編號），不應誤判
+        result = detect_pii_in_text("訂單號 12309123456789012")
+        self.assertEqual(result["mobile"], [])
+
+    def test_detect_pii_finds_national_id_with_valid_checksum(self):
+        result = detect_pii_in_text("身分證 A123456789 已驗證")
+        self.assertIn("A123456789", result["national_id"])
+
+    def test_detect_pii_ignores_national_id_with_invalid_checksum(self):
+        # 格式符合 regex 但檢查碼錯誤，應被過濾
+        result = detect_pii_in_text("亂寫一個 A123456780 應該不通過")
+        self.assertEqual(result["national_id"], [])
+
+    def test_detect_pii_finds_credit_card_with_valid_luhn(self):
+        result = detect_pii_in_text("卡號 4111-1111-1111-1111 已收")
+        self.assertEqual(len(result["credit_card"]), 1)
+
+    def test_detect_pii_ignores_random_digits_failing_luhn(self):
+        result = detect_pii_in_text("流水號 1234567890123456 不是卡號")
+        self.assertEqual(result["credit_card"], [])
+
+    def test_detect_pii_dedups_repeated_values(self):
+        result = detect_pii_in_text("a@b.com a@b.com a@b.com 重複出現")
+        self.assertEqual(result["email"], ["a@b.com"])
+
+    def test_detect_pii_empty_input(self):
+        result = detect_pii_in_text("")
+        self.assertEqual(result["email"], [])
+        self.assertEqual(result["mobile"], [])
+        self.assertEqual(result["national_id"], [])
+        self.assertEqual(result["credit_card"], [])
+
+    def test_detect_pii_none_input(self):
+        result = detect_pii_in_text(None)
+        self.assertEqual(sum(len(v) for v in result.values()), 0)
+
+    # --- analyze_data_exposure（finding 結構與警示）---
+    def _page_input(self, html: str) -> PageAnalysisInput:
+        return PageAnalysisInput(
+            url="https://example.com/",
+            final_url="https://example.com/",
+            title="測試",
+            html=html,
+            headers={},
+            element_boxes={},
+        )
+
+    def test_analyze_data_exposure_returns_no_finding_on_clean_page(self):
+        findings = analyze_data_exposure(self._page_input("<p>沒有任何個資的頁面</p>"))
+        self.assertEqual(findings, [])
+
+    def test_analyze_data_exposure_finding_contains_warning_prefix(self):
+        # 警示文字必須出現在 description 開頭，提醒報告閱讀者責任
+        findings = analyze_data_exposure(self._page_input("<p>a@b.com</p>"))
+        self.assertEqual(len(findings), 1)
+        self.assertTrue(findings[0]["description"].startswith("⚠️ 此項目顯示原始個資"))
+
+    def test_analyze_data_exposure_finding_includes_raw_pii_in_evidence(self):
+        # 依使用者要求，evidence 顯示原始個資（不遮罩）
+        findings = analyze_data_exposure(self._page_input("<p>a@b.com 0912345678</p>"))
+        self.assertEqual(len(findings), 1)
+        self.assertIn("a@b.com", findings[0]["evidence"])
+        self.assertIn("0912345678", findings[0]["evidence"])
+
+    def test_analyze_data_exposure_finding_is_high_severity_security(self):
+        findings = analyze_data_exposure(self._page_input("<p>a@b.com</p>"))
+        self.assertEqual(findings[0]["category"], "security")
+        self.assertEqual(findings[0]["severity"], "high")
+
+    def test_analyze_page_includes_data_exposure_when_pii_present(self):
+        # PII 偵測必須被掛進 analyze_page pipeline
+        page_input = self._page_input(
+            "<html><body><h1>x</h1><p>contact: alice@example.tw 0912345678</p></body></html>"
+        )
+        findings = analyze_page(page_input)
+        titles = {f["title"] for f in findings}
+        self.assertIn("頁面外洩個人資料 (PII)", titles)
 
 
 class GeoFastScannerTests(APITestCase):

@@ -5,6 +5,27 @@ from urllib.parse import urlparse
 
 from apps.scans.models import Finding
 
+# ---------- PII（個人資料）偵測 ----------
+# email 標準 pattern，要求 TLD 至少 2 字元
+EMAIL_PATTERN = re.compile(r"\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b")
+
+# 台灣手機：09 開頭 + 8 位數字，允許中間有 -、空白；前後 lookahead/lookbehind 避免嵌入更長數字串誤判
+TW_MOBILE_PATTERN = re.compile(r"(?<!\d)09\d{2}[\s\-]?\d{3}[\s\-]?\d{3}(?!\d)")
+
+# 台灣身分證號：第一碼英文 + 1/2 + 8 位數字。需另經 is_valid_tw_national_id 檢查碼驗證
+TW_NATIONAL_ID_PATTERN = re.compile(r"\b[A-Z][12]\d{8}\b")
+
+# 信用卡號：13-19 位數字，常見 16 位 4-4-4-4 格式或無分隔。需另經 is_valid_luhn 驗證
+CREDIT_CARD_PATTERN = re.compile(r"(?<!\d)(?:\d[\s\-]?){12,18}\d(?!\d)")
+
+# 台灣身分證號第一碼字母對應的兩位數值（內政部標準）
+_TW_ID_LETTER_VALUES = {
+    "A": 10, "B": 11, "C": 12, "D": 13, "E": 14, "F": 15, "G": 16, "H": 17,
+    "I": 34, "J": 18, "K": 19, "L": 20, "M": 21, "N": 22, "O": 35, "P": 23,
+    "Q": 24, "R": 25, "S": 26, "T": 27, "U": 28, "V": 29, "W": 32, "X": 30,
+    "Y": 31, "Z": 33,
+}
+
 # HTML5 語意化區塊標籤，用於 GEO FAST 的 Structured 維度判斷
 SEMANTIC_LANDMARK_TAGS = {"main", "article", "header", "nav", "section", "footer", "aside"}
 
@@ -31,6 +52,62 @@ NON_HTML_EXTENSIONS = (
     ".css", ".js", ".mjs", ".map",
     ".xml", ".csv", ".json", ".rss", ".atom",
 )
+
+
+def is_valid_tw_national_id(text: str) -> bool:
+    """驗證台灣身分證號檢查碼。
+
+    演算法：第一個英文字母對應兩位數（_TW_ID_LETTER_VALUES）拆成十位數與個位數，
+    與後續 9 碼數字共 11 個 digit 按 weights [1,9,8,7,6,5,4,3,2,1,1] 加權總和，
+    mod 10 == 0 即合法。加檢查碼驗證可大幅降低 regex 對隨機字串的誤判率。
+    """
+    if not text or len(text) != 10:
+        return False
+    letter = text[0].upper()
+    if letter not in _TW_ID_LETTER_VALUES:
+        return False
+    n = _TW_ID_LETTER_VALUES[letter]
+    digits = [n // 10, n % 10] + [int(c) for c in text[1:]]
+    weights = [1, 9, 8, 7, 6, 5, 4, 3, 2, 1, 1]
+    return sum(d * w for d, w in zip(digits, weights, strict=True)) % 10 == 0
+
+
+def is_valid_luhn(text: str) -> bool:
+    """Luhn 演算法驗證信用卡號。從右起每隔一位 ×2（超過 9 減 9），總和 mod 10 == 0。
+
+    僅做格式校驗，無法判斷卡號是否實際發行；可大幅降低 regex 對隨機數字串的誤判。
+    """
+    digits = [int(c) for c in text if c.isdigit()]
+    if not 13 <= len(digits) <= 19:
+        return False
+    checksum = 0
+    for i, d in enumerate(reversed(digits)):
+        if i % 2 == 1:
+            d *= 2
+            if d > 9:
+                d -= 9
+        checksum += d
+    return checksum % 10 == 0
+
+
+def detect_pii_in_text(text: str) -> dict[str, list[str]]:
+    """從文字中偵測 PII，回傳各類別去重後的列表（按出現順序保留）。
+
+    身分證與信用卡會額外用檢查碼過濾，降低 false positive。
+    """
+    text = text or ""
+    return {
+        "email": list(dict.fromkeys(EMAIL_PATTERN.findall(text))),
+        "mobile": list(dict.fromkeys(TW_MOBILE_PATTERN.findall(text))),
+        "national_id": [
+            m for m in dict.fromkeys(TW_NATIONAL_ID_PATTERN.findall(text))
+            if is_valid_tw_national_id(m)
+        ],
+        "credit_card": [
+            m for m in dict.fromkeys(CREDIT_CARD_PATTERN.findall(text))
+            if is_valid_luhn(m)
+        ],
+    }
 
 
 def is_admin_path(url: str) -> bool:
@@ -237,8 +314,10 @@ def analyze_page(page_input: PageAnalysisInput) -> list[dict]:
 
     # 管理後台/登入頁不對外索引，SEO/AEO/GEO 評分對其無意義；
     # 但 SECURITY 檢查（CSRF token、安全頭部）對後台反而更關鍵，必須保留。
+    # PII 偵測也保留：後台頁面意外外洩個資反而更嚴重。
     if is_admin_path(target_url):
         findings.extend(analyze_security(page_input, parser))
+        findings.extend(analyze_data_exposure(page_input))
         return findings
 
     findings.extend(analyze_seo(page_input, parser))
@@ -246,6 +325,7 @@ def analyze_page(page_input: PageAnalysisInput) -> list[dict]:
     findings.extend(analyze_geo(page_input, parser))
     findings.extend(analyze_geo_fast(page_input, parser))
     findings.extend(analyze_security(page_input, parser))
+    findings.extend(analyze_data_exposure(page_input))
     return findings
 
 
@@ -533,6 +613,57 @@ def analyze_security(page_input: PageAnalysisInput, parser: HtmlSignalParser) ->
             )
         )
     return findings
+
+
+def analyze_data_exposure(page_input: PageAnalysisInput) -> list[dict]:
+    """偵測頁面外洩的個人資料（email、台灣手機、身分證、信用卡）。
+
+    顯示原始 PII 在 finding evidence 中（依使用者明確要求，不做遮罩）；
+    description 前置警示文字，讓報告閱讀者意識到本報告含未遮罩個資的法律責任。
+    身分證與信用卡含檢查碼驗證以降低 false positive。
+    """
+    pii = detect_pii_in_text(page_input.html)
+    total = sum(len(v) for v in pii.values())
+    if total == 0:
+        return []
+
+    # 每類最多列前 50 筆，避免 evidence 欄位被個資灌爆（make_finding 還會截到 4000 字）
+    pii_labels = [
+        ("email", "email"),
+        ("mobile", "台灣手機"),
+        ("national_id", "身分證號"),
+        ("credit_card", "信用卡號"),
+    ]
+    parts: list[str] = []
+    for key, label in pii_labels:
+        values = pii[key]
+        if values:
+            parts.append(f"{label}（{len(values)} 筆）：{', '.join(values[:50])}")
+    evidence = "\n".join(parts)
+
+    return [
+        make_finding(
+            category=Finding.Category.SECURITY,
+            severity=Finding.Severity.HIGH,
+            title="頁面外洩個人資料 (PII)",
+            description=(
+                "⚠️ 此項目顯示原始個資，請依個資法妥善處理本報告。\n"
+                f"在頁面內容中偵測到 {total} 筆疑似個資（email、手機、身分證、信用卡）。"
+                "若這些資料非刻意公開（如聯絡資訊頁），可能違反個資法第 27 條的妥善保管義務，"
+                "並讓網站使用者面臨身分盜用、詐騙、釣魚等風險。"
+            ),
+            remediation=(
+                "1. 確認這些資料是否為刻意公開（如官方聯絡頁、開源貢獻者名單）。\n"
+                "2. 若為意外外洩，立即下架該頁或加上登入驗證。\n"
+                "3. 檢查成因：DB 直連 API 未驗證、debug 訊息洩漏、後台路徑未限制存取、"
+                "JSON-LD/comment 內嵌入個資、靜態檔案誤上傳等。\n"
+                "4. 對歷史快取（Google cache、Wayback Machine）發起移除請求。"
+            ),
+            evidence=evidence,
+            impact_area="data_exposure",
+            priority_score=85,
+        )
+    ]
 
 
 def visible_text_length(html: str) -> int:
