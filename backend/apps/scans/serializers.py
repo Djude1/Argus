@@ -22,7 +22,11 @@ class ScanJobCreateSerializer(serializers.Serializer):
         default=ScanJob.ScanMode.PASSIVE,
     )
     max_depth = serializers.IntegerField(default=settings.ARGUS_DEFAULT_MAX_DEPTH, min_value=1)
-    max_pages = serializers.IntegerField(default=settings.ARGUS_DEFAULT_MAX_PAGES, min_value=1)
+    max_pages = serializers.IntegerField(
+        default=settings.ARGUS_DEFAULT_MAX_PAGES,
+        min_value=1,
+        max_value=settings.ARGUS_DEFAULT_MAX_PAGES,
+    )
     respect_robots = serializers.BooleanField(default=True)
 
     def validate(self, attrs: dict) -> dict:

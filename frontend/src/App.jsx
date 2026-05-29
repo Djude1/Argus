@@ -319,6 +319,7 @@ function LineChart({ data, width = 320, height = 110, ariaLabel }) {
 // 進行中時的 polling 間隔（毫秒）
 const SCAN_POLL_INTERVAL_MS = 2000;
 const LIST_POLL_INTERVAL_MS = 3000;
+const MAX_SITE_SCAN_PAGES = 50;
 
 // localStorage 暫存表單草稿的 key
 const SCAN_DRAFT_KEY = "argus_scan_draft_v1";
@@ -582,7 +583,7 @@ function ScanJobForm({ onCreated }) {
   const fetchWallet = useArgusStore((s) => s.fetchWallet);
 
   const coinPerPage = wallet?.coin_per_page ?? 10;
-  const effectivePages = scope === "single" ? 1 : 500;
+  const effectivePages = scope === "single" ? 1 : MAX_SITE_SCAN_PAGES;
   const estimatedCost = effectivePages * coinPerPage;
   const balance = wallet?.balance ?? 0;
   const insufficient = balance < estimatedCost;
@@ -614,14 +615,14 @@ function ScanJobForm({ onCreated }) {
     setSubmitting(true);
     try {
       // 單頁掃描：max_pages=1, max_depth=1（不走連結）
-      // 整站掃描：max_pages 固定 500，不再由使用者設定
+      // 整站掃描：遵守專案預設上限，避免過度爬取與預扣過高
       const payload = {
         url,
         authorization_confirmed: authorizationConfirmed,
         third_party_reconfirmed: thirdPartyReconfirmed,
         scan_mode: activeMode ? "active" : "passive",
         active_testing_authorized: activeMode && activeAuthorized,
-        max_pages: scope === "single" ? 1 : 500,
+        max_pages: scope === "single" ? 1 : MAX_SITE_SCAN_PAGES,
         max_depth: scope === "single" ? 1 : 3,
       };
       const response = await api.post("/scans/", payload);
@@ -691,7 +692,7 @@ function ScanJobForm({ onCreated }) {
             <span className="scope-icon" aria-hidden="true">🌐</span>
             <span className="scope-title">整個網站</span>
             <span className="scope-desc">從入口出發爬同網域多頁，產出完整健檢報告</span>
-            <span className="scope-meta">最多 500 頁，依實際爬到頁數計費</span>
+            <span className="scope-meta">最多 {MAX_SITE_SCAN_PAGES} 頁，依實際爬到頁數計費</span>
           </button>
         </div>
       </div>
@@ -1779,18 +1780,6 @@ function LoginPage() {
     }
   }
 
-  async function handleDevLogin() {
-    setLoading(true);
-    try {
-      const response = await api.post("/auth/dev-login/", {});
-      handleToken(response.data.access);
-    } catch {
-      setError("Dev login 失敗，後端可能不在 DEBUG 模式或 bootstrap 帳號不存在。");
-    } finally {
-      setLoading(false);
-    }
-  }
-
   return (
     <div className="login-page">
       <div className="login-card">
@@ -1897,17 +1886,6 @@ function LoginPage() {
               {loading ? "建立中…" : "建立帳號"}
             </button>
           </form>
-        )}
-
-        {import.meta.env.DEV && (
-          <button
-            type="button"
-            className="login-dev-btn"
-            onClick={handleDevLogin}
-            disabled={loading}
-          >
-            [DEV] 跳過登入
-          </button>
         )}
 
         <p className="login-notice">
@@ -2825,30 +2803,11 @@ function BillingPage() {
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState({});
   const [completedOrder, setCompletedOrder] = useState(null);
-  const [cheatLoading, setCheatLoading] = useState(false);
-  const [cheatMsg, setCheatMsg] = useState("");
   const wallet = useArgusStore((s) => s.wallet);
   const fetchWallet = useArgusStore((s) => s.fetchWallet);
   const me = useArgusStore((s) => s.me);
   const fetchMe = useArgusStore((s) => s.fetchMe);
   const navigate = useNavigate();
-
-  const handleCheat = async (mode) => {
-    setCheatLoading(true);
-    setCheatMsg("");
-    try {
-      const r = await api.post("/billing/dev-cheat/", { mode });
-      await fetchWallet();
-      const bal = r.data.balance?.toLocaleString() ?? "?";
-      setCheatMsg(mode === "set_max"
-        ? `✓ 已設為 ${bal} coin（INT32_MAX）`
-        : `✓ 已疊加，現為 ${bal} coin`);
-    } catch {
-      setCheatMsg("✗ 失敗（確認已登入且 DEBUG=True）");
-    } finally {
-      setCheatLoading(false);
-    }
-  };
 
   const [buyer, setBuyer] = useState({
     buyer_name: "",
@@ -3256,45 +3215,6 @@ function BillingPage() {
         </div>
       )}
 
-      {/* ── [TEST ONLY] 測試用惡搞面板 ── 上線前必須拆除 ── */}
-      <div className="billing-cheat-wrap">
-        <div className="dev-cheat-inner">
-          <div className="dev-cheat-header">
-            <span className="dev-cheat-badge">🔐 DEVELOPER SECRET ROOM · 測試服限定 🔐</span>
-            <span className="dev-cheat-title">⚔ 上古神器 · 造物主模式 ⚔</span>
-            <span className="dev-cheat-subtitle">「能力越大，責任越大——但這裡不管那個」</span>
-          </div>
-          <p className="dev-cheat-warning">
-            ⚡ 此能力由宇宙最強開發者賦予 · 凡人勿試 · 正式版即消失 ⚡
-          </p>
-          <div className="dev-cheat-balance">
-            💰 靈石儲量：<strong>{wallet?.balance?.toLocaleString() ?? "—"} coin</strong>
-          </div>
-          <div className="dev-cheat-btns">
-            <button
-              type="button"
-              className="dev-cheat-btn dev-cheat-btn-max"
-              disabled={cheatLoading}
-              onClick={() => handleCheat("set_max")}
-            >
-              <span className="dev-cheat-btn-label">💎 召喚命運之石</span>
-              <span className="dev-cheat-btn-value">獲得 2,147,483,647 COIN</span>
-              <span className="dev-cheat-btn-flavor">「此乃凡間整數之巔，32bit 的極限！」</span>
-            </button>
-            <button
-              type="button"
-              className="dev-cheat-btn dev-cheat-btn-inf"
-              disabled={cheatLoading}
-              onClick={() => handleCheat("add_max")}
-            >
-              <span className="dev-cheat-btn-label">👑 突破次元壁壘</span>
-              <span className="dev-cheat-btn-value">∞ 無限疊加 · 超越神界</span>
-              <span className="dev-cheat-btn-flavor">「只要按下去，數學也攔不住你」</span>
-            </button>
-          </div>
-          {cheatMsg && <p className="dev-cheat-msg">🌟 {cheatMsg}</p>}
-        </div>
-      </div>
     </section>
   );
 }
@@ -3920,6 +3840,7 @@ const PUBLIC_NAV_ITEMS = [
   { to: "/team", label: "團隊" },
   { to: "/purchase", label: "購買" },
   { to: "/download", label: "下載" },
+  { to: "/reviews", label: "評論" },
 ];
 
 function PublicNav() {
@@ -6264,7 +6185,7 @@ function AppShell() {
   const accessToken = useArgusStore((state) => state.accessToken);
   const location = useLocation();
   const isAdmin = location.pathname.startsWith("/admin");
-  const isPublic = ["/project", "/team", "/purchase", "/download"].some((p) =>
+  const isPublic = ["/project", "/team", "/purchase", "/download", "/reviews"].some((p) =>
     location.pathname.startsWith(p),
   );
   const showTopNav = !isAdmin && !isPublic;
@@ -6279,6 +6200,7 @@ function AppShell() {
             <Route path="/team" element={<TeamPage />} />
             <Route path="/purchase" element={<PurchasePage />} />
             <Route path="/download" element={<DownloadPage />} />
+            <Route path="/reviews" element={<ReviewsPage />} />
           </Route>
           <Route
             path="/dashboard"
@@ -6315,7 +6237,6 @@ function AppShell() {
               </RequireAuth>
             }
           />
-          <Route path="/reviews" element={<ReviewsPage />} />
           <Route
             path="/settings"
             element={

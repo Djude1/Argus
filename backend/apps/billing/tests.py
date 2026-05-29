@@ -140,6 +140,22 @@ class PurchaseTests(APITestCase):
             PricingPlan.objects.get(code="flagship").coin_amount, 2200,
         )
 
+    def test_pricing_plans_are_public_for_purchase_page(self):
+        response = self.client.get(reverse("billing-plans"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("plans", response.data)
+
+    def test_dev_cheat_route_is_removed(self):
+        self.client.force_authenticate(self.user)
+        response = self.client.post(
+            "/api/billing/dev-cheat/",
+            {"mode": "set_max"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
 
 class AdminAdjustTests(APITestCase):
     def setUp(self):
@@ -436,6 +452,21 @@ class ScanCreateCoinIntegrationTests(APITestCase):
         self.assertEqual(
             CoinWallet.objects.get(user=self.user).balance, 200,
         )
+
+    def test_create_scan_rejects_pages_above_project_limit(self):
+        response = self.client.post(
+            self.url,
+            {
+                "url": "https://example.com/",
+                "authorization_confirmed": True,
+                "max_pages": 51,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("max_pages", response.data)
+        self.assertFalse(ScanJob.objects.exists())
 
     def test_cancel_scan_refunds_held_coins(self):
         response = self.client.post(

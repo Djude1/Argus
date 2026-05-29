@@ -1,7 +1,7 @@
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.test import override_settings
+from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -89,59 +89,18 @@ class GoogleLoginConfigTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
 
-
-# DEV LOGIN BACKDOOR — REMOVE WHEN GOOGLE OAUTH IS FULLY WORKING
-class DevLoginTests(APITestCase):
-    def setUp(self):
-        self.url = reverse("dev-login")
-        self.user = get_user_model().objects.create_user(
-            username="dev-user",
-            email="dev@example.com",
-            password="ignored-by-dev-login",
-        )
-
-    @override_settings(DEBUG=True)
-    def test_dev_login_returns_jwt_in_debug_mode(self):
-        response = self.client.post(self.url, {"username": "dev-user"}, format="json")
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn("access", response.data)
-        self.assertIn("refresh", response.data)
-
-    @override_settings(DEBUG=False)
-    def test_dev_login_disabled_when_debug_is_false(self):
-        response = self.client.post(self.url, {"username": "dev-user"}, format="json")
-
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-
-    @override_settings(DEBUG=True)
-    def test_dev_login_rejects_nonexistent_user(self):
-        response = self.client.post(self.url, {"username": "does-not-exist"}, format="json")
-
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-
-    @override_settings(DEBUG=True)
-    def test_dev_login_falls_back_to_bootstrap_username_from_env(self):
-        # 未傳 username 時讀環境變數，常見情境是前端直接 POST 空 body
-        with self.settings():
-            import os as _os
-
-            _os.environ["ARGUS_BOOTSTRAP_SUPERUSER_USERNAME"] = "dev-user"
-            try:
-                response = self.client.post(self.url, {}, format="json")
-            finally:
-                _os.environ.pop("ARGUS_BOOTSTRAP_SUPERUSER_USERNAME", None)
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn("access", response.data)
-
-
-from django.test import Client, TestCase
-
-
 class EmailAuthTests(TestCase):
     def setUp(self):
         self.client = Client()
+
+    def test_dev_login_route_is_removed(self):
+        resp = self.client.post(
+            "/api/auth/dev-login/",
+            {"username": "dev-user"},
+            content_type="application/json",
+        )
+
+        self.assertEqual(resp.status_code, 404)
 
     def test_register_creates_user(self):
         resp = self.client.post(
@@ -166,9 +125,12 @@ class EmailAuthTests(TestCase):
         self.assertEqual(resp.status_code, 400)
 
     def test_email_login_returns_token(self):
-        from django.contrib.auth import get_user_model
         User = get_user_model()
-        User.objects.create_user(username="logintest@example.com", email="logintest@example.com", password="MyPass999!")
+        User.objects.create_user(
+            username="logintest@example.com",
+            email="logintest@example.com",
+            password="MyPass999!",
+        )
         resp = self.client.post(
             "/api/auth/email-login/",
             {"email": "logintest@example.com", "password": "MyPass999!"},
@@ -178,9 +140,12 @@ class EmailAuthTests(TestCase):
         self.assertIn("access", resp.json())
 
     def test_email_login_wrong_password_fails(self):
-        from django.contrib.auth import get_user_model
         User = get_user_model()
-        User.objects.create_user(username="badpw@example.com", email="badpw@example.com", password="correct")
+        User.objects.create_user(
+            username="badpw@example.com",
+            email="badpw@example.com",
+            password="correct",
+        )
         resp = self.client.post(
             "/api/auth/email-login/",
             {"email": "badpw@example.com", "password": "wrong"},

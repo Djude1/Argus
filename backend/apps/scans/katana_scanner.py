@@ -194,8 +194,12 @@ def _extract_jsluice_findings(record: dict[str, Any]) -> list[dict]:
 
 def _build_secret_finding(secret: dict[str, Any], endpoint: str) -> dict | None:
     """將單筆 secret 記錄轉為 Argus finding dict。"""
-    secret_type = str(secret.get("type") or secret.get("name") or secret.get("kind") or "secret").strip()
-    match_val = str(secret.get("match") or secret.get("value") or secret.get("secret") or "").strip()
+    secret_type = str(
+        secret.get("type") or secret.get("name") or secret.get("kind") or "secret"
+    ).strip()
+    match_val = str(
+        secret.get("match") or secret.get("value") or secret.get("secret") or ""
+    ).strip()
     line_no = secret.get("line") or secret.get("line_number") or ""
 
     if not secret_type and not match_val:

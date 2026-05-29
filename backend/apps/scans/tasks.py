@@ -49,7 +49,10 @@ def run_scan_job(self, scan_job_id: int) -> dict:
         "phase_started_at": crawl_phase_started,
     }
     scan_job.save(update_fields=["status", "started_at", "scan_log", "progress", "updated_at"])
-    append_log(scan_job_id, f"掃描任務啟動 — 目標：{scan_job.normalized_url}，模式：{scan_job.scan_mode}")
+    append_log(
+        scan_job_id,
+        f"掃描任務啟動 — 目標：{scan_job.normalized_url}，模式：{scan_job.scan_mode}",
+    )
 
     try:
         # crawler callback：在 async loop 內透過 sync_to_async 寫 DB；
@@ -63,7 +66,10 @@ def run_scan_job(self, scan_job_id: int) -> dict:
             if cancelled:
                 raise ScanCancelled()
 
-        append_log(scan_job_id, f"開始爬取，最大深度 {scan_job.max_depth}，最大頁數 {scan_job.max_pages}")
+        append_log(
+            scan_job_id,
+            f"開始爬取，最大深度 {scan_job.max_depth}，最大頁數 {scan_job.max_pages}",
+        )
         crawled_pages, warnings, site_signals = asyncio.run(
             crawl_site(
                 start_url=scan_job.normalized_url,
@@ -139,7 +145,11 @@ def run_scan_job(self, scan_job_id: int) -> dict:
                 total=scanning_total,
                 phase_started_at=scan_phase_started,
             )
-            blocked = f"（阻擋：{page_data['blocked_reason']}）" if page_data["blocked_reason"] else ""
+            blocked = (
+                f"（阻擋：{page_data['blocked_reason']}）"
+                if page_data["blocked_reason"]
+                else ""
+            )
             findings_count = len(page_findings) if not page_data["blocked_reason"] else 0
             append_log(
                 scan_job_id,

@@ -11,7 +11,7 @@ from apps.billing.serializers import (
     PurchaseOrderSerializer,
     PurchaseRequestSerializer,
 )
-from apps.billing.services import admin_adjust, get_or_create_wallet, purchase_plan
+from apps.billing.services import get_or_create_wallet, purchase_plan
 
 
 @api_view(["GET"])
@@ -23,7 +23,7 @@ def my_wallet(request):
 
 
 @api_view(["GET"])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.AllowAny])
 def list_plans(request):
     """列出所有啟用中的購點方案。"""
     plans = PricingPlan.objects.filter(is_active=True).order_by("sort_order", "price_ntd")
@@ -77,43 +77,6 @@ class PurchaseView(views.APIView):
             },
             status=status.HTTP_201_CREATED,
         )
-
-
-_INT32_MAX = 2_147_483_647
-
-
-@api_view(["POST"])
-@permission_classes([permissions.IsAuthenticated])
-def dev_cheat_coins(request):
-    """[TEST ONLY] 測試用惡搞端點：將餘額設為 INT32_MAX 或無限疊加。
-
-    僅在 DEBUG=True 時可用。上線前必須拆除此 URL 或設 DEBUG=False。
-    """
-    from django.conf import settings
-
-    if not settings.DEBUG:
-        return Response({"detail": "僅限開發模式使用"}, status=status.HTTP_403_FORBIDDEN)
-
-    mode = request.data.get("mode", "set_max")
-    wallet = get_or_create_wallet(request.user)
-
-    if mode == "set_max":
-        delta = _INT32_MAX - wallet.balance
-    else:
-        delta = _INT32_MAX
-
-    if delta <= 0:
-        return Response({"detail": "餘額已達最大值", "balance": wallet.balance})
-
-    admin_adjust(
-        target_user=request.user,
-        delta=delta,
-        admin_actor=request.user,
-        note="[DEV CHEAT] 測試模式硬塞 coin",
-    )
-    wallet.refresh_from_db()
-    return Response({"balance": wallet.balance, "delta": delta})
-
 
 @api_view(["GET"])
 @permission_classes([permissions.IsAuthenticated])

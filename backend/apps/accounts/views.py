@@ -1,5 +1,3 @@
-import os
-
 from django.conf import settings
 from django.contrib.auth import authenticate as django_authenticate
 from django.contrib.auth import get_user_model
@@ -88,9 +86,15 @@ class EmailRegisterView(views.APIView):
         password = request.data.get("password") or ""
 
         if not email or "@" not in email:
-            return Response({"email": "請輸入有效的 Email。"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"email": "請輸入有效的 Email。"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         if len(password) < 8:
-            return Response({"password": "密碼至少需要 8 個字元。"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"password": "密碼至少需要 8 個字元。"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         user_model = get_user_model()
         if user_model.objects.filter(username=email).exists():
@@ -155,7 +159,7 @@ class MeView(views.APIView):
             "is_staff": user.is_staff,
             "date_joined": user.date_joined,
             "last_login": user.last_login,
-            # 注意：以 has_usable_password() 判斷；若管理員在 Django Admin 手動為 Google 使用者設密碼則會誤判
+            # 若管理員在 Django Admin 手動為 Google 使用者設密碼，這裡會判成 email。
             "auth_provider": "google" if not user.has_usable_password() else "email",
         })
 
@@ -188,53 +192,10 @@ class ChangePasswordView(views.APIView):
         if not request.user.check_password(old_password):
             return Response({"detail": "目前密碼錯誤。"}, status=status.HTTP_400_BAD_REQUEST)
         if len(new_password) < 8:
-            return Response({"detail": "新密碼至少需要 8 個字元。"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "新密碼至少需要 8 個字元。"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         request.user.set_password(new_password)
         request.user.save(update_fields=["password"])
         return Response({"detail": "密碼已更新。"})
-
-
-# ============================================================
-# DEV LOGIN BACKDOOR — REMOVE WHEN GOOGLE OAUTH IS FULLY WORKING
-# 用途：Google Cloud Console 的 Authorized JavaScript origins 設定還沒生效時，
-#       讓開發者用 bootstrap superuser 直接拿到 JWT 進入系統。
-# 安全：只在 DEBUG=True 時生效；DEBUG=False 時回 404，等同不存在。
-# 移除：刪除本 class、accounts/urls.py 的 dev-login path、tests.py 的 DevLoginTests、
-#       App.jsx 的「跳過 Google 登入」按鈕區塊。
-# ============================================================
-class DevLoginView(views.APIView):
-    """以 bootstrap superuser 直接簽發 JWT（僅限 DEBUG 模式）。"""
-
-    permission_classes = [permissions.AllowAny]
-
-    def post(self, request):
-        if not settings.DEBUG:
-            return Response(
-                {"detail": "Dev login 僅在 DEBUG=True 時開放，目前已停用。"},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        username = (
-            request.data.get("username")
-            or os.environ.get("ARGUS_BOOTSTRAP_SUPERUSER_USERNAME")
-            or ""
-        ).strip()
-        if not username:
-            return Response(
-                {"detail": "未提供 username 且未設定 ARGUS_BOOTSTRAP_SUPERUSER_USERNAME。"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        user_model = get_user_model()
-        user = user_model.objects.filter(username=username).first()
-        if not user:
-            return Response(
-                {"detail": f"找不到使用者 {username}。"},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        refresh = RefreshToken.for_user(user)
-        return Response(
-            {"access": str(refresh.access_token), "refresh": str(refresh)},
-            status=status.HTTP_200_OK,
-        )

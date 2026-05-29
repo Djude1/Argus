@@ -497,7 +497,7 @@ def estimate_scan(request):
     策略：
     1. 嘗試取得 /sitemap.xml → 計算 <loc> 數
     2. 若無 sitemap → 抓首頁計算同域 <a href> 數量
-    3. 上限 500，回傳估算結果
+    3. 上限採用 ARGUS_DEFAULT_MAX_PAGES，回傳估算結果
     """
     url = (request.data.get("url") or "").strip()
     if not url:
@@ -505,10 +505,13 @@ def estimate_scan(request):
     if not url.startswith(("http://", "https://")):
         url = "https://" + url
     if not _is_safe_url(url):
-        return Response({"url": "不支援此網址（localhost 或私有 IP 禁止使用）。"}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {"url": "不支援此網址（localhost 或私有 IP 禁止使用）。"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
     COIN_PER_PAGE = 10
-    MAX_PAGES = 500
+    MAX_PAGES = settings.ARGUS_DEFAULT_MAX_PAGES
 
     sitemap_count = _try_sitemap(url)
     if sitemap_count is not None:
@@ -521,7 +524,12 @@ def estimate_scan(request):
         })
 
     try:
-        resp = http_requests.get(url, timeout=8, allow_redirects=True, headers={"User-Agent": "Argus-Estimator/1.0"})
+        resp = http_requests.get(
+            url,
+            timeout=8,
+            allow_redirects=True,
+            headers={"User-Agent": "Argus-Estimator/1.0"},
+        )
         count = _count_links(resp.text, url)
         estimated = min(max(count, 1), MAX_PAGES)
         confidence = "medium" if count > 0 else "low"

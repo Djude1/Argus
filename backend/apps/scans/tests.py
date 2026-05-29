@@ -79,7 +79,7 @@ class StaticScannerTests(APITestCase):
         self.assertIn("geo", categories)
         self.assertIn("security", categories)
         self.assertIn("Meta title 長度不理想", titles)
-        self.assertIn("缺少 JSON-LD 結構化資料", titles)
+        self.assertIn("可補充 JSON-LD 結構化資料", titles)
         self.assertIn("頁面未使用 HTTPS", titles)
 
     def test_calculate_scores_returns_top_actions_without_code(self):
@@ -548,7 +548,11 @@ class EstimateScanTests(APITestCase):
     def test_estimate_requires_auth(self):
         from django.test import Client
         c = Client()
-        resp = c.post("/api/estimate/", {"url": "https://example.com"}, content_type="application/json")
+        resp = c.post(
+            "/api/estimate/",
+            {"url": "https://example.com"},
+            content_type="application/json",
+        )
         self.assertEqual(resp.status_code, 401)
 
     def test_estimate_rejects_invalid_url(self):
