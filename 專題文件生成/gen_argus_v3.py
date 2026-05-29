@@ -559,32 +559,32 @@ def _bmc_table(doc):
     tbl.cell(2, 0).merge(tbl.cell(2, 1))
     tbl.cell(2, 2).merge(tbl.cell(2, 4))
     bmc_data = {
-        (0,0): ("關鍵夥伴\n(Key Partners)",
+        (0,0): ("① 關鍵夥伴\n(Key Partners)",
                 ["雲端服務商（AWS / GCP）","支付閘道（綠界 ECPay）",
-                 "AI 模型供應商（MiniMax / Google Gemini）","企業客戶（白牌合作）"], "BDD7EE"),
-        (0,1): ("關鍵活動\n(Key Activities)",
+                 "AI 模型供應商（MiniMax / Google Gemini）","企業客戶（白牌合作）"], "E4DFEC"),
+        (0,1): ("② 關鍵活動\n(Key Activities)",
                 ["系統開發與日常維運","四維掃描引擎持續優化",
-                 "AI 代理（Hermes）訓練迭代","客戶支援與教育訓練"], "BDD7EE"),
-        (0,2): ("價值主張\n(Value Propositions)",
+                 "AI 代理（Hermes）訓練迭代","客戶支援與教育訓練"], "DEEAF6"),
+        (0,2): ("④ 價值主張\n(Value Propositions)",
                 ["一站式四維網站健檢（SEO+AEO+GEO+資安）",
                  "AI 代理自動 UX 測試（Phase 2）",
-                 "降低 80% 工具訂閱成本","Word 格式專業報告輸出"], "E2EFDA"),
-        (0,3): ("顧客關係\n(Customer Relationships)",
+                 "大幅降低工具訂閱成本（按需點數制）","Word 格式專業報告輸出"], "E2EFDA"),
+        (0,3): ("⑤ 顧客關係\n(Customer Relationships)",
                 ["自助式 SaaS 自動化流程","線上即時客服支援",
                  "電子郵件行銷活動","使用者社群與論壇"], "FFF2CC"),
-        (0,4): ("目標客群\n(Customer Segments)",
+        (0,4): ("⑦ 目標客群\n(Customer Segments)",
                 ["中小企業主（電商/品牌網站）","數位行銷人員與代理商",
-                 "網站開發者與自由接案者","企業 IT / 資安部門"], "FFF2CC"),
-        (1,1): ("關鍵資源\n(Key Resources)",
+                 "網站開發者與自由接案者","企業 IT / 資安部門"], "FCE4EC"),
+        (1,1): ("③ 關鍵資源\n(Key Resources)",
                 ["掃描引擎核心技術","Hermes-Agent AI 模組",
-                 "雲端基礎設施（Docker）","開發團隊人力"], "BDD7EE"),
-        (1,3): ("通路\n(Channels)",
+                 "雲端基礎設施（Docker）","開發團隊人力"], "DEEAF6"),
+        (1,3): ("⑥ 通路\n(Channels)",
                 ["官方網站直接銷售","數位行銷代理商合作",
                  "GitHub 開源社群曝光","搜尋引擎廣告（SEA）"], "FFF2CC"),
-        (2,0): ("成本結構\n(Cost Structure)",
+        (2,0): ("⑧ 成本結構\n(Cost Structure)",
                 ["雲端伺服器費用（AWS EC2 / RDS）","AI API 呼叫費用（MiniMax / Gemini）",
                  "開發與維護人力成本","支付手續費（ECPay）"], "F2F2F2"),
-        (2,2): ("收益流\n(Revenue Streams)",
+        (2,2): ("⑨ 收益流\n(Revenue Streams)",
                 ["點數購買（主要，按需付費）","企業月訂閱方案（固定費用）",
                  "客製化健檢報告服務","白牌 API 授權（B2B）"], "F2F2F2"),
     }
@@ -612,7 +612,7 @@ def _swot_table(doc):
         _cell_shading(cell, fill)
         p = cell.paragraphs[0]; p.alignment = WD_ALIGN_PARAGRAPH.CENTER
         run = p.add_run(text)
-        _set_run_font(run, Pt(11), bold=True, color=RGBColor(0xFF,0xFF,0xFF))
+        _set_run_font(run, Pt(11), bold=True, color=RGBColor(0, 0, 0))
         _set_para_spacing(p, before=4, after=4, ls=1.2)
     def write_cell(cell, title, items, fill):
         _cell_shading(cell, fill)
@@ -622,7 +622,7 @@ def _swot_table(doc):
         _set_para_spacing(p0, before=2, after=2, ls=1.2)
         for item in items:
             _cell_add_para(cell, item, size=Pt(9), left_indent_cm=0.2, bullet="➤ ")
-    write_hdr(tbl.cell(0,0), "SWOT-TOWS\n分析矩陣", "1F497D")
+    write_hdr(tbl.cell(0,0), "SWOT-TOWS\n分析矩陣", HDR_FILL)
     write_cell(tbl.cell(0,1), "優勢（Strengths）", [
         "S1：四維掃描差異化定位",
         "S2：AI 代理 UX 測試市場首創",
@@ -673,6 +673,7 @@ def _swot_table(doc):
         "控制 API 呼叫成本優化計費模型（W4+T3）",
         "與資安社群合作強化掃描深度（W3+T2）",
     ], "FCE4EC")
+    _keep_table_together(tbl)
     doc.add_paragraph()
 
 
