@@ -52,12 +52,15 @@ def _set_run_font(run, size=None, bold=False, italic=False, color=None):
     rPr.insert(0, rFonts)
 
 
-def _set_para_spacing(p, before=0, after=6, ls=1.5):
+def _set_para_spacing(p, before=0, after=6, ls=None):
     pf = p.paragraph_format
     pf.space_before        = Pt(before)
     pf.space_after         = Pt(after)
-    pf.line_spacing_rule   = WD_LINE_SPACING.MULTIPLE
-    pf.line_spacing        = ls
+    pf.line_spacing_rule   = WD_LINE_SPACING.SINGLE   # 單行間距
+    # adjustRightInd=1（文件格線時自動調整右側縮排）
+    pPr = p._p.get_or_add_pPr()
+    pPr.set(qn('w:adjustRightInd'), "1")
+    pPr.set(qn('w:snapToGrid'), "0")
 
 
 def _cell_shading(cell, fill_hex):
@@ -110,11 +113,15 @@ def add_section(doc, text):
 def add_body(doc, text, indent=False, bold=False):
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-    if indent:
-        p.paragraph_format.first_line_indent = Cm(1)
     run = p.add_run(text)
     _set_run_font(run, BODY_SIZE, bold=bold)
-    _set_para_spacing(p, before=0, after=4, ls=1.5)
+    _set_para_spacing(p, before=0, after=4)
+    if indent:
+        pPr = p._p.get_or_add_pPr()
+        ind = pPr.find(qn('w:ind'))
+        if ind is None:
+            ind = OxmlElement('w:ind'); pPr.append(ind)
+        ind.set(qn('w:firstLineChars'), "200")   # 位移 2 字元
     return p
 
 
@@ -188,10 +195,16 @@ def add_std_table(doc, headers, rows, caption):
 
 def set_page_margins(doc):
     for sec in doc.sections:
-        sec.top_margin    = Cm(2.5)
-        sec.bottom_margin = Cm(2.5)
-        sec.left_margin   = Cm(3.0)
-        sec.right_margin  = Cm(2.5)
+        sec.top_margin    = Cm(1.5)
+        sec.bottom_margin = Cm(1.5)
+        sec.left_margin   = Cm(1.5)
+        sec.right_margin  = Cm(1.5)
+        sec.header_distance = Cm(1.0)
+        sec.footer_distance = Cm(1.0)
+        # 裝訂邊（gutter）位置左；oxml 直接設定 gutter 屬性，gutterAtTop 不設預設靠左
+        pgMar = sec._sectPr.find(qn('w:pgMar'))
+        if pgMar is not None:
+            pgMar.set(qn('w:gutter'), "0")
 
 
 def add_page_number(doc):
