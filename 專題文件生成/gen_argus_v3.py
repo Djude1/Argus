@@ -1404,84 +1404,104 @@ def ch8(doc):
 
 # ── 參考資料 ────────────────────────────────────────
 
+def _add_hyperlink(paragraph, url, text, color="0563C1", size=None):
+    """於段落插入真正可點擊的 Word 超連結（外部 URL）"""
+    part = paragraph.part
+    r_id = part.relate_to(
+        url, "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink",
+        is_external=True)
+    hyperlink = OxmlElement('w:hyperlink')
+    hyperlink.set(qn('r:id'), r_id)
+    run = OxmlElement('w:r')
+    rPr = OxmlElement('w:rPr')
+    rFonts = OxmlElement('w:rFonts')
+    rFonts.set(qn('w:eastAsia'), CH_FONT)
+    rFonts.set(qn('w:ascii'), EN_FONT)
+    rFonts.set(qn('w:hAnsi'), EN_FONT)
+    rPr.append(rFonts)
+    sz = OxmlElement('w:sz')
+    sz.set(qn('w:val'), str(int((size or BODY_SIZE).pt * 2)))
+    rPr.append(sz)
+    col = OxmlElement('w:color'); col.set(qn('w:val'), color); rPr.append(col)
+    u = OxmlElement('w:u'); u.set(qn('w:val'), 'single'); rPr.append(u)
+    run.append(rPr)
+    t = OxmlElement('w:t'); t.set(qn('xml:space'), 'preserve'); t.text = text
+    run.append(t)
+    hyperlink.append(run)
+    paragraph._p.append(hyperlink)
+    return hyperlink
+
+
+def _para_bottom_border(p, color="D0D0D0", sz=6):
+    """於段落底部加分隔線（參考資料條目間區隔）"""
+    pPr = p._p.get_or_add_pPr()
+    pBdr = OxmlElement('w:pBdr')
+    bottom = OxmlElement('w:bottom')
+    bottom.set(qn('w:val'), 'single')
+    bottom.set(qn('w:sz'), str(sz))
+    bottom.set(qn('w:space'), '4')
+    bottom.set(qn('w:color'), color)
+    pBdr.append(bottom)
+    pPr.append(pBdr)
+
+
 def add_references(doc):
     add_chapter(doc, "參考資料")
-    add_body(doc, "以下參考資料依 APA 第七版格式排列，"
-        "並標示人工智慧輔助使用情形（如有）。")
+    add_body(doc, "以下參考資料以「[編號] 標題：連結」格式排列，連結皆為可點擊之真實來源，"
+        "條目間以分隔線區隔；另標示人工智慧輔助使用情形。")
 
+    # (標題, 可點擊連結)；查證日期 2026-05；無連結者為紙本專書
     refs = [
-        ("Ahrefs", "(2024)", "Ahrefs pricing.",
-         "https://ahrefs.com/pricing"),
-        ("BrightEdge", "(2023)", "BrightEdge generative parser research report.",
-         "https://brightedge.com/resources/research-reports"),
-        ("Celery Project", "(2024)", "Celery 5.4 documentation.",
-         "https://docs.celeryq.dev/en/stable/"),
-        ("Django Software Foundation", "(2024)", "Django 5.1 documentation.",
-         "https://docs.djangoproject.com/en/5.1/"),
-        ("Django REST Framework", "(2024)", "Django REST framework documentation.",
-         "https://www.django-rest-framework.org/"),
-        ("Docker Inc.", "(2024)", "Docker documentation.",
-         "https://docs.docker.com/"),
-        ("GitHub", "(2024)", "GitHub Actions documentation.",
-         "https://docs.github.com/en/actions"),
-        ("Google", "(2024)", "Google Search Console help.",
-         "https://support.google.com/webmasters"),
-        ("Katana - ProjectDiscovery", "(2024)", "Katana: A next-generation crawling and spidering framework.",
-         "https://github.com/projectdiscovery/katana"),
-        ("Maurosoria", "(2024)", "Dirsearch: Web path scanner.",
-         "https://github.com/maurosoria/dirsearch"),
-        ("Microsoft", "(2024)", "Playwright documentation.",
-         "https://playwright.dev/"),
-        ("MiniMax", "(2024)", "MiniMax AI platform documentation.",
-         "https://platform.minimaxi.com/"),
-        ("Nginx Inc.", "(2024)", "NGINX documentation.",
-         "https://nginx.org/en/docs/"),
-        ("Nmap Security Scanner", "(2024)", "Nmap: The network mapper.",
-         "https://nmap.org/"),
-        ("Osterwalder, A., & Pigneur, Y.", "(2010)",
-         "Business model generation: A handbook for visionaries, game changers, and challengers. John Wiley & Sons.", ""),
-        ("OWASP Foundation", "(2021)", "OWASP Top Ten 2021.",
-         "https://owasp.org/www-project-top-ten/"),
-        ("PostgreSQL Global Development Group", "(2024)", "PostgreSQL 16 documentation.",
-         "https://www.postgresql.org/docs/16/"),
-        ("React", "(2024)", "React documentation.",
-         "https://react.dev/"),
-        ("Redis Ltd.", "(2024)", "Redis 7.2 documentation.",
-         "https://redis.io/docs/"),
-        ("Screaming Frog", "(2024)", "Screaming Frog SEO spider.",
-         "https://www.screamingfrog.co.uk/seo-spider/"),
-        ("SEMrush", "(2024)", "SEMrush pricing.",
-         "https://www.semrush.com/prices/"),
-        ("Statista", "(2024)", "Number of websites worldwide from 2000 to 2024.",
-         "https://www.statista.com/statistics/1124891/number-of-websites-online/"),
-        ("Vite", "(2024)", "Vite documentation.",
-         "https://vitejs.dev/"),
-        ("資策會產業情報研究所（MIC）", "(2023)", "2023 台灣電子商務市場現況研究報告. 財團法人資訊工業策進會。",
-         "https://mic.iii.org.tw/"),
+        ("Ahrefs — Pricing（Starter US$29/月，2026）", "https://ahrefs.com/pricing"),
+        ("SEMrush — Pricing for SEO（Pro US$139.95/月，2026）", "https://www.semrush.com/pricing/seo/"),
+        ("Screaming Frog — SEO Spider Pricing（€245/年，2026）", "https://www.screamingfrog.co.uk/seo-spider/pricing/"),
+        ("Google Search Console — 官方說明（免費）", "https://search.google.com/search-console/about"),
+        ("經濟部中小及新創企業署 —《2024 年中小企業白皮書》（中小企業逾 167.4 萬家）", "https://www.sme.gov.tw/article-tw-2853-13097"),
+        ("臺灣銀行 — 牌告匯率（外幣換算依據）", "https://rate.bot.com.tw/xrt"),
+        ("OWASP Foundation — OWASP Top 10:2021", "https://owasp.org/Top10/"),
+        ("Osterwalder, A., & Pigneur, Y. (2010). Business Model Generation. John Wiley & Sons.（紙本專書）", ""),
+        ("Django Software Foundation — Django 5.1 documentation", "https://docs.djangoproject.com/en/5.1/"),
+        ("Django REST Framework — documentation", "https://www.django-rest-framework.org/"),
+        ("React — 官方文件", "https://react.dev/"),
+        ("Vite — 官方文件", "https://vitejs.dev/"),
+        ("Tailwind CSS — 官方文件", "https://tailwindcss.com/"),
+        ("ReactFlow — 官方文件", "https://reactflow.dev/"),
+        ("Microsoft — Playwright 官方文件", "https://playwright.dev/"),
+        ("Celery Project — Celery 5.4 documentation", "https://docs.celeryq.dev/en/stable/"),
+        ("Redis Ltd. — Redis 7.2 documentation", "https://redis.io/docs/"),
+        ("PostgreSQL Global Development Group — PostgreSQL 16 documentation", "https://www.postgresql.org/docs/16/"),
+        ("Docker Inc. — Docker documentation", "https://docs.docker.com/"),
+        ("F5/NGINX — NGINX documentation", "https://nginx.org/en/docs/"),
+        ("Astral — uv 官方文件（Python 套件管理）", "https://docs.astral.sh/uv/"),
+        ("Git — 官方文件", "https://git-scm.com/doc"),
+        ("python-docx — 官方文件", "https://python-docx.readthedocs.io/"),
+        ("Matplotlib — 官方文件", "https://matplotlib.org/"),
+        ("Google — Identity / OAuth 2.0 文件", "https://developers.google.com/identity"),
+        ("PlantUML — 官方網站", "https://plantuml.com/"),
+        ("OMG — Unified Modeling Language (UML) 2.5.1 規格", "https://www.omg.org/spec/UML/"),
     ]
 
-    for i, (author, year, title, url) in enumerate(refs, 1):
+    for i, (title, url) in enumerate(refs, 1):
         p = doc.add_paragraph()
         p.alignment = WD_ALIGN_PARAGRAPH.LEFT
-        p.paragraph_format.left_indent      = Cm(1.5)
-        p.paragraph_format.first_line_indent = Cm(-1.5)
-        ref_text = f"{i}. {author} {year}. {title}"
-        run = p.add_run(ref_text)
+        p.paragraph_format.left_indent       = Cm(1.2)
+        p.paragraph_format.first_line_indent  = Cm(-1.2)
+        run = p.add_run(f"[{i}] {title}")
         _set_run_font(run, BODY_SIZE)
         if url:
-            p.add_run(" ")
-            url_run = p.add_run(url)
-            _set_run_font(url_run, BODY_SIZE)
-            url_run.font.color.rgb = RGBColor(0x00, 0x56, 0xD2)
-        _set_para_spacing(p, before=0, after=4, ls=1.5)
+            sep = p.add_run("：")
+            _set_run_font(sep, BODY_SIZE)
+            _add_hyperlink(p, url, url)
+        _set_para_spacing(p, before=2, after=4, ls=1.5)
+        _para_bottom_border(p)
 
     doc.add_paragraph()
     add_body(doc, "※ 使用人工智慧輔助說明：", bold=True)
     add_std_table(doc,
         ["序號","使用工具名稱","使用範圍及說明","頁碼"],
         [
-            ("1","Claude Sonnet 4.6","輔助系統手冊初稿內容撰寫與排版格式整理","全文"),
-            ("2","Google Gemini 2.5 Flash","Hermes-Agent Phase 2 工具調用邏輯設計參考","第7章"),
+            ("1","Claude（Anthropic）","輔助系統手冊初稿內容撰寫、排版格式與圖表程式整理","全文"),
+            ("2","Google Gemini","Hermes-Agent Phase 2 工具調用邏輯設計參考","第7章"),
         ],
         "表　人工智慧使用說明表")
 
