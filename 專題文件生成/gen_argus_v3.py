@@ -22,8 +22,8 @@ SEC_SIZE       = Pt(16)
 CHAP_SIZE      = Pt(18)
 GANTT_EXPECTED = "D9D9D9"   # 淺灰：預期進度
 GANTT_ACTUAL   = "595959"   # 深灰：實際進度
-HDR_FILL       = "1F497D"   # 深藍：表格標題列
-ALT_FILL       = "D6EAF8"   # 淺藍：交替列
+HDR_FILL       = "E4DFEC"   # 淺紫：表格標題列（仿黃金屋淺色系）
+ALT_FILL       = "F2F2F2"   # 淺灰：交替列
 
 BASE_DIR         = os.path.dirname(os.path.abspath(__file__))
 PLACEHOLDER_IMG  = os.path.join(BASE_DIR, "留空用照片.png")
@@ -208,8 +208,40 @@ def add_placeholder(doc, caption, width=Cm(14)):
     add_fig_caption(doc, caption)
 
 
+def _table_no_split(tbl, repeat_header=True):
+    """所有資料列不跨頁斷裂；首列設為跨頁重複標題"""
+    rows = tbl._tbl.findall(qn('w:tr'))
+    for i, tr in enumerate(rows):
+        trPr = tr.find(qn('w:trPr'))
+        if trPr is None:
+            trPr = OxmlElement('w:trPr'); tr.insert(0, trPr)
+        cs = OxmlElement('w:cantSplit'); trPr.append(cs)
+        if i == 0 and repeat_header:
+            th = OxmlElement('w:tblHeader'); th.set(qn('w:val'), 'true'); trPr.append(th)
+
+
+def _table_fixed_widths(tbl, widths_cm):
+    """固定欄寬，避免同表欄寬不一致"""
+    tbl.autofit = False
+    tblPr = tbl._tbl.tblPr
+    layout = OxmlElement('w:tblLayout'); layout.set(qn('w:type'), 'fixed'); tblPr.append(layout)
+    for row in tbl.rows:
+        for idx, cell in enumerate(row.cells):
+            if idx < len(widths_cm):
+                cell.width = Cm(widths_cm[idx])
+
+
+def _keep_table_together(tbl):
+    """強制整表不跨頁（BMC/SWOT 用）：所有列 cantSplit 且不重複標題"""
+    for tr in tbl._tbl.findall(qn('w:tr')):
+        trPr = tr.find(qn('w:trPr'))
+        if trPr is None:
+            trPr = OxmlElement('w:trPr'); tr.insert(0, trPr)
+        trPr.append(OxmlElement('w:cantSplit'))
+
+
 def add_std_table(doc, headers, rows, caption):
-    """標準藍色表頭表格，標號在上"""
+    """標準淺色表頭表格，標號在上"""
     add_table_caption(doc, caption)
     tbl = doc.add_table(rows=1 + len(rows), cols=len(headers))
     tbl.style     = "Table Grid"
@@ -222,7 +254,7 @@ def add_std_table(doc, headers, rows, caption):
                     align=WD_ALIGN_PARAGRAPH.CENTER)
         _cell_shading(c, HDR_FILL)
         for run in c.paragraphs[0].runs:
-            run.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
+            run.font.color.rgb = RGBColor(0, 0, 0)   # 淺色表頭配黑字
     # 資料列
     for ri, row_data in enumerate(rows):
         row  = tbl.rows[ri + 1]
@@ -232,6 +264,7 @@ def add_std_table(doc, headers, rows, caption):
             c.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
             _cell_write(c, str(val), size=Pt(12))
             _cell_shading(c, fill)
+    _table_no_split(tbl, repeat_header=True)
     doc.add_paragraph()
 
 
@@ -562,6 +595,7 @@ def _bmc_table(doc):
         _set_para_spacing(p0, before=2, after=2, ls=1.2)
         for item in items:
             _cell_add_para(cell, item, size=Pt(9), left_indent_cm=0.3, bullet="• ")
+    _keep_table_together(tbl)
     doc.add_paragraph()
 
 
@@ -846,12 +880,12 @@ def _gantt_table(doc):
     _cell_write(hrow.cells[0], "工作項目", size=Pt(10), bold=True,
                 align=WD_ALIGN_PARAGRAPH.CENTER)
     _cell_shading(hrow.cells[0], HDR_FILL)
-    hrow.cells[0].paragraphs[0].runs[0].font.color.rgb = RGBColor(0xFF,0xFF,0xFF)
+    hrow.cells[0].paragraphs[0].runs[0].font.color.rgb = RGBColor(0,0,0)
     for mi, m in enumerate(months):
         c = hrow.cells[mi + 1]
         _cell_write(c, m, size=Pt(9), bold=True, align=WD_ALIGN_PARAGRAPH.CENTER)
         _cell_shading(c, HDR_FILL)
-        c.paragraphs[0].runs[0].font.color.rgb = RGBColor(0xFF,0xFF,0xFF)
+        c.paragraphs[0].runs[0].font.color.rgb = RGBColor(0,0,0)
 
     # ── 任務列 ──
     for ti, (name, exp, act) in enumerate(tasks):
@@ -887,6 +921,8 @@ def _gantt_table(doc):
     r4 = p.add_run(" 實際進度")
     _set_run_font(r4, Pt(10))
 
+    _table_fixed_widths(tbl, [3.2] + [1.1] * len(months))
+    _table_no_split(tbl, repeat_header=True)
     doc.add_paragraph()
 
 
