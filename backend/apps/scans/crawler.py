@@ -19,6 +19,24 @@ BLOCKED_STATUS_REASONS = {
     429: "請求頻率過高被限流",
 }
 
+# Cloudflare Turnstile / Managed Challenge 特徵字串。
+# 這類驗證需要使用者互動（點擊勾選框），headless 瀏覽器無法自動通過。
+CF_TURNSTILE_MARKERS = (
+    "cf-turnstile",
+    "turnstile-wrapper",
+    "cf-chl-bypass",
+    "challenge-running",
+)
+
+# Cloudflare JavaScript challenge 特徵字串。
+# CF 邊緣注入的 challenge 載入器，body 出現這些字串代表此頁是攔截頁，不是真實內容。
+# 不收錄「Just a moment」短語，避免正常網站文章正文恰好出現該短語的 false positive。
+CF_JS_CHALLENGE_MARKERS = (
+    "challenge-platform",
+    "cf-browser-verification",
+    "cf_captcha",
+)
+
 # 用於診斷的主流 AI 爬蟲 User-Agent；僅檢查 robots.txt 規則，不繞過任何限制
 AI_CRAWLER_USER_AGENTS = ("GPTBot", "ClaudeBot", "Google-Extended", "PerplexityBot")
 
@@ -37,6 +55,22 @@ def classify_blocked(status_code: int | None) -> str:
     if status_code is None:
         return ""
     return BLOCKED_STATUS_REASONS.get(status_code, "")
+
+
+def classify_cf_challenge(html: str | None) -> str:
+    """偵測頁面是否為 Cloudflare challenge 攔截頁，回傳中文原因；非 challenge 回傳空字串。
+
+    Turnstile 優先於一般 JS challenge：兩者並存時前者更嚴重（必擋）。
+    CF challenge 經常回 200 status code 但 body 是攔截頁，若交給 scanners 分析
+    會誤判為「H1 缺失、meta 缺失」等假 finding，因此須在爬蟲層攔下並設為 blocked。
+    """
+    if not html:
+        return ""
+    if any(marker in html for marker in CF_TURNSTILE_MARKERS):
+        return "Cloudflare Turnstile 驗證，需使用者互動才能通過"
+    if any(marker in html for marker in CF_JS_CHALLENGE_MARKERS):
+        return "Cloudflare JavaScript 驗證，自動掃描無法通過"
+    return ""
 
 
 def normalize_crawl_url(url: str) -> str:
@@ -205,7 +239,9 @@ async def crawl_site(
                         html_only = await response.text() if response else ""
                     except Exception:
                         html_only = ""
-                    blocked_reason = classify_blocked(status_code)
+                    # 先看 body 是否為 CF challenge——CF 常回 200 但 body 是攔截頁，
+                    # 必須在 status code 判斷之前先攔下，否則 scanners 會誤判為真實內容。
+                    blocked_reason = classify_cf_challenge(html) or classify_blocked(status_code)
                     final_url = normalize_crawl_url(page.url)
                     screenshot_path = screenshot_dir / f"page-{len(pages) + 1}.png"
                     await page.screenshot(path=str(screenshot_path), full_page=True)
