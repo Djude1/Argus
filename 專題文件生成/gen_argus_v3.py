@@ -228,15 +228,15 @@ def add_placeholder(doc, caption, width=Cm(14)):
     add_fig_caption(doc, caption)
 
 
-def _table_no_split(tbl, repeat_header=True):
-    """所有資料列不跨頁斷裂；首列設為跨頁重複標題"""
+def _table_no_split(tbl, repeat_header=True, header_rows=1):
+    """所有資料列不跨頁斷裂；前 header_rows 列設為跨頁重複標題"""
     rows = tbl._tbl.findall(qn('w:tr'))
     for i, tr in enumerate(rows):
         trPr = tr.find(qn('w:trPr'))
         if trPr is None:
             trPr = OxmlElement('w:trPr'); tr.insert(0, trPr)
         cs = OxmlElement('w:cantSplit'); trPr.append(cs)
-        if i == 0 and repeat_header:
+        if i < header_rows and repeat_header:
             th = OxmlElement('w:tblHeader'); th.set(qn('w:val'), 'true'); trPr.append(th)
 
 
@@ -389,7 +389,6 @@ def add_cover(doc):
         ("指導老師：", "○○○ 老師"),
         ("組　　長：", "○○○○○  ○○○"),
         ("組　　員：", "○○○○○  ○○○"),
-        ("",           "○○○○○  ○○○"),
         ("",           "○○○○○  ○○○"),
         ("",           "○○○○○  ○○○"),
     ]
@@ -786,13 +785,12 @@ def ch3(doc):
 
     add_section(doc, "3-2　系統軟、硬體需求與技術平台")
     add_body(doc, "（一）硬體環境需求", bold=True)
+    add_body(doc,
+        "本節僅列出系統正式上線之公網部署環境與終端使用者之用戶端需求；"
+        "開發測試環境非屬正式營運配置，故不納入。", indent=True)
     add_std_table(doc,
         ["環境","類別","規格需求","備註"],
         [
-            ("開發環境","CPU","Intel Core i5-12500H 或 AMD Ryzen 5 5600X 以上","推薦 i7/Ryzen 7"),
-            ("開發環境","RAM","16 GB 以上","同時運行 Docker + IDE + 瀏覽器"),
-            ("開發環境","儲存空間","SSD 256 GB 以上","含 Docker 映像與資料庫"),
-            ("開發環境","作業系統","Windows 10/11（64-bit）或 Ubuntu 22.04 LTS",""),
             ("正式部署","CPU","vCPU × 4（AWS t3.xlarge 或同等級）","Celery Worker 並行需求"),
             ("正式部署","RAM","16 GB","Django + Celery + PostgreSQL + Redis"),
             ("正式部署","儲存空間","SSD 100 GB（含資料庫與截圖儲存）","截圖約 50–200 KB/頁"),
@@ -873,19 +871,32 @@ def _gantt_table(doc):
         ("期末展示與驗收",         [9],           []),
     ]
     n_tasks = len(tasks)
-    n_rows  = 1 + n_tasks * 2 + 1   # header + task*2 + legend
+    HDR_ROWS = 2                     # 年份列 + 月份列
+    n_rows  = HDR_ROWS + n_tasks * 2 + 1   # 雙表頭 + task*2 + legend
     n_cols  = 1 + len(months)        # 任務名稱 + 10 個月
+    # 114 年（09–12 月，4 欄）／115 年（01–06 月，6 欄）
+    year_spans = [("中華民國 114 年", 0, 3), ("中華民國 115 年", 4, 9)]
 
     tbl = doc.add_table(rows=n_rows, cols=n_cols)
     tbl.style = "Table Grid"
     tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
 
-    # ── 表頭列 ──
-    hrow = tbl.rows[0]
-    _cell_write(hrow.cells[0], "工作項目", size=Pt(10), bold=True,
+    # ── 年份列（row 0）：左上角與月份列垂直合併 ──
+    tbl.cell(0, 0).merge(tbl.cell(1, 0))
+    c_corner = tbl.cell(0, 0)
+    _cell_write(c_corner, "工作項目", size=Pt(10), bold=True,
                 align=WD_ALIGN_PARAGRAPH.CENTER)
-    _cell_shading(hrow.cells[0], HDR_FILL)
-    hrow.cells[0].paragraphs[0].runs[0].font.color.rgb = RGBColor(0,0,0)
+    _cell_shading(c_corner, HDR_FILL)
+    c_corner.paragraphs[0].runs[0].font.color.rgb = RGBColor(0,0,0)
+    for label, c0, c1 in year_spans:
+        tbl.cell(0, c0 + 1).merge(tbl.cell(0, c1 + 1))
+        c = tbl.cell(0, c0 + 1)
+        _cell_write(c, label, size=Pt(9), bold=True, align=WD_ALIGN_PARAGRAPH.CENTER)
+        _cell_shading(c, HDR_FILL)
+        c.paragraphs[0].runs[0].font.color.rgb = RGBColor(0,0,0)
+
+    # ── 月份列（row 1）──
+    hrow = tbl.rows[1]
     for mi, m in enumerate(months):
         c = hrow.cells[mi + 1]
         _cell_write(c, m, size=Pt(9), bold=True, align=WD_ALIGN_PARAGRAPH.CENTER)
@@ -894,7 +905,7 @@ def _gantt_table(doc):
 
     # ── 任務列 ──
     for ti, (name, exp, act) in enumerate(tasks):
-        row_a = 1 + ti * 2
+        row_a = HDR_ROWS + ti * 2
         row_b = row_a + 1
         # 合併任務名稱跨兩列
         tbl.cell(row_a, 0).merge(tbl.cell(row_b, 0))
@@ -927,6 +938,80 @@ def _gantt_table(doc):
     _set_run_font(r4, Pt(10))
 
     _table_fixed_widths(tbl, [3.2] + [1.1] * len(months))
+    _table_no_split(tbl, repeat_header=True, header_rows=HDR_ROWS)
+    doc.add_paragraph()
+
+
+# 4 名成員 × 專業分組（後端/前端/美術/文件），● 主要、○ 次要
+DIVISION_MEMBERS = [
+    "○○○\n（後端開發）", "○○○\n（前端開發）",
+    "○○○\n（美術設計）", "○○○\n（文件撰寫統整）",
+]
+DIVISION_GROUPS = [
+    ("後端開發", [
+        ("後端 API 開發（Django + DRF）",      ["●", "", "", "○"]),
+        ("PostgreSQL 資料庫建置",              ["●", "", "", "○"]),
+        ("點數計費系統（BillingService）",     ["●", "○", "", ""]),
+        ("BFS 爬蟲與四維掃描引擎",             ["●", "", "○", ""]),
+    ]),
+    ("前端開發", [
+        ("React 18 SPA 介面開發",              ["", "●", "○", ""]),
+        ("ReactFlow 網站拓樸圖",               ["○", "●", "", ""]),
+        ("後台管理介面開發",                   ["", "●", "", "○"]),
+    ]),
+    ("美術設計", [
+        ("UI/UX 視覺設計",                     ["", "○", "●", ""]),
+        ("品牌識別與配色風格",                 ["", "", "●", "○"]),
+        ("簡報與展示視覺設計",                 ["", "", "●", "○"]),
+    ]),
+    ("文件撰寫統整", [
+        ("系統手冊撰寫統整",                   ["○", "", "", "●"]),
+        ("GitHub 紀錄與版本管理",              ["○", "", "", "●"]),
+        ("期末簡報製作",                       ["", "", "○", "●"]),
+    ]),
+]
+
+
+def _division_table(doc):
+    """專業組織分工表：4 名成員，列依後端/前端/美術/文件分組；● 主要、○ 次要"""
+    add_table_caption(doc, "表 4-2-1　專案組織分工表（● 主要負責，○ 次要協助）")
+    n_items = sum(len(items) for _, items in DIVISION_GROUPS)
+    n_rows = 1 + len(DIVISION_GROUPS) + n_items  # 標題 + 分組列 + 工作列
+    n_cols = 1 + len(DIVISION_MEMBERS)
+    tbl = doc.add_table(rows=n_rows, cols=n_cols)
+    tbl.style = "Table Grid"
+    tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
+
+    # 標題列
+    _cell_write(tbl.cell(0, 0), "專業分組 / 工作項目", size=Pt(10), bold=True,
+                align=WD_ALIGN_PARAGRAPH.CENTER)
+    _cell_shading(tbl.cell(0, 0), HDR_FILL)
+    tbl.cell(0, 0).paragraphs[0].runs[0].font.color.rgb = RGBColor(0, 0, 0)
+    for mi, m in enumerate(DIVISION_MEMBERS):
+        c = tbl.cell(0, mi + 1)
+        _cell_write(c, m, size=Pt(9), bold=True, align=WD_ALIGN_PARAGRAPH.CENTER)
+        _cell_shading(c, HDR_FILL)
+        c.paragraphs[0].runs[0].font.color.rgb = RGBColor(0, 0, 0)
+
+    r = 1
+    for gname, items in DIVISION_GROUPS:
+        # 分組標題列（整列合併、淺色）
+        tbl.cell(r, 0).merge(tbl.cell(r, n_cols - 1))
+        gc = tbl.cell(r, 0)
+        _cell_write(gc, f"【{gname}】", size=Pt(10), bold=True,
+                    align=WD_ALIGN_PARAGRAPH.LEFT)
+        _cell_shading(gc, "EDEDED")
+        r += 1
+        for ti, (item, marks) in enumerate(items):
+            _cell_write(tbl.cell(r, 0), item, size=Pt(9), align=WD_ALIGN_PARAGRAPH.LEFT)
+            _cell_shading(tbl.cell(r, 0), ALT_FILL if ti % 2 == 0 else "FFFFFF")
+            for mi, mk in enumerate(marks):
+                c = tbl.cell(r, mi + 1)
+                _cell_write(c, mk, size=Pt(11), align=WD_ALIGN_PARAGRAPH.CENTER)
+                _cell_shading(c, ALT_FILL if ti % 2 == 0 else "FFFFFF")
+            r += 1
+
+    _table_fixed_widths(tbl, [5.0] + [2.3] * len(DIVISION_MEMBERS))
     _table_no_split(tbl, repeat_header=True)
     doc.add_paragraph()
 
@@ -943,49 +1028,27 @@ def ch4(doc):
 
     add_section(doc, "4-2　專案組織與分工")
     add_body(doc,
-        "本組共 5 名成員。每項工作指定 1 位主要負責人（●），"
-        "次要協助最多 2 位（○），每一項只能有 1 位主要負責人。"
-        "分工表如表 4-2-1 所示。", indent=True)
-    add_std_table(doc,
-        ["項目 / 組員","組長（○○○）","組員B（○○○）","組員C（○○○）","組員D（○○○）","組員E（○○○）"],
-        [
-            ("後端 API 開發",            "●","○","","",""),
-            ("資料庫建置",               "○","●","","",""),
-            ("伺服器架設 / Docker 部署", "","○","●","",""),
-            ("BFS 爬蟲引擎",             "","●","","○",""),
-            ("四維掃描引擎開發",         "","","○","●",""),
-            ("Celery 任務佇列整合",      "○","","","●",""),
-            ("前端 React UI 開發",       "","","","○","●"),
-            ("點數計費系統",             "●","","","","○"),
-            ("Hermes-Agent（Phase 2）",  "○","","●","",""),
-            ("Google OAuth 登入",        "●","","","","○"),
-            ("Word 報告輸出",            "","","○","","●"),
-            ("管理員後台",               "○","","","","●"),
-            ("UI/UX 設計",               "","","","○","●"),
-            ("文件撰寫統整",             "●","○","","",""),
-            ("報告簡報製作",             "○","","","","●"),
-        ],
-        "表 4-2-1　專案組織分工表（● 主要負責，○ 次要協助）")
+        "本組共 4 名成員，依專業分為後端開發、前端開發、美術設計、文件撰寫統整四組。"
+        "每項工作指定 1 位主要負責人（●），次要協助最多 2 位（○），"
+        "每一項只能有 1 位主要負責人。分工表如表 4-2-1 所示。", indent=True)
+    _division_table(doc)
 
     add_body(doc, "各組員工作內容與貢獻度如表 4-2-2 所示：")
     add_std_table(doc,
         ["序號","姓名","工作內容（各限 100 字以內）","貢獻度"],
         [
-            ("1","○○○（組長）",
-             "負責整體系統架構設計、後端 API 開發（Django + DRF）、Google OAuth 整合、"
-             "點數計費系統設計（BillingService 原子交易機制）及文件統整。","20%"),
-            ("2","○○○（組員B）",
-             "負責 PostgreSQL 資料庫模型設計、BFS 爬蟲引擎實作（Playwright + Celery 整合）"
-             "及掃描任務狀態機（ScanJob）開發。","20%"),
-            ("3","○○○（組員C）",
-             "負責 Docker Compose 容器化部署（nginx/web/worker/redis/db 五容器）、"
-             "Hermes-Agent Phase 2 AI 代理框架建構及伺服器架設。","20%"),
-            ("4","○○○（組員D）",
-             "負責四維掃描引擎（SEO/AEO/GEO/Security）演算法開發、"
-             "Celery 非同步任務佇列整合及 Word 健檢報告自動生成。","20%"),
-            ("5","○○○（組員E）",
-             "負責 React 18 前端 SPA 開發（掃描提交、結果展示、ReactFlow 拓樸圖、"
-             "後台管理介面）、UI/UX 設計及簡報製作。","20%"),
+            ("1","○○○（後端開發）",
+             "負責整體系統架構與後端 API 開發（Django + DRF）、PostgreSQL 資料庫建置、"
+             "點數計費系統（BillingService 原子交易機制）及 BFS 爬蟲與四維掃描引擎核心邏輯。","25%"),
+            ("2","○○○（前端開發）",
+             "負責 React 18 前端 SPA 開發（掃描提交、結果展示）、ReactFlow 網站拓樸圖、"
+             "後台管理介面開發及前端與後端 API 串接整合。","25%"),
+            ("3","○○○（美術設計）",
+             "負責全站 UI/UX 視覺設計、品牌識別與配色風格制定、"
+             "簡報與展示視覺設計，並協助前端介面切版與美術資源產出。","25%"),
+            ("4","○○○（文件撰寫統整）",
+             "負責系統手冊撰寫與統整、GitHub 紀錄與版本管理、期末簡報製作，"
+             "並協助系統整合測試與文件校對。","25%"),
         ],
         "表 4-2-2　專題成果工作內容與貢獻度表")
 
