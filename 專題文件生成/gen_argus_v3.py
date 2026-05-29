@@ -13,6 +13,15 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
+from matplotlib import font_manager as fm
+
+# matplotlib 載入標楷體，解決中文亂碼
+_KAIU = r"C:\Windows\Fonts\kaiu.ttf"
+if os.path.exists(_KAIU):
+    fm.fontManager.addfont(_KAIU)
+    plt.rcParams["font.family"] = "DFKai-SB"
+plt.rcParams["axes.unicode_minus"] = False
+_FP = fm.FontProperties(fname=_KAIU) if os.path.exists(_KAIU) else None
 
 # ── 常數 ──────────────────────────────────────────
 CH_FONT        = "標楷體"
@@ -29,6 +38,17 @@ BASE_DIR         = os.path.dirname(os.path.abspath(__file__))
 PLACEHOLDER_IMG  = os.path.join(BASE_DIR, "留空用照片.png")
 OUT_DOCX         = os.path.join(BASE_DIR, "Argus_系統手冊_v3.docx")
 OUT_PLANTUML     = os.path.join(BASE_DIR, "plantuml_diagrams_v3.txt")
+
+# ── 真實可引用資料（來源見 data_sources_v3.md）─────────
+# 競品月費（換算新台幣）：各官方定價頁 2026/05 查得；外幣依台灣銀行牌告匯率
+# 約 1 USD≈NT$32、1 EUR≈NT$35 換算（匯率每日浮動，僅供比較）
+COST_DATA = [
+    ("Argus\n（本系統按需點數）",  300),   # 本系統定價：單次掃描最低約 NT$300
+    ("Google\nSearch Console",     0),     # 官方免費
+    ("Screaming Frog\n（年費折月）", 714),  # €245/年 ÷12 ×35
+    ("Ahrefs\n（Starter 方案）",   928),    # US$29/月 ×32
+    ("SEMrush\n（Pro 方案）",     4478),    # US$139.95/月 ×32
+]
 
 # ── 基礎排版工具 ────────────────────────────────────
 
@@ -304,43 +324,27 @@ def add_page_number(doc):
 # ── 圖表工具 ────────────────────────────────────────
 
 def _make_cost_chart():
-    """競品月費比較長條圖（真實資料）"""
-    tools  = ["Argus\n（本系統）", "Google\nSearch Console", "Screaming Frog\n（年費折月）",
-              "Ahrefs\n（入門方案）", "SEMrush\n（入門方案）"]
-    costs  = [300, 0, 788, 3069, 4030]
-    colors = ["#1F497D", "#34A853", "#EA4335", "#4285F4", "#FBBC04"]
+    """競品月費比較長條圖（真實官方定價換算）；標號由 caption 提供，圖內不重複"""
+    tools = [t for t, _ in COST_DATA]
+    costs = [c for _, c in COST_DATA]
+    # 淺色系（仿黃金屋範例）
+    colors = ["#8E7CC3", "#A2C4C9", "#B6D7A8", "#F9CB9C", "#EA9999"]
     fig, ax = plt.subplots(figsize=(9, 4))
-    bars = ax.bar(tools, costs, color=colors, edgecolor="gray", linewidth=0.5)
-    ax.set_ylabel("每月費用（新台幣 NT$）", fontsize=10)
-    ax.set_title("圖 2-1-1　主要競品月費比較（2024年）", fontsize=11, fontweight="bold")
-    ax.set_ylim(0, 4800)
+    bars = ax.bar(tools, costs, color=colors, edgecolor="#888888", linewidth=0.6)
+    ax.set_ylabel("每月費用（新台幣 NT$）", fontsize=10, fontproperties=_FP)
+    ax.set_title("主要競品月費比較", fontsize=12, fontweight="bold", fontproperties=_FP)
+    ax.set_ylim(0, max(costs) * 1.2)
     for bar, cost in zip(bars, costs):
         label = "免費" if cost == 0 else f"NT${cost:,}"
-        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 60,
-                label, ha="center", va="bottom", fontsize=9, fontweight="bold")
-    ax.tick_params(axis="x", labelsize=9)
+        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + max(costs) * 0.015,
+                label, ha="center", va="bottom", fontsize=9, fontweight="bold",
+                fontproperties=_FP)
+    for lbl in ax.get_xticklabels():
+        lbl.set_fontproperties(_FP)
+        lbl.set_fontsize(9)
     ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"NT${int(x):,}"))
-    plt.tight_layout()
-    buf = io.BytesIO()
-    fig.savefig(buf, format="png", dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    buf.seek(0)
-    return buf
-
-
-def _make_market_pie():
-    """目標市場區隔圓餅圖"""
-    labels  = ["台灣中小企業主\n（電商/品牌網站）", "數位行銷代理商",
-               "自由接案網頁開發者", "學術 / 研究機構"]
-    sizes   = [45, 25, 20, 10]
-    colors  = ["#1F497D", "#2E86AB", "#A23B72", "#F18F01"]
-    explode = (0.05, 0, 0, 0)
-    fig, ax = plt.subplots(figsize=(7, 4))
-    wedges, texts, autotexts = ax.pie(
-        sizes, explode=explode, labels=labels, colors=colors,
-        autopct="%1.0f%%", startangle=140,
-        textprops={"fontsize": 9})
-    ax.set_title("圖 2-1-2　目標市場區隔分布（估計）", fontsize=11, fontweight="bold")
+    for lbl in ax.get_yticklabels():
+        lbl.set_fontproperties(_FP)
     plt.tight_layout()
     buf = io.BytesIO()
     fig.savefig(buf, format="png", dpi=150, bbox_inches="tight")
@@ -698,27 +702,27 @@ def ch2(doc):
         "表 2-1-1　技術可行性評估表")
     add_body(doc, "（二）經濟可行性", bold=True)
     add_body(doc,
-        "開發採用開源技術棧，無框架授權費用。"
-        "雲端部署以 AWS t3.large 為基準，月費約 NT$2,200，"
-        "含 RDS 及 ElastiCache 合計約 NT$4,500/月。"
-        "台灣約 35 萬家中小企業電商網站（資策會 MIC, 2023），"
-        "若以 1% 滲透率、每月平均 NT$500 消費計算，年收入潛力達 NT$2,100 萬。",
+        "開發採用開源技術棧（Django、React、PostgreSQL、Celery 等），無框架授權費用，"
+        "顯著降低初期投入成本。營運面採雲端部署，依實際使用量計費；"
+        "計費模式為按需點數制，使用者用多少付多少，無強制月費負擔。"
+        "相較於下圖所列國際 SEO 工具動輒每月數千元的訂閱費，本系統具明顯成本優勢。",
         indent=True)
-    _insert_chart(doc, _make_cost_chart(), "圖 2-1-1　主要競品月費比較（2024年）")
+    _insert_chart(doc, _make_cost_chart(), "圖 2-1-1　主要競品月費比較")
     add_body(doc,
-        "資料來源：Ahrefs https://ahrefs.com/pricing（2024）；"
-        "SEMrush https://www.semrush.com/prices/（2024）；"
-        "Screaming Frog https://www.screamingfrog.co.uk/seo-spider/（2024）；"
-        "匯率：台灣銀行牌告匯率 2024 年均值（1 USD≈NT$31、1 GBP≈NT$38）。",
+        "資料來源：各工具官方定價頁（2026 年 5 月查得）——"
+        "Google Search Console https://search.google.com/search-console/about（免費）；"
+        "Screaming Frog https://www.screamingfrog.co.uk/seo-spider/pricing/（€245/年）；"
+        "Ahrefs https://ahrefs.com/pricing（Starter US$29/月）；"
+        "SEMrush https://www.semrush.com/pricing/seo/（Pro US$139.95/月）。"
+        "外幣依台灣銀行牌告匯率（https://rate.bot.com.tw/xrt）約 1 USD≈NT$32、1 EUR≈NT$35 換算，"
+        "匯率每日浮動，數值僅供比較參考。",
         indent=True)
     add_body(doc, "（三）操作可行性", bold=True)
     add_body(doc,
         "系統採用全圖形化 Web 介面，操作流程簡化為三步：輸入目標網址→選擇掃描模式→"
-        "下載報告，預計平均學習時間不超過 5 分鐘。", indent=True)
-    _insert_chart(doc, _make_market_pie(), "圖 2-1-2　目標市場區隔分布（估計）")
-    add_body(doc,
-        "市場估計依據：資策會產業情報研究所（MIC）2023 年台灣電子商務市場研究報告"
-        "（https://mic.iii.org.tw/）。", indent=True)
+        "下載報告，平均學習時間短。台灣中小企業基數龐大——經濟部《2024 年中小企業白皮書》"
+        "指出全台中小企業逾 167.4 萬家，占全體企業 98% 以上，其中具網站經營需求者"
+        "為本系統的潛在使用族群，市場基礎充足。", indent=True)
 
     add_section(doc, "2-2　商業模式（Business Model）")
     add_body(doc,
@@ -731,12 +735,12 @@ def ch2(doc):
         "本系統採用 STP 框架（Segmentation、Targeting、Positioning）"
         "系統性定義目標市場與競爭定位。", indent=True)
     add_body(doc, "➤ 市場區隔（Segmentation）", bold=True)
-    add_bullet(doc, "地理區隔：以台灣及東南亞繁體中文市場為主，次要目標為日韓英語市場。台灣約 35 萬家中小企業具有網站健檢需求（資策會 MIC，2023）。")
+    add_bullet(doc, "地理區隔：以台灣及東南亞繁體中文市場為主，次要目標為日韓英語市場。台灣中小企業逾 167.4 萬家（經濟部《2024 年中小企業白皮書》），具網站經營與健檢需求者眾。")
     add_bullet(doc, "人口區隔：25–45 歲，具數位行銷或網站開發背景之專業人士；企業規模以 10–500 人之中小型企業為主。")
     add_bullet(doc, "行為區隔：曾使用過 Google Search Console 或 SEO 工具，具數據導向決策習慣，對網站效能與安全性有所關注。")
     add_bullet(doc, "心理區隔：重視效率、成本意識強，傾向訂閱制 SaaS，不願為多套工具付費，期望單一平台解決多元問題。")
     add_body(doc, "➤ 目標市場（Targeting）", bold=True)
-    add_bullet(doc, "主要目標：台灣中小企業電商、品牌網站經營者（約 35 萬家）。此族群對 SEO 有強烈需求，但鮮少有能力同時處理 AEO/GEO 與資安合規問題。")
+    add_bullet(doc, "主要目標：台灣中小企業電商、品牌網站經營者。此族群對 SEO 有強烈需求，但鮮少有能力同時處理 AEO/GEO 與資安合規問題。")
     add_bullet(doc, "次要目標：數位行銷代理商（可白牌使用 Argus API 服務其客戶）、自由接案網頁開發者（需快速為客戶提供健檢報告）。")
     add_body(doc, "➤ 市場定位（Positioning）", bold=True)
     add_bullet(doc, "定位聲明：「Argus 是唯一同時涵蓋 SEO、AEO、GEO 與資安的一站式網站健檢平台，以按需點數計費模式，讓中小企業以 1/10 成本享受企業級診斷服務。」")
@@ -765,7 +769,7 @@ def ch3(doc):
         "Redis 訊息佇列通訊，確保各元件職責清晰且可獨立水平擴展。"
         "系統整體架構如圖 3-1-1 所示（PlantUML 圖稿請見附件 plantuml_diagrams.txt）。",
         indent=True)
-    add_placeholder(doc, "圖 3-1-1　Argus 系統架構圖（PlantUML）", width=Cm(14))
+    add_placeholder(doc, "圖 3-1-1　Argus 系統架構圖", width=Cm(14))
     add_body(doc, "各層的主要職責說明如下：")
     add_bullet(doc, "用戶端層（Client Layer）：使用者透過 Chrome/Firefox/Edge 瀏覽器存取 React 18 SPA，"
         "無需安裝任何客戶端軟體。")
