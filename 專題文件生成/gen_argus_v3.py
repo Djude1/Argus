@@ -481,9 +481,9 @@ def ch1(doc):
     add_body(doc, "為具體說明 Argus 相較於現有工具的優勢，以下表 1-2-1 就關鍵功能維度進行比較：")
 
     add_std_table(doc,
-        ["功能特性", "Argus（本系統）", "Nmap", "Dirsearch", "Katana", "MTMG SEO"],
+        ["功能特性", "Argus（本系統）", "Nmap", "Dirsearch", "Katana", "Ahrefs"],
         [
-            ("主要功能",       "四維健檢 SaaS 平台", "網路埠掃描",   "目錄路徑爆破", "網頁爬蟲框架", "SEO 關鍵字分析"),
+            ("主要功能",       "四維健檢 SaaS 平台", "網路埠掃描",   "目錄路徑爆破", "網頁爬蟲框架", "SEO／外鏈分析套件"),
             ("操作介面",       "圖形化 GUI（Web）",  "命令列 CLI",   "命令列 CLI",   "命令列 CLI",   "圖形化 GUI"),
             ("SEO 掃描",       "✅ 完整",             "❌",           "❌",           "部分（爬蟲）", "✅ 完整"),
             ("AEO / GEO 掃描", "✅ 首創四維評分",     "❌",           "❌",           "❌",           "❌"),
@@ -492,14 +492,16 @@ def ch1(doc):
             ("圖形化結果報告", "✅ Word 報告",        "❌ 文字輸出",  "❌ 文字輸出",  "❌ JSON 輸出", "✅"),
             ("中文介面",       "✅ 全中文",           "❌",           "❌",           "❌",           "部分"),
             ("按需計費",       "✅ 點數制",           "免費開源",     "免費開源",     "免費開源",     "訂閱制"),
-            ("月費（約）",     "NT$300 起",           "免費",         "免費",         "免費",         "訂閱制"),
+            ("月費（約）",     "NT$300 起",           "免費",         "免費",         "免費",         "NT$928 起"),
         ],
         "表 1-2-1　各平台功能特性比較表")
 
     add_body(doc,
         "資料來源：Nmap 官方網站（https://nmap.org/）；Dirsearch GitHub 儲存庫"
         "（https://github.com/maurosoria/dirsearch）；Katana GitHub 儲存庫"
-        "（https://github.com/projectdiscovery/katana）；MTMG SEO 官方網站；Argus 系統實測（2024）。",
+        "（https://github.com/projectdiscovery/katana）；Ahrefs 官方定價頁"
+        "（https://ahrefs.com/pricing，Starter US$29/月，依台灣銀行牌告匯率約 NT$928）；"
+        "Argus 系統實測（2026）。",
         indent=True)
 
     add_body(doc,
@@ -767,7 +769,7 @@ def ch3(doc):
         "Argus 系統採用現代化 SaaS 分層架構，由下而上依序為：用戶端層、反向代理層、"
         "應用程式層、非同步任務層及資料持久層。各層之間透過 HTTP/REST、WebSocket 及"
         "Redis 訊息佇列通訊，確保各元件職責清晰且可獨立水平擴展。"
-        "系統整體架構如圖 3-1-1 所示（PlantUML 圖稿請見附件 plantuml_diagrams.txt）。",
+        "系統整體架構如圖 3-1-1 所示（PlantUML 圖稿請見附件 plantuml_diagrams_v3.txt）。",
         indent=True)
     add_placeholder(doc, "圖 3-1-1　Argus 系統架構圖", width=Cm(14))
     add_body(doc, "各層的主要職責說明如下：")
@@ -829,7 +831,7 @@ def ch3(doc):
         "主要的軟體工程建模規範，涵蓋使用個案圖、活動圖、循序圖、類別圖、"
         "佈署圖、套件圖、元件圖及狀態機圖共八類圖形。"
         "所有 UML 圖使用 PlantUML（https://plantuml.com/）語法撰寫，"
-        "圖碼見附件 plantuml_diagrams.txt。使用標準與工具彙整如表 3-3-1。",
+        "圖碼見附件 plantuml_diagrams_v3.txt。使用標準與工具彙整如表 3-3-1。",
         indent=True)
     add_std_table(doc,
         ["工具 / 標準","版本 / 規格","用途","官方連結"],
@@ -1069,7 +1071,7 @@ def ch4(doc):
 
 def ch5(doc):
     add_chapter(doc, "第5章　需求模型")
-    add_body(doc, "（系統分析與設計使用 UML 2.x 建模，所有 UML 圖碼見 plantuml_diagrams.txt）")
+    add_body(doc, "（系統分析與設計使用 UML 2.x 建模，所有 UML 圖碼見 plantuml_diagrams_v3.txt）")
 
     add_section(doc, "5-1　使用者需求")
     add_body(doc, "（一）功能需求（Functional Requirements）", bold=True)
@@ -1267,7 +1269,7 @@ def ch8(doc):
         "billing_pricingplan、billing_purchaseorder），"
         "向右連接掃描系統（scans_scanjob、scans_page、scans_finding），"
         "向下連接評論（reviews_platformreview）與稽核（admin_api_adminauditlog）。"
-        "ER 圖如圖 8-1-1 所示（PlantUML 圖碼見 plantuml_diagrams.txt）。",
+        "ER 圖如圖 8-1-1 所示（PlantUML 圖碼見 plantuml_diagrams_v3.txt）。",
         indent=True)
     add_placeholder(doc, "圖 8-1-1　資料庫 ER 圖（Entity-Relationship Diagram）", width=Cm(14))
 
