@@ -24,6 +24,28 @@
 
 ---
 
+## 1b. 第 1 章 表 1-2-1（主流網站分析 SaaS 平台功能特性比較表）
+
+> 修訂原因：原 v3 表 1-2-1 將 Argus 與單一用途命令列工具（Nmap、Dirsearch、Katana 等）
+> 並列比較，比較基準不對等。改以「同屬雲端 SaaS 網站分析平台」之主流商業產品作對等比較，
+> 凸顯 Argus「AEO/GEO + 一站式四維整合」之差異化定位。
+
+| 平台 | 定位 | 方案 | 官方定價 | 換算 NT$/月 | 來源 |
+|---|---|---|---|---|---|
+| Argus（本系統） | 四維網站健檢 SaaS | 按需點數 | 最低約 NT$300 起 | 300 | 本系統定價（自有產品，系統實測 2026） |
+| SEMrush | SEO／數位行銷套件 | Pro | US$139.95／月 | 4,478（×32） | https://www.semrush.com/pricing/seo/ |
+| Ahrefs | SEO／外鏈分析 | Starter | US$29／月 | 928（×32） | https://ahrefs.com/pricing |
+| Moz Pro | SEO 分析平台 | Starter | US$49／月 | 1,568（×32） | https://moz.com/products/pro/pricing |
+| Sucuri | 網站資安防護 | Basic Platform | US$199.99／年 | 533（US$199.99÷12×32） | https://sucuri.net/website-security-platform/signup/ |
+
+**匯率來源**：台灣銀行牌告匯率 https://rate.bot.com.tw/xrt 約 1 USD≈NT$32（每日浮動，僅供比較參考）。
+查證日期：2026-05。
+
+差異化重點：四大 SEO 平台（SEMrush／Ahrefs／Moz Pro）皆無 AEO/GEO 與資安掃描；
+Sucuri 僅資安、無 SEO/AEO/GEO；唯 Argus 一站式整合 SEO+AEO+GEO+資安四維。
+
+---
+
 ## 2. 市場規模（取代 v2 估算數字）
 
 - **台灣中小企業家數**：逾 167.4 萬家（2023 年），占全體企業 98% 以上。

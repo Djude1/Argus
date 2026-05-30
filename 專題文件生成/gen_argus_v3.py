@@ -478,30 +478,35 @@ def ch1(doc):
         "與 AI 代理自動化測試，提供圖形化 Web 介面與按需點數計費模式，"
         "旨在以一站式服務降低網站健檢的技術門檻與使用成本。", indent=True)
 
-    add_body(doc, "為具體說明 Argus 相較於現有工具的優勢，以下表 1-2-1 就關鍵功能維度進行比較：")
+    add_body(doc,
+        "為使比較基準對等，本表選取與 Argus 同屬「雲端 SaaS 網站分析平台」之主流商業產品"
+        "進行功能維度比較，而非單一用途的命令列工具。比較對象涵蓋三大 SEO 分析平台"
+        "（SEMrush、Ahrefs、Moz Pro）與一資安監測平台（Sucuri），如表 1-2-1 所示：")
 
     add_std_table(doc,
-        ["功能特性", "Argus（本系統）", "Nmap", "Dirsearch", "Katana", "Ahrefs"],
+        ["功能維度", "Argus（本系統）", "SEMrush", "Ahrefs", "Moz Pro", "Sucuri"],
         [
-            ("主要功能",       "四維健檢 SaaS 平台", "網路埠掃描",   "目錄路徑爆破", "網頁爬蟲框架", "SEO／外鏈分析套件"),
-            ("操作介面",       "圖形化 GUI（Web）",  "命令列 CLI",   "命令列 CLI",   "命令列 CLI",   "圖形化 GUI"),
-            ("SEO 掃描",       "✅ 完整",             "❌",           "❌",           "部分（爬蟲）", "✅ 完整"),
-            ("AEO / GEO 掃描", "✅ 首創四維評分",     "❌",           "❌",           "❌",           "❌"),
-            ("資安被動掃描",   "✅ HTTP 標頭／TLS",   "✅（主動埠掃）","✅（路徑探測）","部分（爬蟲）", "❌"),
-            ("合規被動操作",   "✅ 完全被動",         "⚠️ 需授權",   "⚠️ 需授權",   "⚠️ 需授權",   "✅"),
-            ("圖形化結果報告", "✅ Word 報告",        "❌ 文字輸出",  "❌ 文字輸出",  "❌ JSON 輸出", "✅"),
-            ("中文介面",       "✅ 全中文",           "❌",           "❌",           "❌",           "部分"),
-            ("按需計費",       "✅ 點數制",           "免費開源",     "免費開源",     "免費開源",     "訂閱制"),
-            ("月費（約）",     "NT$300 起",           "免費",         "免費",         "免費",         "NT$928 起"),
+            ("平台定位",       "四維網站健檢平台", "SEO／數位行銷套件", "SEO／外鏈分析", "SEO 分析平台", "網站資安防護"),
+            ("部署形式",       "雲端 SaaS",        "雲端 SaaS",        "雲端 SaaS",   "雲端 SaaS",   "雲端 SaaS"),
+            ("SEO 健檢",       "✅ 完整",          "✅ 完整",          "✅ 完整",     "✅ 完整",     "❌"),
+            ("AEO / GEO 掃描", "✅ 首創四維評分",  "❌",               "❌",          "❌",          "❌"),
+            ("資安被動掃描",   "✅ HTTP 標頭／TLS","❌",               "❌",          "❌",          "✅ 惡意程式／WAF"),
+            ("一站式整合四維", "✅ SEO+AEO+GEO+資安","❌（僅 SEO）",   "❌（僅 SEO）", "❌（僅 SEO）","❌（僅資安）"),
+            ("圖形化報告匯出", "✅ Word 報告",     "✅",               "✅",          "✅",          "✅ 資安報告"),
+            ("中文操作介面",   "✅ 全中文",        "部分",             "部分",        "❌",          "部分"),
+            ("計費模式",       "按需點數制",       "月訂閱",           "月訂閱",      "月訂閱",      "年訂閱"),
+            ("最低月費（約）", "NT$300 起",        "NT$4,478",         "NT$928",      "NT$1,568",    "NT$533"),
         ],
-        "表 1-2-1　各平台功能特性比較表")
+        "表 1-2-1　主流網站分析 SaaS 平台功能特性比較表")
 
     add_body(doc,
-        "資料來源：Nmap 官方網站（https://nmap.org/）；Dirsearch GitHub 儲存庫"
-        "（https://github.com/maurosoria/dirsearch）；Katana GitHub 儲存庫"
-        "（https://github.com/projectdiscovery/katana）；Ahrefs 官方定價頁"
-        "（https://ahrefs.com/pricing，Starter US$29/月，依台灣銀行牌告匯率約 NT$928）；"
-        "Argus 系統實測（2026）。",
+        "資料來源（各平台官方定價頁，2026 年 5 月查得；外幣依台灣銀行牌告匯率"
+        "https://rate.bot.com.tw/xrt 約 1 USD≈NT$32 換算）：SEMrush Pro US$139.95/月"
+        "（https://www.semrush.com/pricing/seo/）；Ahrefs Starter US$29/月"
+        "（https://ahrefs.com/pricing）；Moz Pro Starter US$49/月"
+        "（https://moz.com/products/pro/pricing）；Sucuri Basic Platform US$199.99/年"
+        "（https://sucuri.net/website-security-platform/signup/，折合約 NT$533/月）；"
+        "Argus 為本系統按需點數定價與系統實測（2026）。",
         indent=True)
 
     add_body(doc,
@@ -1456,6 +1461,8 @@ def add_references(doc):
     refs = [
         ("Ahrefs — Pricing（Starter US$29/月，2026）", "https://ahrefs.com/pricing"),
         ("SEMrush — Pricing for SEO（Pro US$139.95/月，2026）", "https://www.semrush.com/pricing/seo/"),
+        ("Moz — Moz Pro Pricing（Starter US$49/月，2026）", "https://moz.com/products/pro/pricing"),
+        ("Sucuri — Website Security Platform Pricing（Basic US$199.99/年，2026）", "https://sucuri.net/website-security-platform/signup/"),
         ("Screaming Frog — SEO Spider Pricing（€245/年，2026）", "https://www.screamingfrog.co.uk/seo-spider/pricing/"),
         ("Google Search Console — 官方說明（免費）", "https://search.google.com/search-console/about"),
         ("經濟部中小及新創企業署 —《2024 年中小企業白皮書》（中小企業逾 167.4 萬家）", "https://www.sme.gov.tw/article-tw-2853-13097"),
