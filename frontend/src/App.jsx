@@ -89,6 +89,18 @@ const CATEGORY_COLOR = {
   ux: "#10b981",
 };
 
+function apiErrorMessage(err, fallback = "操作失敗，請稍後再試。") {
+  const data = err?.response?.data;
+  if (!data) return fallback;
+  if (typeof data === "string") return data;
+  if (data.detail) return data.detail;
+  const firstKey = Object.keys(data)[0];
+  const firstValue = firstKey ? data[firstKey] : null;
+  if (Array.isArray(firstValue)) return firstValue.join(" ");
+  if (typeof firstValue === "string") return firstValue;
+  return fallback;
+}
+
 // 數字遞增動畫（適可而止：300ms 線性 ease-out）
 function CountUp({ value, duration = 600, suffix = "" }) {
   const [display, setDisplay] = useState(0);
@@ -3837,6 +3849,7 @@ function SettingsPage() {
 
 const PUBLIC_NAV_ITEMS = [
   { to: "/project", label: "專案介紹" },
+  { to: "/free-tools", label: "免費分析" },
   { to: "/team", label: "團隊" },
   { to: "/purchase", label: "購買" },
   { to: "/download", label: "下載" },
@@ -4457,6 +4470,259 @@ function PurchasePage() {
         </div>
       </section>
 
+    </div>
+  );
+}
+
+const RISK_LABELS = {
+  high: "高風險",
+  medium: "中風險",
+  low: "低風險",
+  minimal: "低訊號",
+};
+
+function RiskLevelBadge({ level }) {
+  return (
+    <span className={`insight-risk-badge risk-${level || "minimal"}`}>
+      {RISK_LABELS[level] || "未判定"}
+    </span>
+  );
+}
+
+function FreeToolsPage() {
+  const [speedForm, setSpeedForm] = useState({
+    url: "",
+    authorization_confirmed: false,
+  });
+  const [speedLoading, setSpeedLoading] = useState(false);
+  const [speedResult, setSpeedResult] = useState(null);
+  const [speedError, setSpeedError] = useState("");
+  const [urlValue, setUrlValue] = useState("");
+  const [urlLoading, setUrlLoading] = useState(false);
+  const [urlResult, setUrlResult] = useState(null);
+  const [urlError, setUrlError] = useState("");
+  const [emailValue, setEmailValue] = useState("");
+  const [emailLoading, setEmailLoading] = useState(false);
+  const [emailResult, setEmailResult] = useState(null);
+  const [emailError, setEmailError] = useState("");
+
+  const runSpeedTest = async (event) => {
+    event.preventDefault();
+    setSpeedLoading(true);
+    setSpeedError("");
+    setSpeedResult(null);
+    try {
+      const res = await api.post("/insights/speed-test/", speedForm);
+      setSpeedResult(res.data);
+    } catch (err) {
+      setSpeedError(apiErrorMessage(err, "測速失敗，請確認網址可公開連線。"));
+    } finally {
+      setSpeedLoading(false);
+    }
+  };
+
+  const runUrlCheck = async (event) => {
+    event.preventDefault();
+    setUrlLoading(true);
+    setUrlError("");
+    setUrlResult(null);
+    try {
+      const res = await api.post("/insights/phishing-url/", { url: urlValue });
+      setUrlResult(res.data);
+    } catch (err) {
+      setUrlError(apiErrorMessage(err, "URL 風險分析失敗。"));
+    } finally {
+      setUrlLoading(false);
+    }
+  };
+
+  const runEmailCheck = async (event) => {
+    event.preventDefault();
+    setEmailLoading(true);
+    setEmailError("");
+    setEmailResult(null);
+    try {
+      const res = await api.post("/insights/phishing-email/", { raw_email: emailValue });
+      setEmailResult(res.data);
+    } catch (err) {
+      setEmailError(apiErrorMessage(err, "郵件風險分析失敗。"));
+    } finally {
+      setEmailLoading(false);
+    }
+  };
+
+  return (
+    <div className="public-page free-tools-page">
+      <section className="public-hero compact">
+        <div className="public-hero-bg" aria-hidden="true">
+          <span className="hero-orb hero-orb-1" />
+          <span className="hero-orb hero-orb-2" />
+          <span className="hero-orb hero-orb-3" />
+        </div>
+        <div className="public-hero-content">
+          <span className="public-hero-eyebrow">FREE TOOLS · 免費分析</span>
+          <h1 className="public-hero-title">
+            先用<span className="hero-grad">免費工具</span>快速判斷
+          </h1>
+          <p className="public-hero-sub">
+            單頁測速參考 PageSpeed / Lighthouse 的效能思路；釣魚 URL 與郵件判斷使用本機特徵分類器，
+            不把內容送到大模型 API。
+          </p>
+        </div>
+      </section>
+
+      <section className="public-section">
+        <header className="public-section-head">
+          <h2>免費測速分析</h2>
+          <p>單一 URL、單次請求，不扣 coin，不啟動全站爬蟲</p>
+        </header>
+        <div className="insight-tool-layout">
+          <form className="insight-tool-card" onSubmit={runSpeedTest}>
+            <label className="insight-field">
+              <span>網址</span>
+              <input
+                value={speedForm.url}
+                onChange={(e) => setSpeedForm((f) => ({ ...f, url: e.target.value }))}
+                placeholder="https://example.com/"
+                required
+              />
+            </label>
+            <label className="insight-check">
+              <input
+                type="checkbox"
+                checked={speedForm.authorization_confirmed}
+                onChange={(e) => setSpeedForm((f) => ({ ...f, authorization_confirmed: e.target.checked }))}
+              />
+              <span>我確認此頁面可公開測速，或我擁有分析授權。</span>
+            </label>
+            {speedError && <div className="insight-error">{speedError}</div>}
+            <button type="submit" className="public-cta-primary" disabled={speedLoading}>
+              {speedLoading ? "測速中..." : "開始測速"}
+            </button>
+          </form>
+
+          <div className="insight-result-card">
+            {!speedResult ? (
+              <div className="insight-empty">
+                <strong>會輸出哪些結果</strong>
+                <span>分數、TTFB、傳輸量、阻塞 script、圖片 lazy loading、快取與壓縮建議。</span>
+              </div>
+            ) : (
+              <>
+                <div className="insight-score-row">
+                  <div className={`insight-score score-${speedResult.grade}`}>
+                    {speedResult.score}
+                  </div>
+                  <div>
+                    <div className="insight-result-title">{speedResult.final_url}</div>
+                    <div className="insight-result-sub">{speedResult.source}</div>
+                  </div>
+                </div>
+                <div className="insight-metrics-grid">
+                  <div><span>TTFB</span><strong>{speedResult.metrics.ttfb_ms} ms</strong></div>
+                  <div><span>傳輸量</span><strong>{speedResult.metrics.transfer_kb} KB</strong></div>
+                  <div><span>阻塞 script</span><strong>{speedResult.metrics.blocking_scripts}</strong></div>
+                  <div><span>圖片</span><strong>{speedResult.metrics.images}</strong></div>
+                </div>
+                <p className="insight-note">{speedResult.core_web_vitals_note}</p>
+                {speedResult.findings.length > 0 ? (
+                  <ul className="insight-finding-list">
+                    {speedResult.findings.map((f, idx) => (
+                      <li key={`${f.title}-${idx}`}>
+                        <strong>{f.title}</strong>
+                        <span>{f.description}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="insight-success">未發現明顯效能風險。</div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <section className="public-section">
+        <header className="public-section-head">
+          <h2>釣魚 URL / 郵件風險</h2>
+          <p>本機特徵分類器，先看證據，不把判斷全交給大模型</p>
+        </header>
+        <div className="insight-two-col">
+          <form className="insight-tool-card" onSubmit={runUrlCheck}>
+            <h3 className="insight-card-title">URL 風險判斷</h3>
+            <label className="insight-field">
+              <span>可疑連結</span>
+              <input
+                value={urlValue}
+                onChange={(e) => setUrlValue(e.target.value)}
+                placeholder="https://secure-login.example/verify"
+                required
+              />
+            </label>
+            {urlError && <div className="insight-error">{urlError}</div>}
+            <button type="submit" className="public-cta-primary" disabled={urlLoading}>
+              {urlLoading ? "分析中..." : "分析 URL"}
+            </button>
+            {urlResult && (
+              <div className="insight-risk-result">
+                <div className="insight-risk-head">
+                  <strong>{urlResult.risk_score}/100</strong>
+                  <RiskLevelBadge level={urlResult.risk_level} />
+                </div>
+                <p>{urlResult.recommendation}</p>
+                <ul className="insight-feature-list">
+                  {urlResult.features.slice(0, 5).map((f, idx) => (
+                    <li key={`${f.title}-${idx}`}>
+                      <strong>{f.title}</strong>
+                      <span>{f.evidence}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </form>
+
+          <form className="insight-tool-card" onSubmit={runEmailCheck}>
+            <h3 className="insight-card-title">郵件原始碼判斷</h3>
+            <label className="insight-field">
+              <span>.eml / 原始信件內容</span>
+              <textarea
+                value={emailValue}
+                onChange={(e) => setEmailValue(e.target.value)}
+                placeholder={"From: notice@example.com\nAuthentication-Results: ...\n\n請立即驗證帳號..."}
+                rows={9}
+                required
+              />
+            </label>
+            {emailError && <div className="insight-error">{emailError}</div>}
+            <button type="submit" className="public-cta-primary" disabled={emailLoading}>
+              {emailLoading ? "分析中..." : "分析郵件"}
+            </button>
+            {emailResult && (
+              <div className="insight-risk-result">
+                <div className="insight-risk-head">
+                  <strong>{emailResult.risk_score}/100</strong>
+                  <RiskLevelBadge level={emailResult.risk_level} />
+                </div>
+                <p>{emailResult.recommendation}</p>
+                <div className="insight-email-meta">
+                  <span>From: {emailResult.from_domain || "未解析"}</span>
+                  <span>連結數: {emailResult.url_count}</span>
+                </div>
+                <ul className="insight-feature-list">
+                  {emailResult.features.slice(0, 5).map((f, idx) => (
+                    <li key={`${f.title}-${idx}`}>
+                      <strong>{f.title}</strong>
+                      <span>{f.evidence}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </form>
+        </div>
+      </section>
     </div>
   );
 }
@@ -6185,7 +6451,7 @@ function AppShell() {
   const accessToken = useArgusStore((state) => state.accessToken);
   const location = useLocation();
   const isAdmin = location.pathname.startsWith("/admin");
-  const isPublic = ["/project", "/team", "/purchase", "/download", "/reviews"].some((p) =>
+  const isPublic = ["/project", "/free-tools", "/team", "/purchase", "/download", "/reviews"].some((p) =>
     location.pathname.startsWith(p),
   );
   const showTopNav = !isAdmin && !isPublic;
@@ -6197,6 +6463,7 @@ function AppShell() {
           <Route path="/login" element={<LoginPage />} />
           <Route element={<PublicLayout />}>
             <Route path="/project" element={<ProjectPage />} />
+            <Route path="/free-tools" element={<FreeToolsPage />} />
             <Route path="/team" element={<TeamPage />} />
             <Route path="/purchase" element={<PurchasePage />} />
             <Route path="/download" element={<DownloadPage />} />

@@ -54,6 +54,7 @@ INSTALLED_APPS = [
     "apps.reviews",
     "apps.admin_api",
     "apps.content",
+    "apps.insights",
 ]
 
 MIDDLEWARE = [

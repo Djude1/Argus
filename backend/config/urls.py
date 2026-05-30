@@ -27,6 +27,7 @@ urlpatterns = [
     path("api/reviews/", include("apps.reviews.urls")),
     path("api/admin/", include("apps.admin_api.urls")),
     path("api/content/", include("apps.content.urls")),
+    path("api/insights/", include("apps.insights.urls")),
     path("api/", include("apps.scans.urls")),
     # 由 Django 直接服務 Vite build 出的靜態 assets，讓 runserver 模式不必另開 npm dev
     re_path(
