@@ -288,6 +288,45 @@ def add_std_table(doc, headers, rows, caption):
     doc.add_paragraph()
 
 
+def add_grouped_table(doc, headers, rows, caption, group_fill="D9D2E9"):
+    """分組比較表：rows 內以 ("__GROUP__", "群組標題") 表示橫跨整列的分組標頭，
+    其餘為一般資料列。標題列重複、不跨頁截斷。"""
+    data_count = sum(1 for r in rows if not (r and r[0] == "__GROUP__"))
+    add_table_caption(doc, caption)
+    tbl = doc.add_table(rows=1 + len(rows), cols=len(headers))
+    tbl.style     = "Table Grid"
+    tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
+    # 標題列
+    for i, h in enumerate(headers):
+        c = tbl.rows[0].cells[i]
+        c.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+        _cell_write(c, h, size=Pt(12), bold=True, align=WD_ALIGN_PARAGRAPH.CENTER)
+        _cell_shading(c, HDR_FILL)
+        for run in c.paragraphs[0].runs:
+            run.font.color.rgb = RGBColor(0, 0, 0)
+    # 內容列
+    di = 0  # 一般資料列計數（供斑馬紋）
+    for ri, row_data in enumerate(rows):
+        row = tbl.rows[ri + 1]
+        if row_data and row_data[0] == "__GROUP__":
+            merged = row.cells[0].merge(row.cells[-1])
+            merged.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+            _cell_write(merged, row_data[1], size=Pt(12), bold=True,
+                        align=WD_ALIGN_PARAGRAPH.LEFT)
+            _cell_shading(merged, group_fill)
+            continue
+        fill = ALT_FILL if di % 2 == 0 else "FFFFFF"
+        di += 1
+        for ci, val in enumerate(row_data):
+            c = row.cells[ci]
+            c.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+            _cell_write(c, str(val), size=Pt(12),
+                        align=WD_ALIGN_PARAGRAPH.LEFT if ci == 0 else WD_ALIGN_PARAGRAPH.CENTER)
+            _cell_shading(c, fill)
+    _table_no_split(tbl, repeat_header=True)
+    doc.add_paragraph()
+
+
 def set_page_margins(doc):
     for sec in doc.sections:
         sec.top_margin    = Cm(1.5)
@@ -480,38 +519,59 @@ def ch1(doc):
 
     add_body(doc,
         "為使比較基準對等，本表選取與 Argus 同屬「雲端 SaaS 網站分析平台」之主流商業產品"
-        "進行功能維度比較，而非單一用途的命令列工具。比較對象涵蓋三大 SEO 分析平台"
-        "（SEMrush、Ahrefs、Moz Pro）與一資安監測平台（Sucuri），如表 1-2-1 所示：")
+        "進行比較，而非單一用途的命令列工具；比較對象涵蓋三大 SEO 分析平台"
+        "（SEMrush、Ahrefs、Moz Pro）與一資安監測平台（Sucuri）。為呈現各平台真正的能力邊界，"
+        "本表進一步將功能拆解為「SEO 分析」、「AEO／GEO 優化」、「資安掃描」三大維度之細項，"
+        "逐項比較，如表 1-2-1 所示（標示說明：✅ 完整支援、△ 部分／需加購、❌ 不支援）：")
 
-    add_std_table(doc,
-        ["功能維度", "Argus（本系統）", "SEMrush", "Ahrefs", "Moz Pro", "Sucuri"],
+    add_grouped_table(doc,
+        ["比較細項", "Argus（本系統）", "SEMrush", "Ahrefs", "Moz Pro", "Sucuri"],
         [
-            ("平台定位",       "四維網站健檢平台", "SEO／數位行銷套件", "SEO／外鏈分析", "SEO 分析平台", "網站資安防護"),
-            ("部署形式",       "雲端 SaaS",        "雲端 SaaS",        "雲端 SaaS",   "雲端 SaaS",   "雲端 SaaS"),
-            ("SEO 健檢",       "✅ 完整",          "✅ 完整",          "✅ 完整",     "✅ 完整",     "❌"),
-            ("AEO / GEO 掃描", "✅ 首創四維評分",  "❌",               "❌",          "❌",          "❌"),
-            ("資安被動掃描",   "✅ HTTP 標頭／TLS","❌",               "❌",          "❌",          "✅ 惡意程式／WAF"),
-            ("一站式整合四維", "✅ SEO+AEO+GEO+資安","❌（僅 SEO）",   "❌（僅 SEO）", "❌（僅 SEO）","❌（僅資安）"),
-            ("圖形化報告匯出", "✅ Word 報告",     "✅",               "✅",          "✅",          "✅ 資安報告"),
-            ("中文操作介面",   "✅ 全中文",        "部分",             "部分",        "❌",          "部分"),
-            ("計費模式",       "按需點數制",       "月訂閱",           "月訂閱",      "月訂閱",      "年訂閱"),
-            ("最低月費（約）", "NT$300 起",        "NT$4,478",         "NT$928",      "NT$1,568",    "NT$533"),
+            ("__GROUP__", "【SEO 分析維度】"),
+            ("技術／On-page 健檢（標題、描述、H1、圖片 alt、canonical）",
+                                          "✅", "✅", "✅", "✅", "❌"),
+            ("Core Web Vitals／頁面效能檢測", "❌", "✅", "✅", "△", "❌"),
+            ("關鍵字研究",                    "❌", "✅", "✅", "✅", "❌"),
+            ("反向連結（外鏈）分析",          "❌", "✅", "✅", "✅", "❌"),
+            ("關鍵字排名追蹤",                "❌", "✅", "✅", "✅", "❌"),
+            ("__GROUP__", "【AEO／GEO 優化維度】"),
+            ("AEO 答案引擎優化（FAQPage／HowTo 結構化檢測）",
+                                          "✅", "❌", "❌", "❌", "❌"),
+            ("GEO 生成式引擎優化（JSON-LD 實體／可引用段落評分）",
+                                          "✅", "❌", "❌", "❌", "❌"),
+            ("AI 品牌可見度監測（ChatGPT／Perplexity 被提及）",
+                                          "❌", "△ 加購", "△ 加購", "❌", "❌"),
+            ("__GROUP__", "【資安掃描維度】"),
+            ("HTTPS／TLS 傳輸加密檢測",       "✅", "△", "△", "△", "✅"),
+            ("安全標頭檢測（HSTS／CSP／X-Frame／X-Content-Type）",
+                                          "✅", "❌", "❌", "❌", "△"),
+            ("CSRF／表單防護檢測",            "✅", "❌", "❌", "❌", "❌"),
+            ("主動弱點探測（後台路徑／開放目錄／SQLi）",
+                                          "✅", "❌", "❌", "❌", "△"),
+            ("惡意程式／黑名單掃描",          "❌", "❌", "❌", "❌", "✅"),
+            ("WAF／網站防火牆防護",           "❌", "❌", "❌", "❌", "✅"),
         ],
-        "表 1-2-1　主流網站分析 SaaS 平台功能特性比較表")
+        "表 1-2-1　主流網站分析 SaaS 平台功能細項比較表")
 
     add_body(doc,
-        "資料來源（各平台官方定價頁，2026 年 5 月查得；外幣依台灣銀行牌告匯率"
-        "https://rate.bot.com.tw/xrt 約 1 USD≈NT$32 換算）：SEMrush Pro US$139.95/月"
-        "（https://www.semrush.com/pricing/seo/）；Ahrefs Starter US$29/月"
-        "（https://ahrefs.com/pricing）；Moz Pro Starter US$49/月"
-        "（https://moz.com/products/pro/pricing）；Sucuri Basic Platform US$199.99/年"
-        "（https://sucuri.net/website-security-platform/signup/，折合約 NT$533/月）；"
-        "Argus 為本系統按需點數定價與系統實測（2026）。",
+        "資料來源（功能依各平台官方功能／定價頁，2026 年 5 月查得；Argus 欄位依本系統"
+        "四維掃描器實測）：SEMrush（https://www.semrush.com/pricing/seo/，Pro US$139.95/月，"
+        "AI Visibility Toolkit 為加購）；Ahrefs（https://ahrefs.com/pricing，Starter US$29/月，"
+        "Brand Radar 為加購）；Moz Pro（https://moz.com/products/pro/pricing，Starter US$49/月）；"
+        "Sucuri（https://sucuri.net/website-security-platform/signup/，Basic Platform US$199.99/年）。"
+        "各平台最低月費約為：Argus NT$300 起、SEMrush NT$4,478、Ahrefs NT$928、Moz Pro NT$1,568、"
+        "Sucuri NT$533（外幣依台灣銀行牌告匯率 https://rate.bot.com.tw/xrt 約 1 USD≈NT$32 換算，"
+        "匯率每日浮動，僅供比較參考）。",
         indent=True)
 
     add_body(doc,
-        "由比較表可見，Argus 是市場上唯一同時具備四維掃描、圖形化介面、完全被動合規操作"
-        "以及按需計費的整合型平台，填補了現有工具在 AEO/GEO 維度的空白。", indent=True)
+        "由細項比較可見，SEMrush、Ahrefs、Moz Pro 在 SEO 分析（關鍵字、外鏈、排名）面向"
+        "功能深厚，但完全不提供 AEO／GEO 之頁面結構化優化檢測，也缺乏資安掃描；其 AI 相關"
+        "功能（如 SEMrush AI Visibility Toolkit、Ahrefs Brand Radar）屬獨立加購，且為「品牌"
+        "在生成式引擎被提及」之可見度監測，並非針對網站本身 FAQ／JSON-LD 結構的 AEO／GEO 評分。"
+        "Sucuri 則專精惡意程式與 WAF 防護，不涉 SEO／AEO／GEO。相較之下，Argus 是唯一"
+        "於單一平台同時整合 SEO 技術健檢、AEO／GEO 結構化優化評分與資安被動掃描三大維度的"
+        "整合型 SaaS，填補了現有工具在 AEO／GEO 維度的空白。", indent=True)
 
     # 1-3 系統目的與目標
     add_section(doc, "1-3　系統目的與目標")

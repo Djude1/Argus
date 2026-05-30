@@ -44,6 +44,31 @@
 差異化重點：四大 SEO 平台（SEMrush／Ahrefs／Moz Pro）皆無 AEO/GEO 與資安掃描；
 Sucuri 僅資安、無 SEO/AEO/GEO；唯 Argus 一站式整合 SEO+AEO+GEO+資安四維。
 
+### 1b-1 表 1-2-1 改為「細項」分組比較（2026-05-30 再修訂）
+
+> 修訂原因：原 1b 的「功能維度」比較仍偏粗（只到 SEO/AEO/GEO/資安大類）。
+> 應使用者要求，將表 1-2-1 進一步拆為三大維度之細項逐項比較，呈現各平台真正能力邊界。
+> 標示：✅ 完整支援、△ 部分／需加購、❌ 不支援。
+
+**Argus 欄位之依據**（本系統 `backend/apps/scans/scanners.py` 實測，非引用、非猜測）：
+- SEO（`analyze_seo`）：Meta title 長度、Meta description、H1 數量、圖片 alt、canonical
+  → 屬技術／On-page 健檢；**不含**關鍵字研究、外鏈、排名追蹤、Core Web Vitals。
+- AEO（`analyze_aeo`）：FAQPage／HowTo 結構化資料檢測。
+- GEO（`analyze_geo` / `analyze_geo_fast`）：JSON-LD 實體類型、可引用文字段落評分。
+- 資安（`analyze_security`）：HTTPS、安全標頭（HSTS／CSP／X-Frame-Options／X-Content-Type-Options）、
+  CSRF token；`active_probes.py`（active mode）：後台路徑、開放目錄列表、SQLi。
+- Argus **不做**惡意程式／黑名單掃描、WAF 防護、關鍵字研究、外鏈、排名追蹤、AI 品牌可見度監測。
+
+**競品 AEO/GEO 之查證**（避免誤標 Argus 核心差異化）：
+- SEMrush「AI Visibility Toolkit」、Ahrefs「Brand Radar」皆為**獨立加購**，
+  且為「品牌在 ChatGPT／Perplexity 等生成式引擎被提及」之可見度監測，
+  **非**針對網站自身 FAQ／JSON-LD 結構的 AEO/GEO 評分，與 Argus 性質不同 → 表中標「△ 加購」。
+  - 來源：SEMrush Enterprise AIO / AI Visibility Toolkit（官方），Ahrefs Brand Radar（官方）；
+    彙整參考 Search Engine Land「GEO metrics to track 2026」https://searchengineland.com/geo-metrics-to-track-476642
+- Moz Pro、Sucuri 皆無任何 AEO/GEO 功能 → 全標「❌」。
+
+各平台功能依官方功能／定價頁（2026-05 查得）逐項判定，定價同上表。
+
 ---
 
 ## 2. 市場規模（取代 v2 估算數字）
