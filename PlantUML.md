@@ -1,947 +1,1171 @@
-# Argus 系統手冊 PlantUML 圖碼
+# Argus UML 圖集
 
-本檔集中保存 `專題文件/Argus_系統手冊_第三章優化版.docx` 中系統架構、需求模型、設計模型、實作模型與資料庫設計相關圖形的 PlantUML 原始碼。圖碼以 Argus 目前實際架構為準：React SPA、Django REST API、Celery/Redis、Playwright、PostgreSQL、點數計費、授權合規、AdminAuditLog 與可選 Hermes-Agent。
+本文件收錄 `Argus_系統手冊_第三章優化版.docx` 與後續系統手冊圖說可使用的 PlantUML 原始碼。為了相容 PlantUML 1.2026.4beta4，本文件不在圖內使用 `title` 指令，圖名統一放在 Markdown 標題中。
 
-## 圖 3-1-1　Argus SaaS 分層系統架構圖
+## 圖 3-1-1 Argus SaaS 分層系統架構圖
 
 ```plantuml
 @startuml
-skinparam shadowing false
-skinparam componentStyle rectangle
+' 圖名由 Markdown 標題呈現，避免 PlantUML beta 版本 title 語法相容性問題
 skinparam defaultFontName Microsoft JhengHei
+skinparam shadowing false
+skinparam roundcorner 10
+skinparam componentStyle rectangle
 skinparam packageStyle rectangle
-skinparam ArrowColor #315a7d
-skinparam rectangle {
-  BackgroundColor #F8FBFF
-  BorderColor #315a7d
+skinparam ArrowColor #374151
+skinparam ArrowThickness 1.2
+skinparam BackgroundColor #FFFFFF
+skinparam NoteBackgroundColor #FFF7ED
+skinparam NoteBorderColor #F97316
+skinparam package {
+  BorderColor #334155
+  FontColor #111827
+}
+skinparam component {
+  BorderColor #334155
+  BackgroundColor #F8FAFC
+  FontColor #111827
 }
 
-actor "一般使用者 / Staff" as User
+actor "網站擁有者 / 分析人員" as User #E0F2FE
 
-package "用戶端層" #EAF5FF {
-  [React 18 SPA\n掃描工作區 / 後台 / PWA] as SPA
-  [Zustand Store\nuser / wallet / scans] as Store
-  [Axios API Client\nJWT + 401 interceptor] as Axios
+package "用戶端層\nReact 18 / Vite / Tailwind / Zustand" as Client #E0F2FE {
+  component "React SPA" as React
+  component "Scan Wizard\n授權聲明 / 任務送出" as Wizard
+  component "Report UI\n弱點 / GEO / 拓撲" as ReportUI
+  component "Zustand Stores\nAuth / Scan / Billing" as Stores
 }
 
-package "反向代理層" #EEF7F2 {
-  node "Nginx / frontend container" as Nginx {
-    [Static assets\nfrontend/dist] as Static
-    [Reverse Proxy\n/api/* -> web:8000] as Proxy
-  }
+package "入口與 API 層" as Edge #ECFDF5 {
+  component "Nginx / Static Server" as Nginx
+  component "Django 5 + DRF" as API
+  component "JWT / OAuth / CSRF" as Auth
 }
 
-package "應用程式層" #FFF4DF {
-  node "Django 5 + DRF" as Django {
-    [accounts\nGoogle OAuth / JWT] as Accounts
-    [scans\nScanJob API / reports] as Scans
-    [billing\nWallet / Order / Transaction] as Billing
-    [reviews\nReview thread / helpful] as Reviews
-    [content\nCMS public API] as Content
-    [admin_api\nDashboard / Audit / CMS CRUD] as Admin
-  }
+package "後端領域模組" as Domain #F8FAFC {
+  component "accounts\n身份 / OAuth / 使用者" as Accounts
+  component "scans\nScanJob / Page / Finding" as Scans
+  component "billing\n點數 / 訂單 / 交易" as Billing
+  component "reviews\n平台評論 / 管理回覆" as Reviews
+  component "content\n首頁內容 / FAQ / 公告" as Content
+  component "admin_api\n審計 / 管理介面 API" as AdminAPI
 }
 
-package "非同步任務與掃描層" #F1EDFF {
-  queue "Redis Broker" as Redis
-  node "Celery Worker" as Worker {
-    [tasks.py\n狀態機推進] as Tasks
-    [Playwright Chromium\nBFS crawler] as Browser
-    [scanners.py\nSEO / AEO / GEO / Security] as Scanner
-    [active_probes.py\nActive 探針] as Active
-    [agent runner\nHermes-Agent 可選] as Agent
-  }
+package "非同步掃描執行層" as Runtime #FEF3C7 {
+  queue "Redis\nCelery Broker / Cache" as Redis
+  component "Celery Worker" as Worker
+  component "Playwright Async Crawler\nsame-origin / robots / depth" as Crawler
+  component "Passive Scanners\nSEO / Security / Performance / GEO" as Passive
+  component "Active Probes\n需額外授權與 RPS 限制" as Active
+  component "Hermes Agent Pipeline\nAI 分析 / 攻擊路徑假設" as Agent
 }
 
-database "PostgreSQL" as DB {
-  [User / ScanJob / Page / Finding]
-  [CoinWallet / CoinTransaction / PurchaseOrder]
-  [PlatformReview / AdminAuditLog / CMS]
+package "資料與外部資源層" as Data #EEF2FF {
+  database "PostgreSQL / SQLite dev" as DB
+  folder "Report Artifacts\nDOCX / JSON / Screenshots" as Artifacts
+  cloud "OAuth Providers" as OAuth
+  cloud "AI Providers\nMiniMax / GLM / Gemini" as AI
+  node "授權目標網站" as Target
 }
 
-cloud "授權網站\nsame-origin target" as Target
-
-User --> SPA : 操作瀏覽器
-SPA --> Store
-SPA --> Axios
-Axios --> Nginx : HTTPS / REST JSON
-Nginx --> Django : /api/*
-Scans --> Billing : 預扣 / 結算 / 退款
-Scans --> Redis : enqueue ScanJob
-Redis --> Worker : dispatch task
-Tasks --> Browser : 啟動爬蟲
-Browser --> Target : authorized HTTP requests
-Tasks --> Scanner : 四維掃描
-Tasks --> Active : scan_mode=active 才執行
-Tasks --> Agent : ARGUS_AGENT_ENABLED 才執行
-Django --> DB : ORM read/write
-Worker --> DB : Page / Finding / progress
-Admin --> DB : AdminAuditLog
+User --> React : 使用瀏覽器操作
+React --> Wizard
+React --> ReportUI
+React --> Stores
+React --> Nginx : HTTPS
+Nginx --> API : /api/*
+API --> Auth
+API --> Accounts
+API --> Scans
+API --> Billing
+API --> Reviews
+API --> Content
+API --> AdminAPI
+Scans --> Redis : enqueue scan job
+Billing --> DB : reserve / settle / refund
+Accounts --> OAuth : OAuth callback
+Worker --> Redis : consume task
+Worker --> Crawler
+Crawler --> Target : 授權範圍內瀏覽
+Crawler --> Passive
+Passive --> Active : 僅在 active 授權後
+Passive --> Agent : 彙整訊號
+Active --> Target : 速率限制探測
+Agent --> AI : 模型推理
+Scans --> DB
+Worker --> DB : 寫入 Page / Finding / 狀態
+Worker --> Artifacts
+ReportUI --> API : 讀取報告與圖譜資料
 
 note right of Scans
-  掃描狀態只由 tasks.py 推進；
-  crawler/scanners 不直接修改 ScanJob.status。
+ScanJob 狀態遷移集中由
+tasks.py / service 層控管，
+避免前端或管理端直接改狀態。
 end note
 
 note bottom of Billing
-  CoinWallet 與 CoinTransaction
-  寫入只能經 billing/services.py。
+點數流程採 reserve -> settle / refund，
+取消、失敗、逾時皆需可追蹤。
 end note
 @enduml
 ```
 
-## 圖 3-1-2　掃描任務執行資料流圖
+## 圖 3-1-2 掃描任務執行資料流圖
 
 ```plantuml
 @startuml
 skinparam defaultFontName Microsoft JhengHei
 skinparam shadowing false
-skinparam activity {
-  BackgroundColor #F8FBFF
-  BorderColor #315a7d
-  DiamondBackgroundColor #FFF4DF
-}
+skinparam roundcorner 12
+skinparam BackgroundColor #FFFFFF
+skinparam ArrowColor #374151
+skinparam ActivityBorderColor #334155
+skinparam ActivityBackgroundColor #F8FAFC
+skinparam ActivityDiamondBackgroundColor #FEF3C7
+skinparam ActivityDiamondBorderColor #D97706
+skinparam partitionBorderColor #CBD5E1
+skinparam partitionBackgroundColor #FAFAFA
 
 start
-:使用者輸入 URL、掃描模式、max_pages;
-:前端檢查授權勾選與 Active 額外授權;
-:POST /api/scans/;
+partition "使用者與前端" {
+  :輸入目標 URL、掃描深度與頁數限制;
+  :確認網站授權、robots.txt 與掃描模式;
+  :送出 POST /api/scans/scan-jobs/;
+}
 
-if (URL 與授權檢查通過？) then (是)
-  :Django Serializer 驗證 same-origin、第三方警示、max_pages;
-else (否)
-  :回傳 400 / UI 顯示原因;
-  stop
-endif
+partition "Django API / 領域服務" {
+  if (URL 格式與 same-origin 規則有效?) then (是)
+    :建立 AuthorizationConsent 記錄;
+  else (否)
+    :回傳 400 與可修正原因;
+    stop
+  endif
 
-if (點數足夠？) then (是)
-  :BillingService.hold_for_scan\n預扣 max_pages × 10 coin;
-else (否)
-  :回傳 coin 不足;
-  stop
-endif
+  if (點數足夠?) then (是)
+    :BillingService.reserve_cost();
+  else (否)
+    :回傳 402 / 需要儲值;
+    stop
+  endif
 
-:建立 ScanJob status=queued;
-:Celery enqueue run_scan_job;
-:Worker 設為 crawling\n並更新 progress;
-:Playwright BFS 擷取 HTML、DOM、截圖、outgoing_links;
+  :建立 ScanJob = queued;
+  :寫入任務參數、授權摘要、成本快照;
+  :送入 Redis / Celery queue;
+}
 
-if (使用者取消？) then (是)
-  :raise ScanCancelled;
-  :refund_full_for_scan;
-  :status=cancelled;
-  stop
-endif
+partition "Celery Worker / 掃描執行" {
+  :ScanJob -> crawling;
+  :Playwright 依深度與頁數限制爬取;
+  if (使用者取消?) then (是)
+    :停止瀏覽器與待處理佇列;
+    :BillingService.refund_unused();
+    :ScanJob -> cancelled;
+    stop
+  else (否)
+    :萃取 Page、連結、截圖、HTTP metadata;
+  endif
 
-:Worker 設為 scanning;
-:執行 SEO / AEO / GEO / Passive Security scanners;
+  :ScanJob -> scanning;
+  :執行 SEO / Security / Performance / GEO 被動掃描;
 
-if (scan_mode == active 且已授權？) then (是)
-  :執行 SQLi / admin path / directory listing\n無破壞性探針，RPS <= 2;
-endif
+  if (Active 掃描已額外授權?) then (是)
+    :套用 RPS 限制與安全探測白名單;
+    :執行低風險 Active Probe;
+  else (否)
+    :略過 Active Probe，保留未授權註記;
+  endif
 
-if (ARGUS_AGENT_ENABLED？) then (是)
-  :Worker 設為 agent_testing;
-  :Hermes-Agent observe -> think -> act;
-  :report_ux_issue 轉成 UX Finding;
-endif
+  if (Agent 分析啟用?) then (是)
+    :ScanJob -> agent_testing;
+    :整理 Findings 與頁面拓撲;
+    :呼叫 AI Provider 產生攻擊路徑與修復建議;
+  else (否)
+    :直接彙整規則掃描結果;
+  endif
+}
 
-:寫入 Page、Finding、top_actions、category_scores;
-:BillingService.settle_scan_actual\n依實際頁數退差額;
-:status=completed 並清空 progress;
-:前端顯示截圖高光、拓樸圖與 Word 報告下載;
+partition "資料庫與報告" {
+  :寫入 Page / Finding / AgentSession;
+  :產生報告摘要、拓撲資料、DOCX 匯出素材;
+  :BillingService.settle_actual_cost();
+  :ScanJob -> completed;
+}
+
 stop
 @enduml
 ```
 
-## 圖 3-1-3　ScanJob 核心狀態與橫切機制圖
+## 圖 3-1-3 ScanJob 核心狀態與橫切機制圖
 
 ```plantuml
 @startuml
 skinparam defaultFontName Microsoft JhengHei
 skinparam shadowing false
-skinparam state {
-  BackgroundColor #EAF5FF
-  BorderColor #315a7d
-}
+skinparam roundcorner 12
+skinparam BackgroundColor #FFFFFF
+skinparam StateBorderColor #334155
+skinparam StateBackgroundColor #F8FAFC
+skinparam StateFontColor #111827
+skinparam ArrowColor #374151
+skinparam NoteBackgroundColor #EFF6FF
+skinparam NoteBorderColor #2563EB
 
-[*] --> queued : POST /api/scans/
-queued --> crawling : Celery worker start
-crawling --> scanning : BFS completed
-scanning --> agent_testing : ARGUS_AGENT_ENABLED
-scanning --> completed : static scan completed
-agent_testing --> completed : agent finished / skipped
+[*] --> queued : 建立任務 / reserve 點數
+queued --> crawling : Celery worker 取得任務
+crawling --> scanning : 頁面擷取完成
+scanning --> agent_testing : 啟用 AI/Agent 分析
+scanning --> completed : 規則掃描完成
+agent_testing --> completed : AI 分析完成
 
-queued --> cancelled : cancel request
-crawling --> cancelled : cooperative cancel
-scanning --> cancelled : cooperative cancel
-agent_testing --> cancelled : cooperative cancel
+queued --> cancelled : 使用者取消
+crawling --> cancelled : 使用者取消 / 超出授權範圍
+scanning --> cancelled : 使用者取消
+agent_testing --> cancelled : 使用者取消
 
-queued --> failed : exception
-crawling --> failed : crawler error
-scanning --> failed : scanner error
-agent_testing --> completed : agent warning only
+queued --> failed : 建立後派送失敗
+crawling --> failed : Playwright / 網站錯誤
+scanning --> failed : 掃描器未處理例外
+agent_testing --> failed : Provider 不可用且無備援
 
 completed --> [*]
 cancelled --> [*]
 failed --> [*]
 
+state "橫切控制" as CrossCutting {
+  [*] --> Consent
+  Consent : AuthorizationConsent\n法律授權與掃描範圍
+  Consent --> Robots
+  Robots : robots.txt / same-origin\n深度與頁數限制
+  Robots --> Cost
+  Cost : reserve / settle / refund\n點數交易審計
+  Cost --> Audit
+  Audit : AdminAuditLog\n管理操作留痕
+  Audit --> [*]
+}
+
 note right of queued
-  AuthorizationConsent
-  user_id / IP / timestamp / user-agent
+queued 之後不得由前端直接推進狀態；
+狀態轉換由後端任務流程集中處理。
 end note
 
-note right of crawling
-  same-origin
-  max_depth / max_pages
-  robots.txt
-  blocked detection
-end note
-
-note right of scanning
-  Passive 預設
-  Active 需額外授權
-  RPS <= 2
-end note
-
-note bottom of completed
-  settle_scan_actual(actual_pages)
-  Word report / topology / findings
-end note
-
-note bottom of cancelled
-  refund_full_for_scan()
-  冪等退款，可被 API 與 Worker 同時呼叫
-end note
-
-note left of failed
-  error_message 保留診斷資訊
-  refund_full_for_scan()
+note bottom of failed
+failed 必須保留 error_code、可重試性、
+已扣/未扣點數與最後成功階段。
 end note
 @enduml
 ```
 
-## 圖 5-2-1　使用個案圖（Use Case Diagram）
+## 圖 5-2-1 使用個案圖
 
 ```plantuml
 @startuml
 left to right direction
 skinparam defaultFontName Microsoft JhengHei
 skinparam shadowing false
+skinparam roundcorner 12
+skinparam BackgroundColor #FFFFFF
+skinparam ActorBorderColor #334155
+skinparam ActorBackgroundColor #E0F2FE
+skinparam UsecaseBorderColor #334155
+skinparam UsecaseBackgroundColor #F8FAFC
+skinparam PackageBorderColor #CBD5E1
+skinparam PackageBackgroundColor #FAFAFA
+skinparam ArrowColor #374151
 
 actor "訪客" as Guest
-actor "一般使用者" as User
+actor "一般使用者" as Member
 actor "Staff 管理員" as Staff
 actor "Superuser" as Super
 actor "Celery Worker" as Worker
-actor "外部 OAuth / AI Provider" as Provider
+actor "OAuth Provider" as OAuth
+actor "AI Provider" as AI
 
-rectangle "Argus 網站健檢 SaaS 平台" {
-  usecase "瀏覽公開頁\n(project/team/purchase/download)" as UC_Public
-  usecase "Google OAuth 登入" as UC_Login
-  usecase "查看/購買點數" as UC_Billing
-  usecase "提交掃描任務" as UC_Submit
-  usecase "同意授權聲明" as UC_Consent
-  usecase "啟用 Active 測試授權" as UC_ActiveConsent
-  usecase "追蹤掃描進度" as UC_Progress
-  usecase "取消掃描任務" as UC_Cancel
-  usecase "查看互動報告" as UC_Report
-  usecase "查看拓樸圖" as UC_Topology
-  usecase "下載 Word 報告" as UC_Docx
-  usecase "撰寫評論 / 回覆對話" as UC_Review
-  usecase "管理使用者與點數" as UC_AdminUser
-  usecase "管理掃描任務" as UC_AdminScan
-  usecase "管理 CMS / 方案 / 訂單" as UC_CMS
-  usecase "查看稽核紀錄" as UC_Audit
-  usecase "執行 BFS 爬蟲與四維掃描" as UC_WorkerScan
-  usecase "執行 Hermes-Agent UX 測試" as UC_Agent
+rectangle "Argus SaaS 平台" {
+  package "公開與帳號" {
+    usecase "瀏覽公開內容" as UC_Public
+    usecase "註冊 / 登入" as UC_Login
+    usecase "OAuth 登入" as UC_OAuth
+  }
+
+  package "掃描任務" {
+    usecase "建立掃描任務" as UC_CreateScan
+    usecase "確認網站授權" as UC_Consent
+    usecase "啟用 Active 掃描" as UC_Active
+    usecase "查看進度" as UC_Progress
+    usecase "取消任務" as UC_Cancel
+  }
+
+  package "報告與知識輸出" {
+    usecase "查看掃描報告" as UC_Report
+    usecase "查看網站拓撲" as UC_Topology
+    usecase "匯出 DOCX 報告" as UC_Docx
+    usecase "提交平台評論" as UC_Review
+  }
+
+  package "計費" {
+    usecase "購買點數" as UC_Buy
+    usecase "查詢交易紀錄" as UC_Tx
+    usecase "任務成本結算" as UC_Settle
+  }
+
+  package "管理端" {
+    usecase "管理使用者與角色" as UC_AdminUsers
+    usecase "管理掃描任務" as UC_AdminScans
+    usecase "管理公開內容" as UC_CMS
+    usecase "檢視審計紀錄" as UC_Audit
+  }
+
+  package "背景執行" {
+    usecase "執行爬取與規則掃描" as UC_WorkerScan
+    usecase "執行 Agent 分析" as UC_Agent
+  }
 }
 
 Guest --> UC_Public
 Guest --> UC_Login
-User --> UC_Billing
-User --> UC_Submit
-User --> UC_Progress
-User --> UC_Cancel
-User --> UC_Report
-User --> UC_Topology
-User --> UC_Docx
-User --> UC_Review
-Staff --> UC_AdminUser
-Staff --> UC_AdminScan
-Staff --> UC_CMS
-Super --> UC_Audit
-Worker --> UC_WorkerScan
-Worker --> UC_Agent
-Provider --> UC_Login
-Provider --> UC_Agent
+UC_Login --> UC_OAuth
+OAuth --> UC_OAuth
 
-UC_Submit ..> UC_Consent : <<include>>
-UC_Submit ..> UC_ActiveConsent : <<extend>>\nscan_mode=active
-UC_Report ..> UC_Docx : <<extend>>
-Staff --|> User
-Super --|> Staff
+Member --> UC_CreateScan
+UC_CreateScan --> UC_Consent
+UC_CreateScan --> UC_Buy
+Member --> UC_Active
+Member --> UC_Progress
+Member --> UC_Cancel
+Member --> UC_Report
+UC_Report --> UC_Topology
+UC_Report --> UC_Docx
+Member --> UC_Review
+Member --> UC_Tx
+
+Worker --> UC_WorkerScan
+UC_WorkerScan --> UC_Settle
+UC_WorkerScan --> UC_Agent
+AI --> UC_Agent
+
+Staff --> UC_AdminScans
+Staff --> UC_CMS
+Staff --> UC_Audit
+Super --> UC_AdminUsers
+Super --> UC_AdminScans
+Super --> UC_CMS
+Super --> UC_Audit
 @enduml
 ```
 
-## 圖 5-3-1　活動圖：提交掃描任務（Activity Diagram）
+## 圖 5-3-1 活動圖：提交掃描任務
 
 ```plantuml
 @startuml
 skinparam defaultFontName Microsoft JhengHei
 skinparam shadowing false
+skinparam roundcorner 12
+skinparam BackgroundColor #FFFFFF
+skinparam ActivityBorderColor #334155
+skinparam ActivityBackgroundColor #F8FAFC
+skinparam ActivityDiamondBackgroundColor #FEF3C7
+skinparam ActivityDiamondBorderColor #D97706
+skinparam ArrowColor #374151
+skinparam partitionBorderColor #CBD5E1
+skinparam partitionBackgroundColor #FAFAFA
 
-|使用者|
 start
-:登入系統;
-:輸入目標網址;
-:選擇單頁/整站與 passive/active;
-:勾選授權聲明;
+partition "使用者" {
+  :輸入目標網站 URL;
+  :選擇掃描深度、頁數上限、掃描模式;
+  :勾選授權與責任聲明;
+}
 
-|React SPA|
-:估算預扣點數;
-:送出 POST /api/scans/;
+partition "React SPA" {
+  :前端格式檢查;
+  :顯示預估成本與授權提醒;
+  :呼叫 POST /api/scans/scan-jobs/;
+}
 
-|Django API|
-:驗證 JWT 與 request payload;
-if (授權聲明有效？) then (是)
-else (否)
-  :回傳 400;
-  |使用者|
-  :修正授權勾選;
-  stop
-endif
+partition "Django API" {
+  if (JWT 有效?) then (是)
+    :解析請求與序列化驗證;
+  else (否)
+    :回傳 401;
+    stop
+  endif
 
-if (URL 合規？\nsame-origin / third-party warning) then (是)
-else (否)
-  :回傳 URL 驗證錯誤;
-  stop
-endif
+  if (URL、same-origin、授權欄位有效?) then (是)
+    :寫入 AuthorizationConsent;
+  else (否)
+    :回傳 400 與欄位錯誤;
+    stop
+  endif
 
-if (點數足夠？) then (是)
-  :hold_for_scan();
-else (否)
-  :回傳 coin 不足;
-  stop
-endif
+  if (點數餘額足夠?) then (是)
+    :保留預估點數;
+  else (否)
+    :回傳 402 與儲值提示;
+    stop
+  endif
 
-:建立 ScanJob queued;
-:送入 Celery 佇列;
+  :建立 ScanJob = queued;
+  :送入 Celery 任務佇列;
+  :回傳 task_id / scan_job_id;
+}
 
-|Celery Worker|
-:crawling;
-:Playwright BFS 爬蟲;
-if (使用者取消？) then (是)
-  :refund_full_for_scan();
-  :status=cancelled;
-  stop
-endif
-:scanning;
-:四維掃描產生 Finding;
-if (Active 授權？) then (是)
-  :執行無破壞性 Active probes;
-endif
-if (Agent 啟用？) then (是)
-  :Hermes-Agent UX 測試;
-endif
-:settle_scan_actual();
-:status=completed;
+partition "React SPA" {
+  :導向任務進度頁;
+  :開始輪詢或訂閱任務狀態;
+}
 
-|React SPA|
-:輪詢狀態完成;
-:呈現截圖高光、拓樸圖、Word 報告下載;
+partition "Celery Worker" {
+  :取得 queued 任務;
+  :更新 ScanJob = crawling;
+  :啟動 Playwright 爬取;
+}
+
 stop
 @enduml
 ```
 
-## 圖 5-4-1　分析類別圖（Analysis Class Diagram）
+## 圖 5-4-1 分析類別圖
 
 ```plantuml
 @startuml
 skinparam defaultFontName Microsoft JhengHei
 skinparam shadowing false
+skinparam roundcorner 10
 skinparam classAttributeIconSize 0
+skinparam BackgroundColor #FFFFFF
+skinparam ClassBorderColor #334155
+skinparam ClassBackgroundColor #F8FAFC
+skinparam ArrowColor #374151
+skinparam NoteBackgroundColor #ECFDF5
+skinparam NoteBorderColor #10B981
 
 class User {
-  id
-  username
-  email
-  is_staff
-  is_superuser
+  +id
+  +email
+  +role
+  +is_staff
+  +is_superuser
 }
 
 class ScanJob {
-  id
-  original_url
-  scan_mode
-  status
-  max_depth
-  max_pages
-  progress
-  overall_score
-}
-
-class Page {
-  id
-  final_url
-  status_code
-  title
-  depth
-  screenshot
-  outgoing_links
-}
-
-class Finding {
-  id
-  category
-  severity
-  title
-  description
-  remediation
-  evidence
-  selector
-  bounding_box
-}
-
-class CoinWallet {
-  id
-  balance
-  total_purchased_ntd
-  total_scans_used
-}
-
-class CoinTransaction {
-  id
-  amount
-  kind
-  balance_after
-  note
-}
-
-class PricingPlan {
-  id
-  name
-  price_ntd
-  coins
-  is_active
-}
-
-class PurchaseOrder {
-  id
-  buyer_name
-  buyer_email
-  invoice_type
-  carrier_type
-  status
-}
-
-class PlatformReview {
-  id
-  rating
-  content
-  is_featured
-}
-
-class ReviewMessage {
-  id
-  body
-  image
-  is_admin
+  +id
+  +target_url
+  +status
+  +scan_mode
+  +depth_limit
+  +page_limit
+  +estimated_cost
+  +actual_cost
+  +created_at
+  +completed_at
 }
 
 class AuthorizationConsent {
-  id
-  ip_address
-  user_agent
-  consent_text
-  created_at
+  +id
+  +scope_summary
+  +robots_policy
+  +active_scan_allowed
+  +ip_address
+  +accepted_at
+}
+
+class Page {
+  +id
+  +url
+  +status_code
+  +content_type
+  +depth
+  +load_time_ms
+}
+
+class Finding {
+  +id
+  +category
+  +severity
+  +rule_id
+  +title
+  +evidence
+  +recommendation
 }
 
 class AgentSession {
-  id
-  provider
-  model
-  total_tokens
-  status
+  +id
+  +provider
+  +model_name
+  +status
+  +capability_summary
+  +token_usage
+}
+
+class CoinWallet {
+  +id
+  +balance
+  +reserved_balance
+}
+
+class CoinTransaction {
+  +id
+  +type
+  +amount
+  +status
+  +reference
+}
+
+class PricingPlan {
+  +id
+  +name
+  +coins
+  +price
+  +is_active
+}
+
+class PurchaseOrder {
+  +id
+  +provider
+  +amount
+  +status
+  +paid_at
+}
+
+class PlatformReview {
+  +id
+  +rating
+  +content
+  +status
+}
+
+class ReviewMessage {
+  +id
+  +message
+  +is_staff_reply
 }
 
 class AdminAuditLog {
-  id
-  action
-  target_object_repr
-  payload
-  created_at
+  +id
+  +actor
+  +action
+  +target_type
+  +target_id
+  +created_at
 }
 
-User "1" -- "1" CoinWallet
-User "1" -- "0..*" ScanJob
-User "1" -- "0..*" PurchaseOrder
-User "1" -- "0..1" PlatformReview
-User "1" -- "0..*" AuthorizationConsent
-User "1" -- "0..*" AdminAuditLog : actor
+User "1" -- "0..*" ScanJob : owns
+User "1" -- "1" CoinWallet : has
+User "1" -- "0..*" PlatformReview : writes
+User "1" -- "0..*" ReviewMessage : sends
+User "1" -- "0..*" AdminAuditLog : performs
 
-ScanJob "1" -- "0..*" Page
-ScanJob "1" -- "0..*" Finding
-Page "1" -- "0..*" Finding
-ScanJob "1" -- "0..*" AgentSession
+ScanJob "1" -- "1" AuthorizationConsent : requires
+ScanJob "1" -- "0..*" Page : crawls
+ScanJob "1" -- "0..*" Finding : produces
+ScanJob "1" -- "0..*" AgentSession : analyzes
+ScanJob "1" -- "0..*" CoinTransaction : reserves / settles
 
-CoinWallet "1" -- "0..*" CoinTransaction
-CoinTransaction "0..1" -- "0..1" ScanJob
-PurchaseOrder "0..1" -- "1" PricingPlan
-PurchaseOrder "0..1" -- "0..1" CoinTransaction
+Page "1" -- "0..*" Finding : evidence on
+CoinWallet "1" -- "0..*" CoinTransaction : records
+PricingPlan "1" -- "0..*" PurchaseOrder : purchased as
+PurchaseOrder "1" -- "0..*" CoinTransaction : credits
+PlatformReview "1" -- "0..*" ReviewMessage : discussion
 
-PlatformReview "1" -- "0..*" ReviewMessage
+note right of AuthorizationConsent
+記錄授權聲明、掃描範圍、
+Active 額外授權與來源 IP，
+支撐法律與審計需求。
+end note
 @enduml
 ```
 
-## 圖 6-1-1　掃描任務循序圖（Sequential Diagram）
+## 圖 6-1-1 掃描任務循序圖
 
 ```plantuml
 @startuml
 skinparam defaultFontName Microsoft JhengHei
 skinparam shadowing false
+skinparam roundcorner 10
+skinparam sequence {
+  ArrowColor #374151
+  LifeLineBorderColor #CBD5E1
+  LifeLineBackgroundColor #F8FAFC
+  ParticipantBorderColor #334155
+  ParticipantBackgroundColor #E0F2FE
+  ActorBorderColor #334155
+  ActorBackgroundColor #ECFDF5
+}
+hide footbox
 autonumber
 
-actor User as "使用者"
-participant SPA as "React SPA"
-participant API as "Django DRF\nScanJobViewSet"
-participant Billing as "BillingService"
-queue Redis as "Redis / Celery Broker"
-participant Worker as "Celery Worker\nrun_scan_job"
-participant Browser as "Playwright\nChromium"
-participant Scanner as "四維 Scanner\nSEO/AEO/GEO/Security"
-participant Agent as "Hermes-Agent\n(optional)"
-database DB as "PostgreSQL"
+actor "使用者" as User
+participant "React SPA" as SPA
+participant "ScanJobViewSet\nDjango DRF" as API #E0F2FE
+participant "BillingService" as Billing #FEF3C7
+database "PostgreSQL" as DB #EEF2FF
+queue "Redis / Celery Broker" as Redis #FCE7F3
+participant "run_scan_job\nCelery Task" as Task #FEF3C7
+participant "Playwright\nChromium" as Browser #ECFDF5
+participant "四維掃描器\nSEO/Security/Performance/GEO" as Scanners #ECFDF5
+participant "Hermes Agent\n可選" as Agent #F3E8FF
+participant "AI Provider" as AI #F3E8FF
 
-User -> SPA : 填寫 URL、掃描模式、授權勾選
-SPA -> API : POST /api/scans/
-API -> API : Serializer 驗證 URL / 授權 / Active / max_pages
-API -> Billing : hold_for_scan(scan)
-Billing -> DB : select_for_update wallet\ncreate CoinTransaction(hold)
-API -> DB : create ScanJob(status=queued)\ncreate AuthorizationConsent
-API -> Redis : enqueue run_scan_job(scan_id)
-API --> SPA : 201 ScanJob
+User -> SPA : 填寫 URL、限制、授權聲明
+SPA -> API : POST /api/scans/scan-jobs/
+API -> API : Serializer 驗證 URL / same-origin / 授權欄位
+API -> Billing : reserve_cost(user, estimated_cost)
+Billing -> DB : 建立 reserved CoinTransaction
+API -> DB : 建立 ScanJob = queued
+API -> Redis : enqueue run_scan_job(scan_job_id)
+API --> SPA : 201 Created + scan_job_id
+SPA --> User : 顯示進度頁
 
-loop 前端輪詢
-  SPA -> API : GET /api/scans/{id}/status/
-  API --> SPA : status + progress
+Redis -> Task : 派送任務
+Task -> DB : ScanJob = crawling
+Task -> Browser : 啟動 browser context
+Browser -> Browser : robots.txt / depth / page limit 控制
+Browser --> Task : pages + screenshots + network metadata
+Task -> DB : 寫入 Page
+
+Task -> DB : ScanJob = scanning
+Task -> Scanners : 執行被動規則掃描
+Scanners --> Task : Finding candidates
+
+alt Active 掃描已額外授權
+  Task -> Scanners : 執行低風險 Active Probe / RPS 限制
+  Scanners --> Task : Active findings
+else 未授權 Active
+  Task -> DB : 記錄 skipped_active_scan_reason
 end
 
-Redis -> Worker : dispatch task
-Worker -> DB : status=crawling\nprogress.phase=crawling
-Worker -> Browser : crawl_site(original_url)
-Browser -> DB : save Page(html/dom/screenshot/links)
-Worker -> DB : status=scanning
-Worker -> Scanner : scan pages
-Scanner -> DB : create Finding\nupdate scores/top_actions
-
-alt scan_mode=active
-  Worker -> Scanner : run active_probes(RPS <= 2)
-  Scanner -> DB : create security Findings
+opt 啟用 Agent 分析
+  Task -> DB : ScanJob = agent_testing
+  Task -> Agent : 彙整 pages / findings / topology
+  Agent -> AI : 呼叫可用模型
+  AI --> Agent : 風險敘事與修復建議
+  Agent --> Task : AgentSession + enriched findings
 end
 
-alt ARGUS_AGENT_ENABLED
-  Worker -> DB : status=agent_testing
-  Worker -> Agent : observe -> think -> act
-  Agent -> Browser : click/type/scroll/screenshot tools
-  Agent -> DB : persist UX Finding
-end
-
-Worker -> Billing : settle_scan_actual(actual_pages)
-Billing -> DB : create settle transaction\nupdate wallet
-Worker -> DB : status=completed\nprogress={}
-SPA -> API : GET findings/pages/report
-API -> DB : read Page/Finding
-API --> SPA : interactive report / docx blob
+Task -> DB : 寫入 Finding / AgentSession / report summary
+Task -> Billing : settle_actual_cost(scan_job_id)
+Billing -> DB : 完成點數結算
+Task -> DB : ScanJob = completed
+SPA -> API : GET /api/scans/scan-jobs/{id}/
+API -> DB : 讀取報告資料
+API --> SPA : report JSON
+SPA --> User : 呈現報告、拓撲與匯出入口
 @enduml
 ```
 
-## 圖 6-2-1　設計類別圖（Design Class Diagram）
+## 圖 6-2-1 設計類別圖
 
 ```plantuml
 @startuml
 skinparam defaultFontName Microsoft JhengHei
 skinparam shadowing false
+skinparam roundcorner 10
 skinparam classAttributeIconSize 0
+skinparam BackgroundColor #FFFFFF
+skinparam ClassBorderColor #334155
+skinparam ClassBackgroundColor #F8FAFC
+skinparam ArrowColor #374151
+skinparam NoteBackgroundColor #FEF3C7
+skinparam NoteBorderColor #D97706
 
-class ScanJobViewSet <<DRF ViewSet>> {
+class ScanJobViewSet <<DRF Controller>> {
   +create(request)
-  +status(request, pk)
+  +retrieve(request, pk)
   +cancel(request, pk)
-  +topology(request, pk)
-  +report(request, pk)
+  +export_docx(request, pk)
 }
 
 class ScanJobCreateSerializer <<Serializer>> {
-  +validate(attrs)
+  +validate_target_url()
+  +validate_authorization()
   +create(validated_data)
 }
 
+class BillingService <<Domain Service>> {
+  +estimate_cost(params)
+  +reserve_cost(user, amount)
+  +settle_actual_cost(scan_job)
+  +refund_unused(scan_job)
+}
+
 class RunScanJobTask <<Celery Task>> {
-  +run_scan_job(scan_id)
-  -_write_progress(scan_id, done, total, phase)
+  +run(scan_job_id)
+  -transition(status)
+  -handle_failure(error)
 }
 
-class Crawler <<module>> {
-  +crawl_site(url, max_depth, max_pages, progress_callback)
+class Crawler <<Runtime Adapter>> {
+  +crawl(target_url, limits)
+  +respect_robots_txt()
+  +enforce_same_origin()
 }
 
-class StaticScanners <<module>> {
-  +run_scanners(page)
-  +build_site_findings(scan)
+class StaticScanners <<Scanner Facade>> {
+  +scan_seo(page)
+  +scan_security(page)
+  +scan_performance(page)
+  +scan_geo(page)
 }
 
-class ActiveProbes <<module>> {
-  +run_active_probes(scan)
+class ActiveProbes <<Optional Scanner>> {
+  +probe_headers()
+  +probe_common_paths()
+  +throttle_rps()
 }
 
-class AgentRunner <<module>> {
-  +run_agent_for_scan(scan)
-  +persist_agent_issues(session, issues)
+class AgentRunner <<AI Orchestrator>> {
+  +select_provider()
+  +summarize_capabilities()
+  +analyze_attack_paths()
 }
 
-class BillingService <<service>> {
-  +hold_for_scan(scan)
-  +settle_scan_actual(scan, actual_pages)
-  +refund_full_for_scan(scan)
-  +grant_monthly_bonus(user)
-  +purchase_coins(user, plan, order)
-  +adjust_coin_manual(wallet, delta, note, actor)
+class ReportBuilder <<Application Service>> {
+  +build_json(scan_job)
+  +build_topology(scan_job)
+  +export_docx(scan_job)
 }
 
-class ReportBuilder <<service>> {
-  +build_scan_report(scan)
+class AdminAuditService <<Cross-cutting Service>> {
+  +record(actor, action, target)
 }
 
-class AdminAuditService <<service>> {
-  +record(action, actor, target, payload)
-}
-
-ScanJobViewSet --> ScanJobCreateSerializer
-ScanJobViewSet --> BillingService : create/cancel
-ScanJobViewSet --> ReportBuilder
-ScanJobCreateSerializer --> BillingService : hold_for_scan
+ScanJobViewSet --> ScanJobCreateSerializer : validates
+ScanJobViewSet --> BillingService : estimate / reserve / refund
+ScanJobViewSet --> ReportBuilder : report / export
+ScanJobViewSet --> AdminAuditService : admin actions
 ScanJobViewSet --> RunScanJobTask : enqueue
-RunScanJobTask --> Crawler
-RunScanJobTask --> StaticScanners
-RunScanJobTask --> ActiveProbes : active only
-RunScanJobTask --> AgentRunner : optional
-RunScanJobTask --> BillingService : settle/refund
-BillingService --> AdminAuditService : admin adjust
+
+RunScanJobTask --> Crawler : crawl pages
+RunScanJobTask --> StaticScanners : passive scan
+RunScanJobTask --> ActiveProbes : when authorized
+RunScanJobTask --> AgentRunner : optional analysis
+RunScanJobTask --> BillingService : settle / refund
+RunScanJobTask --> ReportBuilder : materialize report summary
+
+Crawler --> StaticScanners : normalized page snapshots
+StaticScanners --> AgentRunner : findings context
+ActiveProbes --> AgentRunner : active evidence
+
+note right of ActiveProbes
+ActiveProbes 僅在使用者明確授權後執行，
+且必須套用 RPS 限制與低風險探測集合。
+end note
 @enduml
 ```
 
-## 圖 7-1-1　Docker Compose 佈署圖（Deployment Diagram）
+## 圖 7-1-1 Docker Compose 佈署圖
 
 ```plantuml
 @startuml
 skinparam defaultFontName Microsoft JhengHei
 skinparam shadowing false
+skinparam roundcorner 12
+skinparam componentStyle rectangle
+skinparam BackgroundColor #FFFFFF
+skinparam NodeBorderColor #334155
+skinparam NodeBackgroundColor #F8FAFC
+skinparam ArtifactBorderColor #334155
+skinparam ArtifactBackgroundColor #E0F2FE
+skinparam DatabaseBorderColor #334155
+skinparam DatabaseBackgroundColor #EEF2FF
+skinparam ArrowColor #374151
 
-node "User Browser" as Browser
-
-node "Docker Host" {
-  node "frontend\nnginx:1.26-alpine" as Frontend {
-    artifact "frontend/dist" as Dist
-  }
-
-  node "web\nDjango + DRF\nport 8000" as Web {
-    artifact "backend/config"
-    artifact "backend/apps"
-  }
-
-  node "worker\nCelery + Playwright" as Worker {
-    artifact "Chromium runtime"
-  }
-
-  database "db\nPostgreSQL:5432" as DB
-  queue "redis\nRedis:6379" as Redis
+node "使用者裝置" as Client {
+  artifact "Browser" as Browser
 }
 
-cloud "Authorized target site" as Target
-cloud "Google OAuth / AI Providers" as Provider
+node "Docker Host" as Host {
+  node "frontend container" as Frontend {
+    artifact "React static assets\nserved by Nginx" as FE
+  }
 
-Browser --> Frontend : HTTP/HTTPS
-Frontend --> Web : /api/* -> web:8000
-Web --> DB : ORM
-Web --> Redis : enqueue task
-Worker --> Redis : consume task
-Worker --> DB : Page / Finding / progress
-Worker --> Target : Playwright HTTP
-Web --> Provider : OAuth token verify
-Worker --> Provider : optional Agent API
+  node "web container" as Web {
+    artifact "Django + DRF\nGunicorn/Uvicorn" as Django
+  }
+
+  node "worker container" as Worker {
+    artifact "Celery Worker" as Celery
+    artifact "Playwright Chromium" as PW
+  }
+
+  database "postgres service" as Postgres
+  queue "redis service" as Redis
+  folder "media / reports volume" as Media
+}
+
+cloud "OAuth Providers" as OAuth
+cloud "AI Providers" as AI
+node "授權目標網站" as Target
+
+Browser --> FE : HTTPS / static files
+Browser --> Django : HTTPS /api/*
+Django --> Postgres : ORM
+Django --> Redis : cache / enqueue
+Django --> Media : report artifacts
+Django --> OAuth : OAuth callback
+Celery --> Redis : consume jobs
+Celery --> Postgres : update ScanJob / Findings
+Celery --> Media : screenshots / exports
+Celery --> PW : browser automation
+PW --> Target : same-origin crawl
+Celery --> AI : agent analysis
 
 note bottom of Worker
-  Playwright browser 必須在容器或專案 .ms-playwright，
-  不使用使用者層級瀏覽器快取。
+Playwright browser binaries 必須放在專案內 .ms-playwright，
+避免污染使用者層級環境。
 end note
 @enduml
 ```
 
-## 圖 7-2-1　套件架構圖（Package Diagram）
+## 圖 7-2-1 套件架構圖
 
 ```plantuml
 @startuml
 skinparam defaultFontName Microsoft JhengHei
 skinparam shadowing false
+skinparam roundcorner 10
 skinparam packageStyle rectangle
+skinparam BackgroundColor #FFFFFF
+skinparam PackageBorderColor #334155
+skinparam PackageBackgroundColor #F8FAFC
+skinparam ArrowColor #374151
+skinparam NoteBackgroundColor #EFF6FF
+skinparam NoteBorderColor #2563EB
 
-package "backend/config" as Config {
-  [settings.py]
-  [urls.py]
-  [celery.py]
+package "frontend/src" #E0F2FE {
+  package "pages" as FE_Pages
+  package "components" as FE_Components
+  package "stores\nZustand" as FE_Stores
+  package "api\nAxios clients" as FE_API
 }
 
-package "apps.accounts" as Accounts
-package "apps.scans" as Scans
-package "apps.billing" as Billing
-package "apps.reviews" as Reviews
-package "apps.content" as Content
-package "apps.admin_api" as Admin
-package "apps.agent" as Agent
-package "apps.insights" as Insights
+package "backend/config" #ECFDF5 {
+  package "settings" as Settings
+  package "urls" as URLs
+  package "celery" as CeleryConfig
+}
 
-Accounts ..> Config
-Scans ..> Config
-Billing ..> Config
-Reviews ..> Config
-Content ..> Config
-Admin ..> Config
-Agent ..> Config
-Insights ..> Config
+package "backend/apps" #F8FAFC {
+  package "accounts" as Accounts
+  package "scans" as Scans
+  package "billing" as Billing
+  package "reviews" as Reviews
+  package "content" as Content
+  package "admin_api" as AdminAPI
+  package "agent" as Agent
+  package "insights" as Insights
+}
 
-Scans --> Billing : hold / settle / refund
-Scans --> Agent : optional UX test
-Admin --> Billing : manual adjustment
-Admin --> Reviews : admin reply
-Admin --> Content : CMS CRUD
-Billing --> Accounts : User wallet
-Reviews --> Accounts : reviewer / message author
-Scans --> Accounts : scan owner
+package "runtime" #FEF3C7 {
+  package "playwright crawler" as RuntimeCrawler
+  package "scanner rules" as RuntimeRules
+  package "report export" as RuntimeReport
+}
 
-note right of Billing
-  services.py 是錢包唯一寫入入口
-end note
+FE_Pages --> FE_Components
+FE_Pages --> FE_Stores
+FE_Stores --> FE_API
+FE_API --> URLs : /api/*
+
+URLs --> Accounts
+URLs --> Scans
+URLs --> Billing
+URLs --> Reviews
+URLs --> Content
+URLs --> AdminAPI
+CeleryConfig --> Scans
+
+Scans --> Billing : cost reserve / settle
+Scans --> Agent : optional analysis
+Scans --> Insights : GEO / AEO insights
+Scans --> RuntimeCrawler
+Scans --> RuntimeRules
+Scans --> RuntimeReport
+AdminAPI --> Accounts
+AdminAPI --> Scans
+AdminAPI --> Content
+Reviews --> Accounts
+Billing --> Accounts
 
 note right of Scans
-  tasks.py 是 ScanJob 狀態機唯一推進處
+scans 是掃描流程核心邊界：
+任務狀態、頁面、Finding、取消與報告查詢
+都應集中在此模組協調。
 end note
 @enduml
 ```
 
-## 圖 7-3-1　系統元件圖（Component Diagram）
+## 圖 7-3-1 系統元件圖
 
 ```plantuml
 @startuml
 skinparam defaultFontName Microsoft JhengHei
 skinparam shadowing false
+skinparam roundcorner 10
 skinparam componentStyle rectangle
+skinparam BackgroundColor #FFFFFF
+skinparam ComponentBorderColor #334155
+skinparam ComponentBackgroundColor #F8FAFC
+skinparam InterfaceBorderColor #334155
+skinparam ArrowColor #374151
 
-component "React SPA" as SPA {
-  [ScanForm]
-  [FindingsWorkspace]
-  [TopologyPage]
-  [BillingWizard]
-  [AdminDashboard]
-}
+component "React SPA" as SPA #E0F2FE
+component "Django REST API" as API #ECFDF5
+component "Domain Services" as Services #F8FAFC
+component "Celery Scan Runtime" as Runtime #FEF3C7
+component "Report Builder" as Report #EEF2FF
+database "Relational Database" as DB #EEF2FF
+queue "Redis Broker / Cache" as Redis #FCE7F3
+component "Playwright Browser" as Playwright #ECFDF5
+component "Scanner Rules" as Rules #ECFDF5
+component "Agent Orchestrator" as Agent #F3E8FF
+cloud "AI Providers" as AI #F3E8FF
+node "Authorized Target Site" as Target
 
-component "Django REST API" as API {
-  [Auth API]
-  [Scans API]
-  [Billing API]
-  [Reviews API]
-  [Admin API]
-  [Content API]
-}
+interface "REST JSON API" as IRest
+interface "Task Queue" as IQueue
+interface "ORM Models" as IOrm
+interface "Browser Automation" as IBrowser
+interface "Report Export" as IReport
 
-component "Domain Services" as Services {
-  [BillingService]
-  [ReportBuilder]
-  [AdminAuditLog]
-}
-
-component "Scan Runtime" as Runtime {
-  [Celery Task]
-  [Playwright Crawler]
-  [Static Scanners]
-  [Active Probes]
-  [Hermes-Agent]
-}
-
-database "PostgreSQL" as DB
-queue "Redis" as Redis
-cloud "Authorized Website" as Target
-cloud "OAuth / AI APIs" as External
-
-SPA --> API : REST / JSON
+SPA --> IRest
+IRest --> API
 API --> Services
-API --> Redis : enqueue
-Runtime --> Redis : consume
-Runtime --> Target : browser automation
-Runtime --> Services : settle/refund/report
-Runtime --> External : optional AI tool calling
-API --> DB
-Services --> DB
-Runtime --> DB
+API --> IQueue
+IQueue --> Redis
+Redis --> Runtime
+Services --> IOrm
+Runtime --> IOrm
+IOrm --> DB
+Runtime --> IBrowser
+IBrowser --> Playwright
+Playwright --> Target
+Runtime --> Rules
+Runtime --> Agent
+Agent --> AI
+Runtime --> IReport
+Services --> IReport
+IReport --> Report
+Report --> DB
+
+note bottom of API
+API 僅負責同步請求、權限、序列化與任務派送；
+長時間掃描必須交由 Celery Runtime。
+end note
 @enduml
 ```
 
-## 圖 7-4-1　ScanJob 狀態機圖（State Machine）
+## 圖 7-4-1 ScanJob 狀態機圖
 
 ```plantuml
 @startuml
 skinparam defaultFontName Microsoft JhengHei
 skinparam shadowing false
+skinparam roundcorner 12
+skinparam BackgroundColor #FFFFFF
+skinparam StateBorderColor #334155
+skinparam StateBackgroundColor #F8FAFC
+skinparam ArrowColor #374151
+skinparam NoteBackgroundColor #FFF7ED
+skinparam NoteBorderColor #F97316
 
-[*] --> queued : create ScanJob\nhold_for_scan
-queued --> crawling : worker starts
-crawling --> scanning : crawl_site completed
+[*] --> Draft : 前端尚未送出
+Draft --> Validating : POST create
+Validating --> Rejected : 欄位 / 授權 / 點數不通過
+Validating --> queued : 建立 ScanJob
+
+queued --> crawling : worker started
+crawling --> scanning : pages captured
 scanning --> agent_testing : agent enabled
-scanning --> completed : static scan done
-agent_testing --> completed : agent finished or skipped
+agent_testing --> finalizing : agent completed
+scanning --> finalizing : agent disabled
+finalizing --> completed : report materialized
 
-queued --> cancelled : cancel API
-crawling --> cancelled : ScanCancelled
-scanning --> cancelled : ScanCancelled
-agent_testing --> cancelled : ScanCancelled
+queued --> cancelling : cancel requested
+crawling --> cancelling : cancel requested
+scanning --> cancelling : cancel requested
+agent_testing --> cancelling : cancel requested
+cancelling --> cancelled : cleanup + refund
 
-queued --> failed : exception
-crawling --> failed : browser / network error
+queued --> failed : enqueue / startup error
+crawling --> failed : crawler error
 scanning --> failed : scanner error
+agent_testing --> failed : provider fallback failed
+finalizing --> failed : report persistence error
 
-completed : settle_scan_actual(actual_pages)
-completed : progress = {}
-cancelled : refund_full_for_scan()
-cancelled : error_message = 使用者已終止掃描
-failed : refund_full_for_scan()
-failed : error_message = exception summary
-
+Rejected --> [*]
 completed --> [*]
 cancelled --> [*]
 failed --> [*]
+
+note right of finalizing
+finalizing 階段完成：
+Finding 彙整、成本結算、報告摘要、
+拓撲資料與可匯出素材。
+end note
 @enduml
 ```
 
-## 圖 8-1-1　資料庫 ER 圖（Entity-Relationship Diagram）
+## 圖 8-1-1 資料庫 ER 圖
 
 ```plantuml
 @startuml
 skinparam defaultFontName Microsoft JhengHei
 skinparam shadowing false
-hide circle
+skinparam linetype ortho
+skinparam roundcorner 8
+skinparam BackgroundColor #FFFFFF
+skinparam EntityBorderColor #334155
+skinparam EntityBackgroundColor #F8FAFC
+skinparam ArrowColor #374151
 
 entity "auth_user" as user {
-  * id : int <<PK>>
+  * id : bigint <<PK>>
   --
-  username : varchar
   email : varchar
-  is_staff : bool
-  is_superuser : bool
+  username : varchar
+  is_staff : boolean
+  is_superuser : boolean
+  date_joined : datetime
 }
 
-entity "scans_scanjob" as scan {
-  * id : uuid <<PK>>
+entity "scans_scanjob" as scanjob {
+  * id : bigint <<PK>>
   --
-  user_id : int <<FK>>
-  original_url : text
+  user_id : bigint <<FK>>
+  target_url : text
   status : varchar
   scan_mode : varchar
-  progress : json
+  depth_limit : int
+  page_limit : int
+  estimated_cost : int
+  actual_cost : int
+  created_at : datetime
+}
+
+entity "scans_authorizationconsent" as consent {
+  * id : bigint <<PK>>
+  --
+  scan_job_id : bigint <<FK>>
+  active_scan_allowed : boolean
+  scope_summary : text
+  robots_policy : text
+  accepted_at : datetime
 }
 
 entity "scans_page" as page {
-  * id : int <<PK>>
+  * id : bigint <<PK>>
   --
-  scan_id : uuid <<FK>>
-  final_url : text
-  title : varchar
-  screenshot : file
-  outgoing_links : json
+  scan_job_id : bigint <<FK>>
+  url : text
+  status_code : int
+  depth : int
+  load_time_ms : int
 }
 
 entity "scans_finding" as finding {
-  * id : int <<PK>>
+  * id : bigint <<PK>>
   --
-  scan_id : uuid <<FK>>
-  page_id : int <<FK nullable>>
+  scan_job_id : bigint <<FK>>
+  page_id : bigint <<FK>>
   category : varchar
   severity : varchar
-  evidence : text
+  rule_id : varchar
+  title : varchar
+}
+
+entity "scans_agentsession" as agentsession {
+  * id : bigint <<PK>>
+  --
+  scan_job_id : bigint <<FK>>
+  provider : varchar
+  model_name : varchar
+  status : varchar
+  token_usage : json
 }
 
 entity "billing_coinwallet" as wallet {
-  * id : int <<PK>>
+  * id : bigint <<PK>>
   --
-  user_id : int <<FK unique>>
+  user_id : bigint <<FK>>
   balance : int
-  total_purchased_ntd : int
+  reserved_balance : int
 }
 
 entity "billing_cointransaction" as tx {
-  * id : int <<PK>>
+  * id : bigint <<PK>>
   --
-  wallet_id : int <<FK>>
-  scan_job_id : uuid <<FK nullable>>
+  wallet_id : bigint <<FK>>
+  scan_job_id : bigint <<FK>>
+  type : varchar
   amount : int
-  kind : varchar
-  balance_after : int
+  status : varchar
+  created_at : datetime
 }
 
 entity "billing_pricingplan" as plan {
-  * id : int <<PK>>
+  * id : bigint <<PK>>
   --
   name : varchar
-  price_ntd : int
   coins : int
+  price : decimal
+  is_active : boolean
 }
 
 entity "billing_purchaseorder" as order {
-  * id : uuid <<PK>>
+  * id : bigint <<PK>>
   --
-  user_id : int <<FK>>
-  plan_id : int <<FK>>
-  transaction_id : int <<FK nullable>>
+  user_id : bigint <<FK>>
+  pricing_plan_id : bigint <<FK>>
+  provider : varchar
+  amount : decimal
   status : varchar
 }
 
 entity "reviews_platformreview" as review {
-  * id : int <<PK>>
+  * id : bigint <<PK>>
   --
-  user_id : int <<FK unique>>
+  user_id : bigint <<FK>>
   rating : int
   content : text
+  status : varchar
 }
 
-entity "reviews_reviewmessage" as msg {
-  * id : int <<PK>>
+entity "reviews_reviewmessage" as message {
+  * id : bigint <<PK>>
   --
-  review_id : int <<FK>>
-  author_id : int <<FK>>
-  is_admin : bool
-  body : text
+  review_id : bigint <<FK>>
+  user_id : bigint <<FK>>
+  message : text
+  is_staff_reply : boolean
 }
 
 entity "admin_api_adminauditlog" as audit {
-  * id : int <<PK>>
+  * id : bigint <<PK>>
   --
-  actor_id : int <<FK>>
+  actor_id : bigint <<FK>>
   action : varchar
-  payload : json
+  target_type : varchar
+  target_id : varchar
+  created_at : datetime
 }
 
-user ||--o{ scan
-scan ||--o{ page
-scan ||--o{ finding
-page ||--o{ finding
-user ||--|| wallet
-wallet ||--o{ tx
-scan ||--o{ tx
-user ||--o{ order
-plan ||--o{ order
-tx ||--o{ order
-user ||--o| review
-review ||--o{ msg
-user ||--o{ msg
-user ||--o{ audit
+user ||--o{ scanjob : owns
+scanjob ||--|| consent : requires
+scanjob ||--o{ page : crawls
+scanjob ||--o{ finding : produces
+page ||--o{ finding : contains
+scanjob ||--o{ agentsession : analyzes
+
+user ||--|| wallet : has
+wallet ||--o{ tx : records
+scanjob ||--o{ tx : billed_by
+plan ||--o{ order : selected_by
+user ||--o{ order : places
+
+user ||--o{ review : writes
+review ||--o{ message : discusses
+user ||--o{ message : sends
+user ||--o{ audit : performs
 @enduml
 ```
