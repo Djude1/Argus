@@ -1,6 +1,6 @@
 # Argus 系統手冊 PlantUML 圖碼
 
-本檔集中保存 `專題文件/Argus_系統手冊_第三章優化版.docx` 中系統架構、需求模型、設計模型、實作模型與資料庫設計相關圖形的 PlantUML 原始碼。圖碼以 Argus 目前實際架構為準：React SPA、Django REST API、Celery/Redis、Playwright、PostgreSQL、點數計費、授權合規、AdminAuditLog 與可選 Hermes-Agent。
+本檔集中保存 `專題文件/Argus_系統手冊.docx` 中系統架構、需求模型、設計模型、實作模型與資料庫設計相關圖形的 PlantUML 原始碼。圖碼以 Argus 目前實際架構為準：React SPA、Django REST API、Celery/Redis、Playwright、PostgreSQL、點數計費、授權合規、AdminAuditLog 與可選 Hermes-Agent。
 
 ## 圖 3-1-1　Argus SaaS 分層系統架構圖
 
