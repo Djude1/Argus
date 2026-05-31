@@ -6,7 +6,7 @@
 
 ```plantuml
 @startuml
-title Argus SaaS 分層系統架構圖
+title Argus SaaS 分層系統架構圖 end title
 skinparam shadowing false
 skinparam componentStyle rectangle
 skinparam defaultFontName Microsoft JhengHei
@@ -160,7 +160,7 @@ stop
 
 ```plantuml
 @startuml
-title ScanJob 核心狀態與橫切機制圖
+title ScanJob 核心狀態與橫切機制圖 end title
 skinparam defaultFontName Microsoft JhengHei
 skinparam shadowing false
 skinparam state {
@@ -228,7 +228,7 @@ end note
 
 ```plantuml
 @startuml
-title Argus 使用個案圖
+title Argus 使用個案圖 end title
 left to right direction
 skinparam defaultFontName Microsoft JhengHei
 skinparam shadowing false
@@ -292,7 +292,7 @@ Super --|> Staff
 
 ```plantuml
 @startuml
-title 活動圖：提交掃描任務
+title 活動圖：提交掃描任務 end title
 skinparam defaultFontName Microsoft JhengHei
 skinparam shadowing false
 
@@ -363,7 +363,7 @@ stop
 
 ```plantuml
 @startuml
-title 分析類別圖
+title 分析類別圖 end title
 skinparam defaultFontName Microsoft JhengHei
 skinparam shadowing false
 skinparam classAttributeIconSize 0
@@ -504,7 +504,7 @@ PlatformReview "1" -- "0..*" ReviewMessage
 
 ```plantuml
 @startuml
-title 掃描任務循序圖
+title 掃描任務循序圖 end title
 skinparam defaultFontName Microsoft JhengHei
 skinparam shadowing false
 autonumber
@@ -567,7 +567,7 @@ API --> SPA : interactive report / docx blob
 
 ```plantuml
 @startuml
-title 設計類別圖
+title 設計類別圖 end title
 skinparam defaultFontName Microsoft JhengHei
 skinparam shadowing false
 skinparam classAttributeIconSize 0
@@ -643,7 +643,7 @@ BillingService --> AdminAuditService : admin adjust
 
 ```plantuml
 @startuml
-title Docker Compose 佈署圖
+title Docker Compose 佈署圖 end title
 skinparam defaultFontName Microsoft JhengHei
 skinparam shadowing false
 
@@ -691,7 +691,7 @@ end note
 
 ```plantuml
 @startuml
-title Django 後端套件架構圖
+title Django 後端套件架構圖 end title
 skinparam defaultFontName Microsoft JhengHei
 skinparam shadowing false
 skinparam packageStyle rectangle
@@ -743,7 +743,7 @@ end note
 
 ```plantuml
 @startuml
-title 系統元件圖
+title 系統元件圖 end title
 skinparam defaultFontName Microsoft JhengHei
 skinparam shadowing false
 skinparam componentStyle rectangle
@@ -801,7 +801,7 @@ Runtime --> DB
 
 ```plantuml
 @startuml
-title ScanJob 狀態機圖
+title ScanJob 狀態機圖 end title
 skinparam defaultFontName Microsoft JhengHei
 skinparam shadowing false
 
@@ -838,7 +838,7 @@ failed --> [*]
 
 ```plantuml
 @startuml
-title Argus 資料庫 ER 圖
+title Argus 資料庫 ER 圖 end title
 skinparam defaultFontName Microsoft JhengHei
 skinparam shadowing false
 hide circle
