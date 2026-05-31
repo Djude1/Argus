@@ -5,6 +5,9 @@
 services:
   db:
     image: postgres:16-alpine
+    ports:
+      # 讓 Navicat / DBeaver 等主機端資料庫工具可連到本機開發 DB
+      - "5432:5432"
     environment:
       POSTGRES_USER: argus
       POSTGRES_PASSWORD: argus_local_password
