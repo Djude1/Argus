@@ -34,7 +34,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | `playwright install` 不加 `PLAYWRIGHT_BROWSERS_PATH` | 污染 `%USERPROFILE%\AppData\Local\ms-playwright` 全域路徑 | `$env:PLAYWRIGHT_BROWSERS_PATH=".ms-playwright"; uv run playwright install chromium` |
 | `pip install` 全域安裝 Python 套件 | 污染全域 Python 環境 | `uv add 套件名` |
 | 全域 `npm install -g` | 污染全域 Node 環境 | `D:\node22\npm.cmd install 套件名` |
-| 修改或刪除已存在的 `CoinTransaction` 紀錄 | 破壞計費稽核軌跡 | 新增 `type=manual` 的補正交易 |
+| 修改或刪除已存在的 `CoinTransaction` 紀錄 | 破壞計費稽核軌跡 | 新增 `kind=admin_adjust` 的補正交易 |
 | 刪除 `AdminAuditLog` 紀錄 | 破壞合規稽核軌跡 | 禁止刪除，僅可查詢 |
 | 在 `scanners.py` / `crawler.py` 直接修改 `ScanJob.status` | 繞過狀態機，導致不一致狀態 | 只在 `tasks.py` 推進狀態 |
 | 在 `views.py` 直接 render 使用者個資欄位（email、手機等） | 個資洩漏 | 透過 Serializer 明確 whitelist 欄位 |
@@ -86,6 +86,43 @@ log/YYYY-MM-DD_簡短描述.md
 
 ---
 
+## 文件同步強制規則（Documentation Sync，優先順序最高）
+
+> **此規則的存在原因（真實事故）**：2026-06 發現 `ONBOARDING.md` 與 `CLAUDE.md` 同時嚴重漂移——新增了 `insights` app（第 8 個）、`/free-tools` 公開頁、`/api/insights/*` 端點、`/api/content/milestones/`，且 W4 已移除 jazzmin、測試數已增長，但兩份接手文件全部沒同步，仍寫「7 個 app / Jazzmin / 192 測試」。**過時的接手文件會讓下一個接手者（人或 Claude）依錯誤事實操作、甚至寫出錯誤的專題文件。**
+
+**核心原則：程式碼是唯一事實來源（single source of truth）；文件必須與程式碼一致。文件漂移視同 bug，與程式 bug 同等嚴重。**
+
+### 規則 A：改了程式 → 同次提交必須同步文件
+
+任何「會改變對外事實」的程式改動，**必須在同一次 commit 內**更新所有受影響的文件，不可留到下次。對應關係如下：
+
+| 你改了什麼（程式） | 必須同步更新的文件 |
+|---|---|
+| 新增 / 移除 Django app | `CLAUDE.md`（app 數量標題 + 職責邊界表 + API 路由地圖）、`ONBOARDING.md`（§4 目錄樹 + §5 app 表 + §7 API） |
+| 新增 / 改 / 刪 API 端點 | `CLAUDE.md` 後端 API 路由地圖、`ONBOARDING.md` §7 對應子表 |
+| 新增 / 改前端路由（含公開頁） | `CLAUDE.md` 前端路由地圖、`ONBOARDING.md` §6 路由地圖（+ 若是公開頁，§13 TopNav return null 清單） |
+| 改 Model 欄位 / 狀態機 / 列舉值 | `CLAUDE.md` 關鍵 Model 速查、`ONBOARDING.md` §8 資料模型、對應子目錄 `CLAUDE.md` |
+| 新增 / 移除 Python 或 Node 套件 | `CLAUDE.md`（技術棧相關段）、`ONBOARDING.md` §3 技術棧 + §2 安裝步驟 |
+| 改 `ARGUS_*` 等 settings 常數 | `ONBOARDING.md` 附錄 B、`CLAUDE.md` 對應段落 |
+| 新增 / 修改 Skill | `CLAUDE.md` 的 Skills 表格（並跑下方「MD 修改強制核對清單」） |
+| 測試數量變動 | 不要寫死精確數字於多處；以「約 N 項，以 `manage.py test apps` 實跑為準」描述，且全檔一致 |
+
+### 規則 B：純文件改動 → 動筆前必須對照程式碼驗證
+
+即使本次只改文件、不碰程式（例如撰寫專題文件、整理接手文件），**每一條寫進文件的事實都必須先用 `Grep` / `Read` 對照實際程式碼確認**，禁止憑記憶或沿用舊文件的數字／名稱。常見必查項：app 數量、端點清單、路由清單、套件是否還在 `pyproject.toml` / `package.json`、model 欄位、settings 常數。
+
+### 規則 C：完成後一致性檢查（不可跳過）
+
+改完文件後，用 `grep` 掃過全檔，確認沒有殘留的舊事實（例如改 app 數後 grep 是否仍有「7 個 app」；移除套件後 grep 是否仍有該套件名）。跨檔（`CLAUDE.md` ↔ `ONBOARDING.md` ↔ 子目錄 `CLAUDE.md`）對同一事實不可有兩種說法。修改規則／MD 後另須執行本檔下方的「MD 修改強制核對清單」。
+
+### 接手文件清單（須長期與程式碼保持一致）
+- `ONBOARDING.md` — 快速接手流程（事實密度最高，最容易漂移）
+- `CLAUDE.md`（本檔）— 架構表、API/路由地圖、Model 速查
+- `frontend/CLAUDE.md`、`backend/apps/billing/CLAUDE.md`、`backend/apps/scans/CLAUDE.md`
+- `Project_說明.md`、`開發計畫.md`
+
+---
+
 ## 常用命令
 
 ```powershell
@@ -100,7 +137,7 @@ cd frontend ; .\build-node22.ps1 ; cd ..
 # 套用 migration
 uv run python backend/manage.py migrate
 
-# 後端測試（全部 192 項）
+# 後端測試（約 252 項，以實跑數字為準）
 uv run python backend/manage.py test apps
 
 # 單一 app 測試（例如 billing）
@@ -129,12 +166,13 @@ docker compose up -d --build frontend
 
 ### 前端路由地圖（`frontend/src/App.jsx`）
 
-> 所有路由定義在 App.jsx 底部 `<Routes>` 區塊（約第 5380 行起）。
+> 所有路由定義在 App.jsx 底部 `<Routes>` 區塊（約第 6460 行起）。
 
 | 路由 | 元件 / 頁面 | 說明 |
 |---|---|---|
 | `/login` | `LoginPage` | Google OAuth 登入 |
 | `/project` | `ProjectPage` | 公開行銷頁：產品特色 |
+| `/free-tools` | `FreeToolsPage` | 公開免費分析（測速 / URL 風險 / 郵件風險），呼叫 `/api/insights/*` |
 | `/team` | `TeamPage` | 公開行銷頁：團隊介紹 |
 | `/purchase` | `PurchasePage` | 購買點數（3 步驟結帳 wizard） |
 | `/download` | `DownloadPage` | 下載報告 |
@@ -158,7 +196,7 @@ docker compose up -d --build frontend
 
 | 檔案 | 職責 |
 |---|---|
-| `frontend/src/App.jsx` | 4500+ 行，所有頁面元件與路由定義全在此 |
+| `frontend/src/App.jsx` | 6500+ 行，所有頁面元件與路由定義全在此 |
 | `frontend/src/api.js` | Axios instance，統一處理 base URL 與 CSRF token |
 | `frontend/src/store.js` | Zustand 全域狀態（user、wallet 等） |
 | `frontend/src/main.jsx` | React entry point，Provider 掛載 |
@@ -170,13 +208,14 @@ docker compose up -d --build frontend
 
 | URL 前綴 | Django App | 主要端點 |
 |---|---|---|
-| `/api/auth/` | `accounts` | `login/`（dev）、`google/`（OAuth）、`logout/`、`me/` |
-| `/api/scans/` | `scans` | `scans/`（CRUD）、`pages/`、`findings/`、`dashboard/`、`history/`、`audit/`、`findings-by-category/` |
+| `/api/auth/` | `accounts` | `google/`（OAuth）、`register/`、`email-login/`、`me/`（GET/PATCH）、`change-password/`（dev-login 已移除） |
+| `/api/scans/` | `scans` | `scans/`（CRUD + `status/`/`cancel/`/`report/`/`topology/`/`screenshot`）、`estimate/`、`pages/`、`findings/`、`dashboard/`、`history/`、`audit/`、`findings-by-category/` |
 | `/api/billing/` | `billing` | `wallet/`、`plans/`、`purchase/`、`orders/` |
 | `/api/reviews/` | `reviews` | `reviews/`（CRUD + thread） |
-| `/api/content/` | `content` | `features/`、`team/`、`releases/`（公開 CMS） |
-| `/api/admin/` | `admin_api` | `overview/`、`users/`、`transactions/`、`scans/`、`reviews/`、`orders/`、`dashboard/`、`audit-log/`、`cms/*` |
-| `/django-admin/` | Django Admin | superuser 後門（Jazzmin 主題） |
+| `/api/content/` | `content` | `features/`、`team/`、`releases/`、`milestones/`（公開 CMS） |
+| `/api/insights/` | `insights` | `speed-test/`、`phishing-url/`、`phishing-email/`（公開免費工具，AllowAny、不扣 coin） |
+| `/api/admin/` | `admin_api` | `me/`、`overview/`、`dashboard/`、`users/`、`transactions/`、`scans/`、`reviews/`、`orders/`、`audit-log/`、`announcements/*`、`cms/*` |
+| `/django-admin/` | Django Admin | superuser 後門（Django 預設樣式，W4 已移除 jazzmin） |
 | `/` ～ `/*` | SPA fallback | 回傳 `frontend/dist/index.html`，由 React Router 處理 |
 
 ---
@@ -201,21 +240,26 @@ last_bonus_year / last_bonus_month（月贈點冪等欄位）
 
 **CoinTransaction**（`apps/billing/models.py`）
 ```
-wallet FK、amount（正=入帳、負=扣款）、type（purchase/hold/settle/refund/bonus/manual）
-scan FK（nullable）、note
+wallet FK、amount（正=入帳、負=扣款）、balance_after（異動後餘額快照）
+kind（monthly_bonus / purchase / scan_hold / scan_refund / admin_adjust）
+scan_job FK（nullable）、plan FK（nullable）、admin_actor FK（nullable）、note
+→ 審計不可改；補正交易用 kind=admin_adjust（不是 type，也沒有 manual 值）
 ```
 
 **AdminAuditLog**（`apps/admin_api/models.py`）
 ```
-actor（staff user）、action（字串）、target_user FK（nullable）、
-detail（JSON）、created_at
-→ 每次後台操作（調整點數、回覆評論等）自動寫入
+admin_actor FK（staff user）、target_user FK（nullable）、
+action（coin_adjust / review_reply / review_delete / user_toggle_staff / other）、
+target_object_repr、payload（JSON）、created_at
+→ 透過 log_admin_action() 集中寫入（調整點數、回覆評論等）
 ```
 
 **PlatformReview**（`apps/reviews/models.py`）
 ```
-user（一人一則，unique）、rating（1-5）、content、images（JSON）
-parent FK（nullable，用於 thread 回覆）
+user（一人一則，OneToOne）、rating（1-5）、comment（TextField）、is_featured
+→ thread 回覆是獨立 model ReviewMessage（review FK、author、is_admin、body、image）
+→ 沒有 content / images(JSON) / parent 欄位（勿沿用舊敘述）
+→ 「有幫助」標記：ReviewHelpful / ReviewMessageHelpful（per user 唯一）
 ```
 
 ### Node 22 portable（build 必用）
@@ -226,20 +270,21 @@ parent FK（nullable，用於 thread 回覆）
 - **重灌 node_modules**：請用 `D:\node22\npm.cmd install`
 - **未安裝環境**：下載 `https://nodejs.org/dist/latest-v22.x/node-v22.22.3-win-x64.zip` 解壓到 `D:\node22` 即可，不需 admin 也不需改環境變數
 
-### 7 個 Django App 的職責邊界
+### 8 個 Django App 的職責邊界
 
 | app | 職責 | 最重要的檔案 |
 |---|---|---|
-| `accounts` | User model（繼承 AbstractUser）、Google OAuth、dev-login 後門 | `views.py` |
+| `accounts` | User model（繼承 AbstractUser）、Google OAuth、Email 註冊/登入、改密碼（dev-login 後門已移除） | `views.py` |
 | `scans` | **核心**：ScanJob 狀態機、Playwright 爬蟲、四維 scanner、Word 報告、合作式 cancel | `tasks.py` `crawler.py` `scanners.py` |
 | `agent` | Phase 2 Hermes-Agent：provider chain + tool calling loop（預設 `ARGUS_AGENT_ENABLED=false`） | `providers.py` `loop.py` `runner.py` |
 | `billing` | 點數錢包；**`services.py` 是 wallet 唯一寫入入口**，禁止繞過直接改 model | `services.py` `signals.py` |
 | `reviews` | 平台評論（一人一則 + thread + 圖片） | `models.py` `views.py` |
 | `admin_api` | React `/admin/*` 用的 REST API + AdminAuditLog | `views.py` `permissions.py` |
 | `content` | CMS（ProjectFeature / TeamMember / AppRelease），公開 API | `models.py` `admin.py` |
+| `insights` | 公開免費分析工具（測速 / 釣魚 URL / 釣魚郵件），AllowAny、不扣 coin、本機特徵分類器；供公開頁 `/free-tools` 使用 | `views.py` `analyzers.py` |
 
 ### 前端：巨型單檔架構
-`frontend/src/App.jsx` 是 **4500+ 行的單檔**，包含所有頁面與元件。修改前必須先 grep 定位，不要從頭瀏覽。路由都在 App.jsx 底部 `<Routes>` 區塊。
+`frontend/src/App.jsx` 是 **6500+ 行的單檔**，包含所有頁面與元件。修改前必須先 grep 定位，不要從頭瀏覽。路由都在 App.jsx 底部 `<Routes>` 區塊。
 
 ### Billing 的冪等安全閘
 `billing/services.py` 所有函式都用 `select_for_update` + `transaction.atomic` + 冪等判斷（e.g. `last_bonus_year/month`）。掃描取消或失敗時 worker 和 cancel API 都會呼叫 `refund_full_for_scan`，兩邊都呼叫是安全的。
@@ -256,7 +301,7 @@ $env:PLAYWRIGHT_BROWSERS_PATH=".ms-playwright"; uv run playwright install chromi
 ### 三種管理介面
 - **前台**：`http://127.0.0.1:8000/` — 一般使用者
 - **React 後台**：`/admin/*` — staff 進入（`IsAdminUser`），superuser 多看「操作紀錄」
-- **Jazzmin Django Admin**：`/django-admin/` — superuser 後門，含 CoinWallet adjust 自訂頁
+- **Django Admin**：`/django-admin/` — superuser 後門，Django 預設樣式（W4 已 `uv remove` django-jazzmin）
 
 ### 掃描 Coin 扣點流程
 建立掃描 → `hold_for_scan(max_pages × 10)` → worker 完成 → `settle_scan_actual(actual_pages × 10)` 退差 → 失敗/取消 → `refund_full_for_scan` 全退。
@@ -406,110 +451,4 @@ sc.exe qc Cloudflared   # 看 BINARY_PATH_NAME 的 --config 參數
    Copy-Item C:\Users\ntub\.cloudflared\config.yml `
              C:\Windows\System32\config\systemprofile\.cloudflared\config.yml -Force
    ```
-3. **UAC 提升,重啟 service**:
-   ```powershell
-   sc.exe stop Cloudflared
-   Start-Sleep 3
-   taskkill /IM cloudflared.exe /F
-   sc.exe start Cloudflared
-   ```
-4. **驗證 ingress 真的生效**(必做):
-   - `curl.exe -sI http://<hostname>/` 確認**不是** cloudflared 的 catch-all 404
-   - cloudflared 自家 404 特徵:`Connection: keep-alive` 但**沒有** `Server: cloudflare`
-   - 正常經過 Cloudflare 邊緣的回應(200 / 後端 404 都算)會帶 `Server: cloudflare` + `CF-RAY`
-
-### cloudflared CLI 跨 zone 也是地雷
-
-`cloudflared tunnel route dns <id> <hostname>` 對**非 origincert 對應 zone** 的 hostname 會 silently 把它 append 到預設 zone(不會報錯,但 DNS 建到錯位的 zone)。
-
-例子:origincert = `aiglasses.qzz.io`,跑 `cloudflared tunnel route dns ... xn--gst.tw` → 結果建了 `xn--gst.tw.aiglasses.qzz.io` CNAME,不是在 巧.tw zone 上!
-
-**跨 zone 建 DNS → 一律去 Cloudflare Dashboard 手動加 CNAME**,目標 `<tunnel-uuid>.cfargotunnel.com`,Proxy 橘雲開。**永遠不要對跨 zone hostname 跑 `cloudflared tunnel route dns`。**
-
-跑了之後也要看 log 訊息「Added CNAME <full-hostname>」確認 hostname 是預期值,別只看到 "Added" 就放心。
-
----
-
-**MD 修改強制核對清單（修改任何規則/MD 後必須逐項執行，不可跳過）：**
-
-**A. 跨檔一致性**
-- [ ] Skills 表格中每一個 skill → 在觸發規則或準則中有對應的觸發時機
-- [ ] 觸發規則中每一個 skill 呼叫 → 在 Skills 表格中有列出
-- [ ] 準則編號 → 在所有引用它的文件中完全一致
-
-**B. 引用有效性**
-- [ ] 所有 `memory/xxx.md` 路徑 → 確認對應檔案實際存在
-- [ ] 所有 `MD/xxx.md` 路徑 → 確認對應檔案實際存在
-- [ ] MEMORY.md 的每個連結 → 對應 memory 檔案存在
-
-**C. 無矛盾**
-- [ ] 同一份檔案內沒有兩段敘述互相矛盾
-- [ ] 不同檔案之間沒有同一事實的不同說法
-
-**D. 完整性**
-- [ ] 新增的 skill/規則/MD → 已同步更新到所有引用它的地方
-- [ ] 刪除的 skill/規則/MD → 已從所有引用它的地方移除
-
----
-
-> **準則生效的跡象：** diff 中不必要的改動減少、因過度設計而重寫的情況減少、釐清問題的提問發生在實作前而非出錯後。測試循環讓錯誤在交付前被消滅，而非由使用者發現。
-
----
-
-<!-- RTK-RULES-START -->
-## RTK (Rust Token Killer) 使用規則
-
-**安裝位置**：`C:\Users\ntub\scoop\shims\rtk.exe`（v0.42.0，透過 scoop 安裝，shim 已在 PATH 內，可直接用 `rtk` 呼叫）
-
-**核心目的**：壓縮 git/test/build/docker 等命令輸出，節省 60-90% LLM token
-
-### 呼叫格式
-
-PowerShell 直接呼叫即可（shim 已在 PATH）：
-
-```powershell
-rtk <subcommand> <args>
-```
-
-### 何時必須使用 rtk
-
-當預期輸出 **超過約 50 行**，且屬於下列類型時，**改用 rtk 包裝命令**：
-
-| 原始命令 | 改用 |
-|---------|------|
-| `git status` / `git diff` / `git log` / `git show` | `rtk git <sub>` |
-| `git add` / `git commit` / `git push` / `git pull` | `rtk git <sub>` |
-| `gh pr view` / `gh run list` / `gh issue list` | `rtk gh <sub>` |
-| `jest` / `vitest` / `playwright test` | `rtk <runner>` |
-| `pytest` / `cargo test` / `go test` | `rtk <runner>` |
-| `tsc` / `eslint` / `prettier --check` | `rtk tsc` / `rtk lint` / `rtk prettier` |
-| `cargo build` / `cargo clippy` / `next build` | `rtk cargo <sub>` / `rtk next build` |
-| `docker ps` / `docker logs` / `kubectl get` | `rtk docker <sub>` / `rtk kubectl <sub>` |
-| `curl <url>` 大型 JSON | `rtk curl <url>` |
-| 觀察大型 log 檔 | `rtk log <file>` |
-
-### 何時**不要**用 rtk
-
-1. **內建工具更好**：檔案讀寫搜尋一律優先用 Claude Code 內建 `Read` / `Grep` / `Glob` / `Edit`，**不要**用 `rtk ls` / `rtk grep` / `rtk find` / `rtk read` / `rtk tree`（這些在 Windows 原生會失敗，因為它們 proxy 到 Unix 命令）。
-2. **預期輸出 ≤ 20 行**：rtk 收益不大，維持原命令。
-3. **使用者明確要求看完整原始輸出**：維持原命令。
-4. **使用者明確說「不要用 rtk」或「直接用原命令」**：立即停止使用，並記住該專案的偏好。
-5. **互動式命令**（`git rebase -i` 等）：rtk 不支援互動。
-
-### 命令鏈中的處理
-
-PowerShell 沒有 `&&`，每段都要獨立包：
-
-```powershell
-# 錯誤
-git add . && git commit -m "msg"
-
-# 正確
-rtk git add . ; if ($?) { rtk git commit -m "msg" }
-```
-
-### 卸載
-
-`scoop uninstall rtk`（透過 scoop 統一管理，刪除即完整移除；同時移除本區塊規則）。
-<!-- RTK-RULES-END -->
-
+3. **UAC 提升,重啟
