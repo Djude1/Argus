@@ -3,7 +3,7 @@
 Claude 操作 `backend/apps/agent/` 時，本檔在專案層 `CLAUDE.md` 之後自動載入。
 
 ## 職責
-Phase 2 **Hermes-Agent**（掃描後的動態 UX 測試）。**預設關閉**（`ARGUS_AGENT_ENABLED=False`）；關閉時 `runner.run_agent_for_scan` 直接 `return None`，向下相容既有掃描流程。
+Phase 2 **Hermes-Agent**（掃描後的動態 UX 測試）。**預設關閉**（`ARGUS_AGENT_ENABLED=false`）；關閉時 `runner.run_agent_for_scan` 直接 `return None`，向下相容既有掃描流程。
 
 ## 關鍵檔案
 | 檔案 | 職責 |
@@ -11,7 +11,7 @@ Phase 2 **Hermes-Agent**（掃描後的動態 UX 測試）。**預設關閉**（
 | `runner.py` | `run_agent_for_scan`（async，Celery 掃描流程呼叫；挑已成功爬到的 Page 當起點；**強制 same-origin**） |
 | `providers.py` | `ChatProvider` / `ProviderChain`（MiniMax / GLM = OpenAI-compatible tool calling；Gemini = 純文字 fallback）；`ProviderError` 只帶公開資訊 |
 | `loop.py` | `HermesAgent` tool-calling 迴圈、`AgentRunResult` |
-| `tools.py` | `ToolExecutor`：`get_dom_summary` / `click` / `report_ux_issue` / `finish` |
+| `tools.py` | `ToolExecutor`（8 個 tool）：`click` / `type_text` / `scroll` / `get_visible_text` / `get_dom_summary` / `take_screenshot` / `report_ux_issue` / `finish` |
 | `findings.py` | `persist_agent_issues` 寫回 DB |
 
 ## 安全（硬規則）

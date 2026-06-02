@@ -36,6 +36,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 |---|---|---|
 | `argus-ui-design` | 新增 / 修改任何**前端介面**時（`App.jsx` 頁面與元件、`styles.css`、前台公開頁、後台 `/admin/*`、按鈕 / 導覽 / 分頁 / 動畫 / 特效 / 配色 / 版面 / 互動，或「美化、調版面、做動畫、改視覺」需求） | [`.claude/skills/argus-ui-design/SKILL.md`](.claude/skills/argus-ui-design/SKILL.md) |
 | `argus-git-safety` | 任何 `git add` / `commit` / `push`，或討論部署 / 上線 / 共用 repo / 與組員協作時（內含公網部署現況與 push 前強制清單） | [`.claude/skills/argus-git-safety/SKILL.md`](.claude/skills/argus-git-safety/SKILL.md) |
+| `argus-project` | Codex 用的專案總規則（環境隔離、API provider、交接）；**Claude 不自動載入**，需要時手動參考 | [`skills/argus-project/SKILL.md`](skills/argus-project/SKILL.md) |
 
 ---
 
@@ -49,6 +50,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - 不清楚就**詳細詢問使用者**，或**認真驗證使用者的真正想法（Why）**再製作。
 - **禁止隨意猜測**；需要時**多考證網路上的業界做法**（找厲害的、不瞎找）。
 - 此狀況也常出現在「**交接不完全**」時，導致 Claude 根本不知道自己在幹嘛 → 所以交接檔與文件必須寫完整、寫清楚（呼應上方 A 與下方「文件同步強制規則」）。
+
+---
+
+## 品質保證（QA）鐵則：假設一定有問題，去找出來
+
+**心態（最重要）**：你的第一次產出幾乎不可能完全正確。**QA 是「找出錯誤的過程」，不是「確認沒問題的步驟」。若第一次檢查沒發現任何問題，代表你檢查得還不夠仔細**——再查一輪。
+
+### A. 內容 QA
+- 逐項檢查是否有：**內容缺失、拼字錯誤、順序錯誤**。
+- 用範本 / 樣板時，檢查是否殘留**佔位符文字**（placeholder，如 `TODO`、`XXX`、`<...>`、「待補」、lorem）。用 `grep` 掃；**只要 grep 有結果，就先修掉再宣布完成**。
+
+### B. 視覺 / 交叉 QA（fresh eyes）
+- ⚠️ **即使只有兩三處內容修改，也要用子代理（sub-agent）做一次 fresh-eyes 檢查**。你一直盯著自己寫的東西，看到的是「**你期望的結果**」，不是「**實際存在的內容**」；子代理有全新視角，能抓到你的盲點。
+- 子代理審查時前提同上：**假設一定有問題、把問題找出來**；找不到就再查。
 
 ---
 
