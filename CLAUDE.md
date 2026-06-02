@@ -37,6 +37,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | `argus-ui-design` | 新增 / 修改任何**前端介面**時（`App.jsx` 頁面與元件、`styles.css`、前台公開頁、後台 `/admin/*`、按鈕 / 導覽 / 分頁 / 動畫 / 特效 / 配色 / 版面 / 互動，或「美化、調版面、做動畫、改視覺」需求） | [`.claude/skills/argus-ui-design/SKILL.md`](.claude/skills/argus-ui-design/SKILL.md) |
 | `argus-git-safety` | 任何 `git add` / `commit` / `push`，或討論部署 / 上線 / 共用 repo / 與組員協作時（內含公網部署現況與 push 前強制清單） | [`.claude/skills/argus-git-safety/SKILL.md`](.claude/skills/argus-git-safety/SKILL.md) |
 | `argus-project` | Codex 用的專案總規則（環境隔離、API provider、交接）；**Claude 不自動載入**，需要時手動參考 | [`skills/argus-project/SKILL.md`](skills/argus-project/SKILL.md) |
+| `scope-and-environment-check` | 開工前環境感知（worktree / 並行）、全稱問題範圍宣告、糾錯反思循環、PowerShell / `.env` / worktree 環境陷阱 | [`.claude/skills/scope-and-environment-check/SKILL.md`](.claude/skills/scope-and-environment-check/SKILL.md) |
 
 ---
 
@@ -51,6 +52,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **禁止隨意猜測**；需要時**多考證網路上的業界做法**（找厲害的、不瞎找）。
 - 此狀況也常出現在「**交接不完全**」時，導致 Claude 根本不知道自己在幹嘛 → 所以交接檔與文件必須寫完整、寫清楚（呼應上方 A 與下方「文件同步強制規則」）。
 
+### C. 開工前環境與並行檢查（Phase 0，避免多 Claude 撞車）
+動工前先確認「自己在哪、有沒有別人同時在改」（曾發生兩個 Claude 並行於主 repo 與 worktree 撞車）：
+```powershell
+git worktree list                        # 是否有兄弟 worktree（可能有另一個 Claude 在改）
+git fetch origin
+git log --all --oneline --decorate -15   # 全分支版圖
+git status --short                        # 自己的未提交變更
+```
+- **worktree 看不到主 repo 的未追蹤檔/未提交變更** → 在 worktree 工作時，必要時 `git -C <主 repo 路徑> status --short` 看主樹。
+- 事實以**程式碼**為準、不以文件為準（文件可能漂移）。
+- 全稱問題（「整個 / 所有 / 每個 / 介紹專案…」）回答第一句先講「**已查範圍 + 已知盲區**」再答內容。
+- 詳見 skill [`scope-and-environment-check`](.claude/skills/scope-and-environment-check/SKILL.md)。
+
 ---
 
 ## 品質保證（QA）鐵則：假設一定有問題，去找出來
@@ -64,6 +78,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### B. 視覺 / 交叉 QA（fresh eyes）
 - ⚠️ **即使只有兩三處內容修改，也要用子代理（sub-agent）做一次 fresh-eyes 檢查**。你一直盯著自己寫的東西，看到的是「**你期望的結果**」，不是「**實際存在的內容**」；子代理有全新視角，能抓到你的盲點。
 - 子代理審查時前提同上：**假設一定有問題、把問題找出來**；找不到就再查。
+
+### C. 找到錯誤 → 加倍驗證（N+1 不同方法）
+- 每找到 **N 個問題**，就再做 **N+1 個測試**，且**必須用不同方法 + 包含原方法重跑一次**（只用同一招容易漏同類錯）。
+- 「N」是廣義的：執行錯誤、認知遺漏、未驗證的假設、使用者的糾錯，都算。
+- 使用者糾錯一次 → 不只改當下：**回頭掃同類問題，並修補「規則本身」**讓同類錯不再發生。
 
 ---
 
