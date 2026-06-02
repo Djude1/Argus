@@ -15,10 +15,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | 子目錄層 | `frontend/CLAUDE.md` 等 | 各模組的具體規則（越深越具體） | ✅ 提交 |
 | 個人覆寫層 | `CLAUDE.local.md` | 本機個人微調，不影響他人 | 不提交 |
 
-**子目錄 CLAUDE.md 位置：**
+**子目錄 CLAUDE.md 位置**（完整地圖＋ SKILL 索引見 [`專案導覽.md`](專案導覽.md)）：
 - [`frontend/CLAUDE.md`](frontend/CLAUDE.md) — React/Vite build、App.jsx 操作規範
-- [`backend/apps/billing/CLAUDE.md`](backend/apps/billing/CLAUDE.md) — 點數系統唯一入口規則
+- [`backend/apps/accounts/CLAUDE.md`](backend/apps/accounts/CLAUDE.md) — User / JWT / Google 登入，不簽發 staff
 - [`backend/apps/scans/CLAUDE.md`](backend/apps/scans/CLAUDE.md) — ScanJob 狀態機、Playwright、取消機制
+- [`backend/apps/agent/CLAUDE.md`](backend/apps/agent/CLAUDE.md) — Hermes-Agent（預設關閉）、禁印 key、same-origin
+- [`backend/apps/billing/CLAUDE.md`](backend/apps/billing/CLAUDE.md) — 點數系統唯一入口規則
+- [`backend/apps/reviews/CLAUDE.md`](backend/apps/reviews/CLAUDE.md) — 評論（一人一則 + thread + 圖片）
+- [`backend/apps/admin_api/CLAUDE.md`](backend/apps/admin_api/CLAUDE.md) — 後台 API + AdminAuditLog 稽核
+- [`backend/apps/content/CLAUDE.md`](backend/apps/content/CLAUDE.md) — 公開 CMS 讀取（寫入走 admin_api/cms）
+- [`backend/apps/insights/CLAUDE.md`](backend/apps/insights/CLAUDE.md) — 免費工具 `/free-tools`（SSRF 防護）
 
 ---
 
@@ -30,6 +36,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 |---|---|---|
 | `argus-ui-design` | 新增 / 修改任何**前端介面**時（`App.jsx` 頁面與元件、`styles.css`、前台公開頁、後台 `/admin/*`、按鈕 / 導覽 / 分頁 / 動畫 / 特效 / 配色 / 版面 / 互動，或「美化、調版面、做動畫、改視覺」需求） | [`.claude/skills/argus-ui-design/SKILL.md`](.claude/skills/argus-ui-design/SKILL.md) |
 | `argus-git-safety` | 任何 `git add` / `commit` / `push`，或討論部署 / 上線 / 共用 repo / 與組員協作時（內含公網部署現況與 push 前強制清單） | [`.claude/skills/argus-git-safety/SKILL.md`](.claude/skills/argus-git-safety/SKILL.md) |
+
+---
+
+## 交接與不確定性鐵則（最高優先，每次對話必守）
+
+### A. 工作額度達 85% 強制交接
+**每次處理工作時，若該工作的額度（對話 context / token 預算）已達約 85%，必須立刻強制交接手頭工作**：把「目前目標、成功條件、已完成、未完成的下一步、關鍵決策與地雷」寫進交接檔（`.sisyphus/argus-handoff.local.md` 或對應 `log/`），**以防額度用盡、下一個接手的 Claude 只能不知所措**。寧可提早交接，也不要做到一半斷掉、沒留下狀態。
+
+### B. 指令不具體 → 先問 / 先驗證，禁止猜測
+使用者的命令可能並不具體或不清楚。動手前：
+- 不清楚就**詳細詢問使用者**，或**認真驗證使用者的真正想法（Why）**再製作。
+- **禁止隨意猜測**；需要時**多考證網路上的業界做法**（找厲害的、不瞎找）。
+- 此狀況也常出現在「**交接不完全**」時，導致 Claude 根本不知道自己在幹嘛 → 所以交接檔與文件必須寫完整、寫清楚（呼應上方 A 與下方「文件同步強制規則」）。
 
 ---
 
