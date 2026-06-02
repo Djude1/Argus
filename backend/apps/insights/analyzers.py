@@ -6,7 +6,7 @@ import time
 from email import policy
 from email.parser import Parser
 from html.parser import HTMLParser
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urljoin, urlparse
 
 import requests
 from django.conf import settings
@@ -248,15 +248,36 @@ def _performance_findings(url: str, response, elapsed_ms: int, transfer_kb: floa
     return findings
 
 
+REDIRECT_STATUSES = {301, 302, 303, 307, 308}
+MAX_SPEED_REDIRECTS = 5
+
+
+def _safe_get(session, validated_url: str, timeout: int):
+    """跟隨 redirect，但每一跳都先用 assert_public_url 重新檢查目標主機，
+    避免公開 URL 透過 302 轉址到內網而繞過 SSRF 防護（allow_redirects=True 會
+    在我們檢查前就把內網請求發出去，故改為逐跳手動跟隨）。"""
+    current = validated_url
+    for _ in range(MAX_SPEED_REDIRECTS + 1):
+        resp = session.get(
+            current,
+            headers={"User-Agent": settings.ARGUS_SCANNER_USER_AGENT},
+            timeout=timeout,
+            allow_redirects=False,
+        )
+        if resp.status_code not in REDIRECT_STATUSES:
+            return resp
+        location = resp.headers.get("Location") or resp.headers.get("location")
+        if not location:
+            return resp
+        # 每一跳的目標都要重新做公開主機檢查
+        current = assert_public_url(urljoin(current, location))
+    raise PublicHostError("redirect 次數過多，已停止分析。")
+
+
 def analyze_speed(url: str, session=requests, timeout: int = 10) -> dict:
     normalized = assert_public_url(url)
     started = time.perf_counter()
-    response = session.get(
-        normalized,
-        headers={"User-Agent": settings.ARGUS_SCANNER_USER_AGENT},
-        timeout=timeout,
-        allow_redirects=True,
-    )
+    response = _safe_get(session, normalized, timeout)
     elapsed_ms = int((time.perf_counter() - started) * 1000)
     content = response.content[:2_000_000]
     transfer_kb = len(response.content or b"") / 1024
