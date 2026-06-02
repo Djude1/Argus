@@ -22,6 +22,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ---
 
+## Skills 表格（專案技能）
+
+`.claude/skills/` 下的 skill 會被 Claude Code 自動發現，並依 `description` 在相關情境**自動載入**，無需手動呼叫。新增 / 修改 skill 後須同步本表（見「文件同步強制規則」與行為準則 4）。
+
+| Skill | 觸發時機 | 位置 |
+|---|---|---|
+| `argus-ui-design` | 新增 / 修改任何**前端介面**時（`App.jsx` 頁面與元件、`styles.css`、前台公開頁、後台 `/admin/*`、按鈕 / 導覽 / 分頁 / 動畫 / 特效 / 配色 / 版面 / 互動，或「美化、調版面、做動畫、改視覺」需求） | [`.claude/skills/argus-ui-design/SKILL.md`](.claude/skills/argus-ui-design/SKILL.md) |
+| `argus-git-safety` | 任何 `git add` / `commit` / `push`，或討論部署 / 上線 / 共用 repo / 與組員協作時（內含公網部署現況與 push 前強制清單） | [`.claude/skills/argus-git-safety/SKILL.md`](.claude/skills/argus-git-safety/SKILL.md) |
+
+---
+
 ## 禁止事項清單（Prohibited Actions）
 
 以下操作**在任何情況下都禁止**，違反可能導致資料損毀、安全漏洞或計費錯誤。

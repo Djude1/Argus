@@ -15,9 +15,15 @@ description: Argus 專案專用工作規則。當 Codex 在 D:\GitHub_Project\Ar
 6. 若工作超過約 20 分鐘，更新 `.sisyphus/argus-handoff.local.md` 做交接存檔。
 7. 完成後執行最接近改動面的測試；若找到 `n` 個與本次改動相關的錯誤，補 `n*2` 個不同類型測試。
 
+## 部署與協作安全
+
+- 本專案**已部署公網正式對外**：`https://xn--gst.tw/`（部署在另一台電腦）；GitHub repo 與該部署機**共用**，且**有其他組員同時開發**。push = 進入「線上服務 + 多人協作」的共用 repo。
+- 任何 `git commit` / `git push` 前：(1) commit 訊息詳列改了什麼與為什麼；(2) 只 stage 本次自己的改動（明確檔案路徑，禁止 `git add .` / `-A`）；(3) 先跑相關測試/檢查並 `git diff --staged` 審視，確認無誤、無夾帶機密；(4) 取得使用者明確同意才 push，不自行 push。
+- 詳見 `references/project-rules.md` 的「部署與協作安全規則」。
+
 ## 必讀參考
 
-- `references/project-rules.md`：專案定位、硬性規則、20 分鐘交接、測試加倍規則。
+- `references/project-rules.md`：專案定位、硬性規則、**部署與協作 / push 安全**、20 分鐘交接、測試加倍規則。
 - `references/api-provider-workflow.md`：API Key 安全檢查、模型列舉、provider 選擇與 fallback。
 - `references/external-references.md`：可參考的 GEO/AEO/crawler/RTK 專案與可取用優點。
 - `references/technology-adoption.md`：外部專案技術採納矩陣、MVP/Phase 2 落地任務與不採納項。

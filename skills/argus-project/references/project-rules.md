@@ -59,6 +59,17 @@ Argus 是 SaaS 級網站健檢平台。使用者輸入 URL 後，系統執行同
 - 記錄時只寫變數名稱、provider、通過/失敗狀態、HTTP 狀態類型，不寫原始請求/回應 body。
 - `.gitignore` 必須保護 `.env`、`GoogleCloud_ApiKey.json`、本機交接檔與常見 build/dependency 目錄。
 
+## 部署與協作安全規則（公網上線後）
+
+- **部署現況**：已上線公網 `https://xn--gst.tw/`（部署在另一台電腦）；GitHub repo `https://github.com/Djude1/Argus.git` 與部署機**共用**；repo 內**有其他組員同時開發**。任何 push 都是對外、會影響線上環境與他人的操作。
+- **push / commit 前強制（全部滿足才可 push）**：
+  1. commit 訊息詳細標示「改了什麼 + 為什麼」，分點列出，禁止一行模糊帶過。
+  2. 只 stage 自己這次的改動（用明確檔案路徑，**禁止 `git add .` / `-A`**），避免夾帶他人或無關變更。
+  3. 先驗證無問題：依改動範圍跑相關測試 / `uv run python backend/manage.py check` / 前端 build，並 `git diff --staged` 逐項審視，確認沒壞東西、沒夾帶機密。
+  4. 取得使用者明確同意才 push，**不自行 push**。
+- **一定不能 push**：`.sisyphus/*.local.md` 本機交接檔、`CLAUDE.local.md`、`.env`、`GoogleCloud_ApiKey.json`、任何金鑰或硬編碼秘密。
+- **機器專屬設定**（是否測試機、RTK 實際安裝路徑等）放 `CLAUDE.local.md`（gitignored），不寫進會被 push 的團隊共用檔，以免跨機器 drift。
+
 ## 交接檔格式
 
 更新 `.sisyphus/argus-handoff.local.md` 時使用：
