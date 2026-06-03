@@ -9,17 +9,10 @@
 from __future__ import annotations
 
 import json
-import logging
 import shutil
 import subprocess
-from typing import TYPE_CHECKING
 
 from apps.scans.scan_logger import append_log
-
-if TYPE_CHECKING:
-    pass
-
-logger = logging.getLogger(__name__)
 
 _PRIORITY: dict[str, float] = {
     "critical": 90.0,
@@ -49,7 +42,8 @@ def run_nuclei(
 ) -> list[dict]:
     """執行 Nuclei 掃描並回傳 Finding dict 列表。
 
-    deep=False：精選模板（cves/vulnerabilities/misconfigurations/exposures/default-logins），6 分鐘硬限。
+    deep=False：精選模板
+    （cves/vulnerabilities/misconfigurations/exposures/default-logins），6 分鐘硬限。
     deep=True：全部模板，12 分鐘硬限。
     binary 不存在或任何例外皆 silent-fail 回傳 []。
     """
@@ -85,6 +79,10 @@ def run_nuclei(
         append_log(scan_job_id, f"Nuclei 失敗（{exc.__class__.__name__}），略過", level="warn")
         return []
 
+    if result.returncode != 0 and not result.stdout.strip():
+        append_log(scan_job_id, f"Nuclei 異常退出（exit={result.returncode}），略過", level="warn")
+        return []
+
     findings = _parse_jsonl(result.stdout.splitlines())
     append_log(scan_job_id, f"Nuclei 完成（{mode_label}）：{len(findings)} 項發現")
     return findings
@@ -112,13 +110,12 @@ def _parse_jsonl(lines: list[str]) -> list[dict]:
         seen.add(key)
 
         finding = _build_finding(record)
-        if finding:
-            findings.append(finding)
+        findings.append(finding)
 
     return findings
 
 
-def _build_finding(record: dict) -> dict | None:
+def _build_finding(record: dict) -> dict:
     """將 Nuclei JSONL 記錄轉為 Argus Finding dict。"""
     info = record.get("info") or {}
     template_id = record.get("template-id", "unknown")
@@ -135,7 +132,11 @@ def _build_finding(record: dict) -> dict | None:
     if extracted:
         evidence_parts.append(f"提取結果：{'; '.join(str(r) for r in extracted[:3])}")
 
-    tags: list[str] = info.get("tags") or []
+    raw_tags = info.get("tags") or []
+    tags: list[str] = (
+        raw_tags if isinstance(raw_tags, list)
+        else [t.strip() for t in str(raw_tags).split(",")]
+    )
     impact_area = "vulnerability"
     for tag in tags:
         if tag in _TAG_IMPACT:
