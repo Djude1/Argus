@@ -2,7 +2,7 @@
 
 **日期**：2026-06-03
 **狀態**：待實作
-**範疇**：Phase 1 快速掃描（免費層）
+**範疇**：Phase 1 — 快速掃描（免費）+ 深度掃描（付費）雙模式
 
 ---
 
@@ -22,10 +22,10 @@ Argus 目前的資安掃描涵蓋：被動 header 檢查、PII 偵測、Katana J
 
 | 層級 | 觸發條件 | 包含內容 |
 |---|---|---|
-| **免費（快速掃描）** | 所有使用者，預設 | crawl + 四維 scan + Katana binary + Nuclei 精選模板（5 分鐘上限） |
-| **付費（深度掃描）** | `active_testing_authorized=True`，未來實作 | 免費全部 + Nuclei 完整模板 + 更長 timeout + 額外工具（dalfox/sqlmap）|
+| **免費（快速掃描）** | `scan_mode=passive`（預設） | crawl + 四維 scan + Katana binary + Nuclei 精選模板，timeout 6 分鐘 |
+| **付費（深度掃描）** | `scan_mode=active` + `active_testing_authorized=True` | 免費全部 + Nuclei **全部模板**（無 `-tags` 限制），timeout 12 分鐘，`-c 50` |
 
-Phase 1 只實作免費層。`ScanJob` schema 不變，`active` mode gate 保留作為付費功能預留位置。
+兩個層級均在 Phase 1 實作並可測試。`ScanJob` schema 不變，沿用現有 `active_testing_authorized` 欄位作為付費授權旗標。
 
 ---
 
@@ -58,33 +58,34 @@ crawl → scan → ┌ katana(binary)  ┐ ThreadPoolExecutor 並行
 
 ## nuclei_scanner.py 設計
 
-### 執行參數
+### 執行模式對照
+
+| 參數 | 免費（fast） | 付費（deep） |
+|---|---|---|
+| 觸發條件 | `scan_mode=passive` | `scan_mode=active` + `active_testing_authorized=True` |
+| `-tags` | `cves,vulnerabilities,misconfigurations,exposures,default-logins` | 不加（全部模板） |
+| `-timeout` | `15`（每 request 15 秒） | `30`（每 request 30 秒） |
+| `-c`（執行緒） | `25` | `50` |
+| subprocess 硬限 | `360` 秒（6 分鐘） | `720` 秒（12 分鐘） |
 
 ```bash
-nuclei \
-  -u <target_url> \
-  -tags cves,vulnerabilities,misconfigurations,exposures,default-logins \
-  -timeout 15 \
-  -c 25 \
-  -j \
-  -o /tmp/nuclei_<scan_id>.jsonl \
-  -silent
+# 免費模式
+nuclei -u <url> -tags cves,vulnerabilities,misconfigurations,exposures,default-logins \
+  -timeout 15 -c 25 -j -o /tmp/nuclei_<id>.jsonl -silent
+
+# 付費模式
+nuclei -u <url> -timeout 30 -c 50 -j -o /tmp/nuclei_<id>.jsonl -silent
 ```
 
-- `-tags`：精選五類高價值模板，排除 `fuzzing`（太慢）和 `helpers`（非漏洞）
-- `-timeout 15`：每個 HTTP request 連線等待上限 15 秒（Nuclei 內部預設 5 秒）
-- `-c 25`：25 執行緒並行，平衡速度與靶機壓力
-- `-j`：JSONL 格式輸出，每行一筆 finding
-- 外層 subprocess timeout：360 秒（6 分鐘硬性上限，超時 kill process）
-
-### Binary 偵測（silent-fail）
+### Binary 偵測與模式選擇（silent-fail）
 
 ```python
-def run_nuclei(url: str, scan_job_id: int) -> list[dict]:
+def run_nuclei(url: str, scan_job_id: int, *, deep: bool = False) -> list[dict]:
     if not shutil.which("nuclei"):
         append_log(scan_job_id, "Nuclei binary 未安裝，略過", level="warn")
         return []
-    # ... 執行 subprocess
+    # deep=True 時不加 -tags，跑全部模板
+    # ... 依 deep 決定參數後執行 subprocess
 ```
 
 ### Finding Mapping
@@ -139,13 +140,19 @@ watcher = threading.Thread(
 )
 watcher.start()
 
+deep_mode = (
+    scan_job.scan_mode == ScanJob.ScanMode.ACTIVE
+    and scan_job.active_testing_authorized
+)
+append_log(scan_job_id, f"Nuclei 模式：{'深度（付費）' if deep_mode else '快速（免費）'}")
+
 try:
     with ThreadPoolExecutor(max_workers=2) as executor:
         f_katana = executor.submit(run_katana, scan_job.normalized_url,
                                    scan_job.max_depth, scan_job.max_pages,
                                    cancel_event)
         f_nuclei = executor.submit(run_nuclei, scan_job.normalized_url, scan_job_id,
-                                   cancel_event)
+                                   cancel_event, deep=deep_mode)
 
     katana_findings, katana_tech = f_katana.result()
     nuclei_findings = f_nuclei.result()
@@ -181,6 +188,8 @@ for finding in katana_findings + nuclei_findings:
 | severity → priority_score mapping | 各 severity 值逐一測 | critical=90, high=75... |
 | 重複結果去重 | 兩筆相同 template-id + matched-at | 只產出一筆 |
 | Subprocess timeout | mock `subprocess.run` raise TimeoutExpired | silent-fail，回傳 `[]` |
+| **免費模式參數** | `deep=False`，mock subprocess | 指令含 `-tags`，硬限 360 秒 |
+| **付費模式參數** | `deep=True`，mock subprocess | 指令**不含** `-tags`，硬限 720 秒，`-c 50` |
 
 ### 修改：現有測試
 
@@ -189,19 +198,27 @@ for finding in katana_findings + nuclei_findings:
 
 ### 手動整合驗證
 
-對 DVWA 或 OWASP Juice Shop 靶機執行完整掃描，確認：
-1. scan log 出現「Nuclei 完成：N 項發現」
+對 DVWA 或 OWASP Juice Shop 靶機執行兩次掃描，確認：
+
+**免費模式（passive）：**
+1. scan log 出現「Nuclei 模式：快速（免費）」
 2. `Finding` 表有 `category=security` 的 Nuclei 結果
 3. 總掃描時間 < 10 分鐘
 
+**付費模式（active + authorized）：**
+1. scan log 出現「Nuclei 模式：深度（付費）」
+2. Finding 數量明顯多於免費模式（全部模板 > 精選模板）
+3. 總掃描時間 < 15 分鐘
+
 ---
 
-## 未來展望（Phase 2，付費功能）
+## 未來展望（Phase 2）
 
-- `active` mode + `active_testing_authorized=True` 時：移除 `-tags` 限制，跑全部模板
-- 加入 **dalfox**（XSS 深度掃描）、**sqlmap**（完整 SQLi）
-- Nuclei `-c` 提升至 50，timeout 延長至 600 秒
-- 考慮將 Nuclei 和其他工具全部並行化（Approach B 進化版）
+Phase 1 已實作免費（快速）與付費（深度）雙模式。Phase 2 可在付費模式下加入額外工具：
+
+- **dalfox**（XSS 深度掃描）：針對所有含輸入的頁面自動注入 XSS payload
+- **sqlmap**（完整 SQLi）：取代 Nuclei SQLi 模板，涵蓋 union/time-based/error-based
+- 上述工具以並行 subprocess 加入 `ThreadPoolExecutor`，不影響現有流程
 
 ---
 
