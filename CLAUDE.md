@@ -36,7 +36,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 |---|---|---|
 | `argus-ui-design` | 新增 / 修改任何**前端介面**時（`App.jsx` 頁面與元件、`styles.css`、前台公開頁、後台 `/admin/*`、按鈕 / 導覽 / 分頁 / 動畫 / 特效 / 配色 / 版面 / 互動，或「美化、調版面、做動畫、改視覺」需求） | [`.claude/skills/argus-ui-design/SKILL.md`](.claude/skills/argus-ui-design/SKILL.md) |
 | `argus-git-safety` | 任何 `git add` / `commit` / `push`，或討論部署 / 上線 / 共用 repo / 與組員協作時（內含公網部署現況與 push 前強制清單） | [`.claude/skills/argus-git-safety/SKILL.md`](.claude/skills/argus-git-safety/SKILL.md) |
-| `argus-project` | Codex 用的專案總規則（環境隔離、API provider、交接）；**Claude 不自動載入**，需要時手動參考 | [`skills/argus-project/SKILL.md`](skills/argus-project/SKILL.md) |
 | `scope-and-environment-check` | 開工前環境感知（worktree / 並行）、全稱問題範圍宣告、糾錯反思循環、PowerShell / `.env` / worktree 環境陷阱 | [`.claude/skills/scope-and-environment-check/SKILL.md`](.claude/skills/scope-and-environment-check/SKILL.md) |
 
 ---
@@ -240,10 +239,14 @@ docker compose up -d --build frontend
 | `/team` | `TeamPage` | 公開行銷頁：團隊介紹 |
 | `/purchase` | `PurchasePage` | 購買點數（3 步驟結帳 wizard） |
 | `/download` | `DownloadPage` | 下載報告 |
-| `/scans` | `ScansPlaceholder` → `ScanListPage` | 掃描列表（需登入） |
+| `/reviews` | `ReviewsPage` | 平台評論（公開） |
+| `/dashboard` | `DashboardPage` | 登入後預設落地頁（需登入；未匹配路由也導向此） |
+| `/scans` | `ScansPlaceholder` | 掃描列表（需登入） |
 | `/scans/:scanId` | `ScanDetailPage` | 掃描結果詳情 + findings |
 | `/scans/:scanId/topology` | `TopologyPage` | 網站拓樸圖（ReactFlow） |
-| `/reviews` | `ReviewsPage` | 平台評論 |
+| `/history` | `HistoryPage` | 掃描歷史紀錄（需登入） |
+| `/billing` | `BillingPage` | 點數與帳務（需登入） |
+| `/settings` | `SettingsPage` | 個人設定（需登入） |
 | `/admin` | → redirect `/admin/overview` | staff 進入點 |
 | `/admin/overview` | `AdminOverviewPage` | 後台總覽 |
 | `/admin/users` | `AdminUsersPage` | 使用者管理 |
@@ -255,6 +258,8 @@ docker compose up -d --build frontend
 | `/admin/content` | `AdminContentPage` | CMS 內容管理 |
 | `/admin/plans` | `AdminPlansPage` | 定價方案管理 |
 | `/admin/audit-log` | `AdminAuditLogPage` | 操作紀錄（superuser 限定） |
+| `/admin/announcements` | `AdminAnnouncementsPage` | 公告管理 |
+| `*` | → redirect `/dashboard`（已登入）或 `/project`（未登入） | 未匹配路由 catch-all |
 
 **前端核心檔案：**
 
@@ -344,7 +349,7 @@ user（一人一則，OneToOne）、rating（1-5）、comment（TextField）、i
 | `billing` | 點數錢包；**`services.py` 是 wallet 唯一寫入入口**，禁止繞過直接改 model | `services.py` `signals.py` |
 | `reviews` | 平台評論（一人一則 + thread + 圖片） | `models.py` `views.py` |
 | `admin_api` | React `/admin/*` 用的 REST API + AdminAuditLog | `views.py` `permissions.py` |
-| `content` | CMS（ProjectFeature / TeamMember / AppRelease），公開 API | `models.py` `admin.py` |
+| `content` | CMS（ProjectFeature / TeamMember / ProjectMilestone / AppRelease），公開 API | `models.py` `admin.py` |
 | `insights` | 公開免費分析工具（測速 / 釣魚 URL / 釣魚郵件），AllowAny、不扣 coin、本機特徵分類器；供公開頁 `/free-tools` 使用 | `views.py` `analyzers.py` |
 
 ### 前端：巨型單檔架構
@@ -515,4 +520,24 @@ sc.exe qc Cloudflared   # 看 BINARY_PATH_NAME 的 --config 參數
    Copy-Item C:\Users\ntub\.cloudflared\config.yml `
              C:\Windows\System32\config\systemprofile\.cloudflared\config.yml -Force
    ```
-3. **UAC 提升,重啟
+3. **UAC 提升,重啟 service**:
+   ```powershell
+   sc.exe stop Cloudflared
+   Start-Sleep 3
+   taskkill /IM cloudflared.exe /F
+   sc.exe start Cloudflared
+   ```
+4. **驗證 ingress 真的生效**(必做):
+   - `curl.exe -sI http://<hostname>/` 確認**不是** cloudflared 的 catch-all 404
+   - cloudflared 自家 404 特徵:`Connection: keep-alive` 但**沒有** `Server: cloudflare`
+   - 正常經過 Cloudflare 邊緣的回應(200 / 後端 404 都算)會帶 `Server: cloudflare` + `CF-RAY`
+
+### cloudflared CLI 跨 zone 也是地雷
+
+`cloudflared tunnel route dns <id> <hostname>` 對**非 origincert 對應 zone** 的 hostname 會 silently 把它 append 到預設 zone(不會報錯,但 DNS 建到錯位的 zone)。
+
+例子:origincert = `aiglasses.qzz.io`,跑 `cloudflared tunnel route dns ... xn--gst.tw` → 結果建了 `xn--gst.tw.aiglasses.qzz.io` CNAME,不是在 巧.tw zone 上!
+
+**跨 zone 建 DNS → 一律去 Cloudflare Dashboard 手動加 CNAME**,目標 `<tunnel-uuid>.cfargotunnel.com`,Proxy 橘雲開。**永遠不要對跨 zone hostname 跑 `cloudflared tunnel route dns`。**
+
+跑了之後也要看 log 訊息「Added CNAME <full-hostname>」確認 hostname 是預期值,別只看到 "Added" 就放心。

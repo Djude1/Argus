@@ -115,7 +115,7 @@ SaaS 級網站健檢工具。使用者輸入單一網址 → 系統執行:
 
 ### M5. 前台 / 後台分離
 - **前台(User Portal)**:Google OAuth 登入、新建掃描任務、查看互動報告、匯出、購買點數、撰寫評論
-- **後台(Admin)**:Django admin + django-jazzmin 客製化,可監控 Celery queue、使用者點數錢包、交易紀錄、評論回覆、Agent token 消耗
+- **後台(Admin)**:React `/admin/*` 為主要管理介面、Django admin 為 superuser 後門(預設樣式,W4 已移除 jazzmin),可監控 Celery queue、使用者點數錢包、交易紀錄、評論回覆、Agent token 消耗
 
 ### M6. 點數制度（取代月配額）
 - **錢包**：每使用者一個 `CoinWallet`（balance、累積購買、累積掃描）；建立帳號自動發 200 coin，之後每月登入時自動補發
@@ -159,7 +159,7 @@ SaaS 級網站健檢工具。使用者輸入單一網址 → 系統執行:
 
 # 🧱 初始架構交付規格(歷史參考)
 
-> 本節保留為早期架構設計參考。正式開發順序以 `開發計畫.md` 與 `skills/argus-project/references/technology-adoption.md` 為準。
+> 本節保留為早期架構設計參考。正式開發順序以 `開發計畫.md` 為準。
 
 ## 1️⃣ 資料庫 Schema(Django Models)
 請給出完整可執行的 `models.py`,至少包含:

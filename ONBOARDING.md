@@ -27,12 +27,9 @@
 2. `CLAUDE.md` — 行為準則（用繁體中文回覆、簡潔優先、目標導向執行、修改後測試）
 3. `Project_說明.md` — 專案規格與法律限制
 4. `開發計畫.md` — T1–T26 已完成與未完成項目
-5. `AGENTS.md` — Agent 規則
-6. `skills/argus-project/SKILL.md` 與 references
-7. `.sisyphus/argus-project-memory.md` — 歷史決策與地雷
-8. `.sisyphus/argus-handoff.local.md` — 最近一次工作快照（如有）
+5. `.sisyphus/argus-handoff.local.md` — 最近一次工作快照（如有）
 
-**對話開始時必做**：`git pull --rebase origin main`（與另一個 Claude Code 同步）
+**對話開始時必做**：先 `git fetch origin` 再比對差異，**不要無腦 `git pull` / `git pull --rebase`**——本機規則只能被增量新增/更新，不可被遠端覆蓋；詳見 `CLAUDE.local.md`「git pull 保護本機規則」。
 
 ---
 
@@ -143,9 +140,7 @@ Argus/
 ├── CLAUDE.md               ← 行為準則（繁中、簡潔、目標導向）
 ├── Project_說明.md         ← 專案規格 + 法律限制
 ├── 開發計畫.md             ← T1–T26 任務清單
-├── AGENTS.md               ← Agent 入口規則
 ├── .sisyphus/
-│   ├── argus-project-memory.md   ← 長期記憶與決策
 │   └── argus-handoff.local.md    ← 最近一次工作快照（.gitignore）
 ├── pyproject.toml          ← Python 依賴（uv 管）
 ├── uv.lock
@@ -514,9 +509,10 @@ ReviewHelpful / ReviewMessageHelpful（評論/訊息「有幫助」標記，per 
 
 ### 12.1 每次動手前
 ```powershell
-git pull --rebase origin main
+git fetch origin
+git log --oneline --left-right HEAD...origin/main   # 比對差異，不要無腦 pull
 ```
-若有 unstaged 改動先 stash 或 commit。
+確認遠端不會覆蓋本機規則後再整合；若有 unstaged 改動先 stash 或 commit。詳見 `CLAUDE.local.md`「git pull 保護本機規則」。
 
 ### 12.2 分工溝通
 - 用聊天明確告訴對方「我要改 X、預計動 Y 檔」
