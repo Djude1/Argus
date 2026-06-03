@@ -183,8 +183,16 @@ def run_scan_job(self, scan_job_id: int) -> dict:
                 scan_job_id,
                 deep=deep_mode,
             )
-        katana_findings, katana_tech = f_katana.result()
-        nuclei_findings = f_nuclei.result()
+        try:
+            katana_findings, katana_tech = f_katana.result()
+        except Exception as exc:  # noqa: BLE001
+            append_log(scan_job_id, f"Katana 略過（{exc.__class__.__name__}）", level="warn")
+            katana_findings, katana_tech = [], []
+        try:
+            nuclei_findings = f_nuclei.result()
+        except Exception as exc:  # noqa: BLE001
+            append_log(scan_job_id, f"Nuclei 略過（{exc.__class__.__name__}）", level="warn")
+            nuclei_findings = []
 
         for finding in katana_findings + nuclei_findings:
             Finding.objects.create(scan_job=scan_job, page=None, **finding)
