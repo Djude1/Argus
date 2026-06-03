@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import logging
+import shutil
 import subprocess
 from typing import Any
 
@@ -62,27 +63,28 @@ def run_katana(
     max_depth: int = 3,
     max_pages: int = 50,
 ) -> tuple[list[dict], list[str]]:
-    """以 Docker 執行 Katana 並回傳 (findings, tech_stack)。
+    """以本機 katana binary 執行並回傳 (findings, tech_stack)。
 
-    任何錯誤（Docker 不可用、timeout、parse 失敗）皆靜默回傳 ([], [])。
+    任何錯誤（binary 不存在、timeout、parse 失敗）皆靜默回傳 ([], [])。
     """
-    image = getattr(settings, "KATANA_DOCKER_IMAGE", "projectdiscovery/katana:latest")
+    if not shutil.which("katana"):
+        logger.warning("katana_scanner: katana binary 不存在，略過")
+        return [], []
+
     timeout = getattr(settings, "KATANA_TIMEOUT", 90)
 
     cmd = [
-        "docker", "run", "--rm",
-        image,
+        "katana",
         "-u", url,
         "-d", str(max_depth),
-        "-jc",           # JS 端點解析
-        "-jsl",          # jsluice 深度 JS 秘鑰挖掘
-        "-td",           # 技術棧識別
-        "-j",            # JSONL 輸出
+        "-jc",
+        "-jsl",
+        "-td",
+        "-j",
         "-silent",
         "-timeout", "10",
         "-rl", "10",
         "-c", "5",
-        "-p", "1",
     ]
 
     try:
@@ -92,9 +94,6 @@ def run_katana(
             text=True,
             timeout=timeout,
         )
-    except FileNotFoundError:
-        logger.warning("katana_scanner: docker 指令不存在，略過 Katana 掃描")
-        return [], []
     except subprocess.TimeoutExpired:
         logger.warning("katana_scanner: Katana 超時（%ds），略過", timeout)
         return [], []
