@@ -29,7 +29,7 @@ queued → crawling → scanning → [agent_testing] → completed
 | `scanners.py` | 四維掃描（SEO/AEO/GEO/Security）、產生 findings | 修改 ScanJob.status |
 | `cancellation.py` | CancellationToken，供 worker 輪詢是否要終止 | 直接終止 worker process |
 | `reports.py` | 產生 Word 報告（.docx） | 任何 DB 寫入 |
-| `active_probes.py` | 主動測試探針（`scan_mode=active` 才執行） | 在 passive mode 被呼叫 |
+| `nuclei_scanner.py` | Nuclei binary 封裝；fast/deep 雙模式；JSONL 解析；Finding mapping | 在 passive mode 執行（已由 deep 旗標控制） |
 
 ---
 
@@ -100,5 +100,5 @@ refund_full_for_scan(scan)  ← 全退（冪等）
 | `scanners.py` / `crawler.py` 修改 `ScanJob.status` | 狀態機只在 tasks.py 管理 |
 | `crawler.py` 呼叫任何 billing 函式 | 職責分離 |
 | `playwright install` 不加 `PLAYWRIGHT_BROWSERS_PATH` | 污染全域路徑 |
-| `active_probes.py` 在 passive mode 執行 | 未授權的主動測試 |
+| Nuclei deep mode 需 `scan_mode=active AND active_testing_authorized` | 未授權的主動測試 |
 | 直接 `ScanJob.objects.filter(...).update(status=...)` | 繞過 signal，狀態不一致 |
