@@ -17,8 +17,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **子目錄 CLAUDE.md 位置：**
 - [`frontend/CLAUDE.md`](frontend/CLAUDE.md) — React/Vite build、App.jsx 操作規範
+- [`backend/CLAUDE.md`](backend/CLAUDE.md) — API 路由地圖、Model 速查、App 職責
 - [`backend/apps/billing/CLAUDE.md`](backend/apps/billing/CLAUDE.md) — 點數系統唯一入口規則
 - [`backend/apps/scans/CLAUDE.md`](backend/apps/scans/CLAUDE.md) — ScanJob 狀態機、Playwright、取消機制
+
+### CLAUDE.md 跨層同步規則（強制）
+
+**任何一層的 CLAUDE.md 有內容異動，必須在同一次 commit 內同步所有受影響的層。**
+
+| 你改了哪一層 | 必須同時檢查並同步 |
+|---|---|
+| 本檔（專案層） | 所有相關子目錄 CLAUDE.md（規則是否矛盾、索引連結是否仍正確） |
+| 任一子目錄 CLAUDE.md | 本檔索引表（涵蓋內容欄位是否需要更新） + 兄弟層（同模組其他 CLAUDE.md）|
+| 新增子目錄 CLAUDE.md | 本檔「子目錄 CLAUDE.md 位置」清單與「子模組詳細資訊」索引表 |
+| 刪除或移動 CLAUDE.md | 本檔及所有引用它的 CLAUDE.md 的連結必須同步移除或改路徑 |
+
+**檢查方式**：改完後執行 `grep -r "對應關鍵字" */CLAUDE.md`，確認跨檔描述一致、無殘留舊事實。
 
 ---
 
