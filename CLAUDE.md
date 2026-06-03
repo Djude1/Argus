@@ -100,144 +100,20 @@ docker compose up -d --build frontend
 ### 整體資料流
 使用者在前端填網址 → `POST /api/scans/`（billing 預扣 coin）→ Celery worker 啟動 Playwright BFS 爬蟲 → 四維 scanner → 可選 Hermes-Agent → 結果寫 DB → 前端 polling 取 findings。
 
----
+### 子模組詳細資訊（修改前先查對應 CLAUDE.md）
 
-### 前端路由地圖（`frontend/src/App.jsx`）
-
-> 所有路由定義在 App.jsx 底部 `<Routes>` 區塊（約第 6460 行起）。
-
-| 路由 | 元件 / 頁面 | 說明 |
+| 模組 | 涵蓋內容 | 文件 |
 |---|---|---|
-| `/login` | `LoginPage` | Google OAuth 登入 |
-| `/project` | `ProjectPage` | 公開行銷頁：產品特色 |
-| `/free-tools` | `FreeToolsPage` | 公開免費分析（測速 / URL 風險 / 郵件風險），呼叫 `/api/insights/*` |
-| `/team` | `TeamPage` | 公開行銷頁：團隊介紹 |
-| `/purchase` | `PurchasePage` | 購買點數（3 步驟結帳 wizard） |
-| `/download` | `DownloadPage` | 下載報告 |
-| `/scans` | `ScansPlaceholder` → `ScanListPage` | 掃描列表（需登入） |
-| `/scans/:scanId` | `ScanDetailPage` | 掃描結果詳情 + findings |
-| `/scans/:scanId/topology` | `TopologyPage` | 網站拓樸圖（ReactFlow） |
-| `/reviews` | `ReviewsPage` | 平台評論 |
-| `/admin` | → redirect `/admin/overview` | staff 進入點 |
-| `/admin/overview` | `AdminOverviewPage` | 後台總覽 |
-| `/admin/users` | `AdminUsersPage` | 使用者管理 |
-| `/admin/users/:userId` | `AdminUserDetailPage` | 使用者詳情 + 點數調整 |
-| `/admin/transactions` | `AdminTransactionsPage` | 交易紀錄 |
-| `/admin/reviews` | `AdminReviewsPage` | 評論管理（可回覆） |
-| `/admin/scans` | `AdminScansPage` | 掃描任務管理 |
-| `/admin/scans/:scanId` | `AdminScanDetailPage` | 掃描詳情（管理員視角） |
-| `/admin/content` | `AdminContentPage` | CMS 內容管理 |
-| `/admin/plans` | `AdminPlansPage` | 定價方案管理 |
-| `/admin/audit-log` | `AdminAuditLogPage` | 操作紀錄（superuser 限定） |
-
-**前端核心檔案：**
-
-| 檔案 | 職責 |
-|---|---|
-| `frontend/src/App.jsx` | 6500+ 行，所有頁面元件與路由定義全在此 |
-| `frontend/src/api.js` | Axios instance，統一處理 base URL 與 CSRF token |
-| `frontend/src/store.js` | Zustand 全域狀態（user、wallet 等） |
-| `frontend/src/main.jsx` | React entry point，Provider 掛載 |
-| `frontend/src/styles.css` | 全域樣式（含 admin 深色 sidebar 變數） |
-
----
-
-### 後端 API 路由地圖（`backend/config/urls.py`）
-
-| URL 前綴 | Django App | 主要端點 |
-|---|---|---|
-| `/api/auth/` | `accounts` | `google/`（OAuth）、`register/`、`email-login/`、`me/`（GET/PATCH）、`change-password/` |
-| `/api/scans/` | `scans` | `scans/`（CRUD + `status/`/`cancel/`/`report/`/`topology/`/`screenshot`）、`estimate/`、`pages/`、`findings/`、`dashboard/`、`history/`、`audit/`、`findings-by-category/` |
-| `/api/billing/` | `billing` | `wallet/`、`plans/`、`purchase/`、`orders/` |
-| `/api/reviews/` | `reviews` | `reviews/`（CRUD + thread） |
-| `/api/content/` | `content` | `features/`、`team/`、`releases/`、`milestones/`（公開 CMS） |
-| `/api/insights/` | `insights` | `speed-test/`、`phishing-url/`、`phishing-email/`（公開免費工具，AllowAny、不扣 coin） |
-| `/api/admin/` | `admin_api` | `me/`、`overview/`、`dashboard/`、`users/`、`transactions/`、`scans/`、`reviews/`、`orders/`、`audit-log/`、`announcements/*`、`cms/*` |
-| `/django-admin/` | Django Admin | superuser 後門（Django 預設樣式，W4 已移除 jazzmin） |
-| `/` ～ `/*` | SPA fallback | 回傳 `frontend/dist/index.html`，由 React Router 處理 |
-
----
-
-### 關鍵 Model 速查
-
-**ScanJob**（`apps/scans/models.py`）
-```
-狀態機：queued → crawling → scanning → [agent_testing] → completed
-                                                        ↘ failed / cancelled
-欄位重點：original_url、status、scan_mode（passive/active）、
-         max_depth、max_pages、progress（JSON 即時進度）、
-         overall_score、category_scores（JSON）、top_actions（JSON）
-```
-
-**CoinWallet**（`apps/billing/models.py`）
-```
-balance（目前餘額）、total_purchased_ntd、total_scans_used
-last_bonus_year / last_bonus_month（月贈點冪等欄位）
-→ 所有寫入必須經過 billing/services.py，禁止直接 .save()
-```
-
-**CoinTransaction**（`apps/billing/models.py`）
-```
-wallet FK、amount（正=入帳、負=扣款）、balance_after（異動後餘額快照）
-kind（monthly_bonus / purchase / scan_hold / scan_refund / admin_adjust）
-scan_job FK（nullable）、plan FK（nullable）、admin_actor FK（nullable）、note
-→ 審計不可改；補正交易用 kind=admin_adjust（不是 type，也沒有 manual 值）
-```
-
-**AdminAuditLog**（`apps/admin_api/models.py`）
-```
-admin_actor FK（staff user）、target_user FK（nullable）、
-action（coin_adjust / review_reply / review_delete / user_toggle_staff / other）、
-target_object_repr、payload（JSON）、created_at
-→ 透過 log_admin_action() 集中寫入（調整點數、回覆評論等）
-```
-
-**PlatformReview**（`apps/reviews/models.py`）
-```
-user（一人一則，OneToOne）、rating（1-5）、comment（TextField）、is_featured
-→ thread 回覆是獨立 model ReviewMessage（review FK、author、is_admin、body、image）
-→ 沒有 content / images(JSON) / parent 欄位（勿沿用舊敘述）
-→ 「有幫助」標記：ReviewHelpful / ReviewMessageHelpful（per user 唯一）
-```
-
-### Node 22 portable（build 必用）
-⚠ 系統 Node v24 + Rollup 4.x 在 Windows 會 crash，build 一律用 `frontend/build-node22.ps1`（D:\node22，v22.22.3 portable）。詳細安裝說明見 [`docs/node22-guide.md`](docs/node22-guide.md)。
-
-### 8 個 Django App 的職責邊界
-
-| app | 職責 | 最重要的檔案 |
-|---|---|---|
-| `accounts` | User model（繼承 AbstractUser）、Google OAuth、Email 註冊/登入、改密碼 | `views.py` |
-| `scans` | **核心**：ScanJob 狀態機、Playwright 爬蟲、四維 scanner、Word 報告、合作式 cancel | `tasks.py` `crawler.py` `scanners.py` |
-| `agent` | Phase 2 Hermes-Agent：provider chain + tool calling loop（預設 `ARGUS_AGENT_ENABLED=false`） | `providers.py` `loop.py` `runner.py` |
-| `billing` | 點數錢包；**`services.py` 是 wallet 唯一寫入入口**，禁止繞過直接改 model | `services.py` `signals.py` |
-| `reviews` | 平台評論（一人一則 + thread + 圖片） | `models.py` `views.py` |
-| `admin_api` | React `/admin/*` 用的 REST API + AdminAuditLog | `views.py` `permissions.py` |
-| `content` | CMS（ProjectFeature / TeamMember / AppRelease），公開 API | `models.py` `admin.py` |
-| `insights` | 公開免費分析工具（測速 / 釣魚 URL / 釣魚郵件），AllowAny、不扣 coin；供公開頁 `/free-tools` 使用 | `views.py` `analyzers.py` |
-
-### 前端：巨型單檔架構
-`frontend/src/App.jsx` 是 **6500+ 行的單檔**，包含所有頁面與元件。修改前必須先 grep 定位，不要從頭瀏覽。路由都在 App.jsx 底部 `<Routes>` 區塊。
-
-### Billing 的冪等安全閘
-`billing/services.py` 所有函式都用 `select_for_update` + `transaction.atomic` + 冪等判斷（e.g. `last_bonus_year/month`）。掃描取消或失敗時 worker 和 cancel API 都會呼叫 `refund_full_for_scan`，兩邊都呼叫是安全的。
+| 前端 | 路由地圖、核心檔案、元件/樣式規範 | [`frontend/CLAUDE.md`](frontend/CLAUDE.md) |
+| 後端整體 | API 路由地圖、Model 速查、App 職責、管理介面 | [`backend/CLAUDE.md`](backend/CLAUDE.md) |
+| 掃描引擎 | ScanJob 狀態機、Playwright、取消機制、Coin 扣點 | [`backend/apps/scans/CLAUDE.md`](backend/apps/scans/CLAUDE.md) |
+| 計費系統 | services.py 函式、冪等機制、kind 枚舉 | [`backend/apps/billing/CLAUDE.md`](backend/apps/billing/CLAUDE.md) |
 
 ### Django 直接 serve 前端
 開發時不需要另開 Vite dev server，Django `runserver` 透過 `config/urls.py` 的 SPA fallback 直接服務 `frontend/dist`。**必須先 build 前端**，改了 React code 要重 build 才會生效。
 
-### Playwright 瀏覽器路徑
-Chromium 必須裝在專案 `.ms-playwright`，不可污染全域：
-```powershell
-$env:PLAYWRIGHT_BROWSERS_PATH=".ms-playwright"; uv run playwright install chromium
-```
-
-### 三種管理介面
-- **前台**：`http://127.0.0.1:8000/` — 一般使用者
-- **React 後台**：`/admin/*` — staff 進入（`IsAdminUser`），superuser 多看「操作紀錄」
-- **Django Admin**：`/django-admin/` — superuser 後門，Django 預設樣式（W4 已移除 jazzmin）
-
-### 掃描 Coin 扣點流程
-建立掃描 → `hold_for_scan(max_pages × 10)` → worker 完成 → `settle_scan_actual(actual_pages × 10)` 退差 → 失敗/取消 → `refund_full_for_scan` 全退。
+### Node 22 portable（build 必用）
+⚠ 系統 Node v24 + Rollup 4.x 在 Windows 會 crash，build 一律用 `frontend/build-node22.ps1`（D:\node22，v22.22.3）。詳細說明見 [`docs/node22-guide.md`](docs/node22-guide.md)。
 
 ---
 
