@@ -1,12 +1,12 @@
 """Katana 補充型爬蟲整合。
 
-透過 Docker 執行 projectdiscovery/katana，提供：
+透過本機 katana binary 執行，提供：
 - JS 端點挖掘（-jc）：從 JS 原始碼解析出隱藏 API 路由
 - JS 秘鑰解析（-jsl）：jsluice 深度分析 JS 檔案中的秘鑰與端點
 - 技術棧識別（-td）：識別框架/版本，存入 warning_summary.tech_stack
 
 設計原則：
-- Docker 不可用或 Katana 失敗時靜默回傳空結果，不影響主掃描流程。
+- katana binary 不存在或失敗時靜默回傳空結果，不影響主掃描流程。
 - Tech stack 以獨立列表回傳，由 tasks.py 存入 warning_summary。
 - 所有 security finding 的 page=None（Finding FK 已是 nullable）。
 """
@@ -65,6 +65,7 @@ def run_katana(
 ) -> tuple[list[dict], list[str]]:
     """以本機 katana binary 執行並回傳 (findings, tech_stack)。
 
+    max_pages 保留於簽名供未來加入爬行頁數上限使用，目前由 katana 自行決定。
     任何錯誤（binary 不存在、timeout、parse 失敗）皆靜默回傳 ([], [])。
     """
     if not shutil.which("katana"):

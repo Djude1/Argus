@@ -159,7 +159,7 @@ def run_scan_job(self, scan_job_id: int) -> dict:
             raise_if_cancelled(scan_job_id)
 
         # Katana 補充掃描：JS 秘鑰偵測、技術棧識別、JS 端點挖掘
-        # 靜默失敗：Docker 不可用或 Katana 超時時僅記錄警告，不影響主掃描
+        # 靜默失敗：katana binary 不存在或超時時僅記錄警告，不影響主掃描
         append_log(scan_job_id, "Katana 補充掃描開始（JS 秘鑰 / 技術棧 / 端點）")
         try:
             katana_findings, katana_tech = run_katana(
