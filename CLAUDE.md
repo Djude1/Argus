@@ -43,83 +43,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 任務完成記錄規則（log 資料夾）
 
-**每次完成任務後，必須在 `log/` 資料夾建立一筆記錄**，哪怕是小改動也要記。這是為了讓其他組員（或下次的 Claude）能快速了解「誰動了什麼、為什麼動、影響哪裡」，不必靠記憶或翻 git diff 猜測。
+**每次完成任務後，必須在 `log/` 建立記錄並納入同次 git commit。**
 
-### 檔案命名
-
-```
-log/YYYY-MM-DD_簡短描述.md
-```
-
-- 日期格式 ISO 8601（`2026-05-26`）
-- 描述用連字號分隔，中英文均可
-- 同一天多筆加後綴：`2026-05-26_fix-a.md`、`2026-05-26_fix-b.md`
-
-### 記錄格式
-
-```markdown
-# 簡短描述
-
-**日期**：YYYY-MM-DD  
-**操作者**：（誰執行，如：Claude / 組員 A）
-
-## 變更內容
-- 修改了哪個檔案的哪個函式 / 哪段邏輯
-- 新增了什麼
-
-## 原因
-使用者請求或 bug 描述（Why，不只是 What）
-
-## 影響範圍
-- 哪些功能受影響
-- 需要注意的副作用或相依關係
-
-## 驗證方式
-- 執行了哪些測試或手動確認步驟
-- 測試結果（pass / 手動確認 OK）
-```
-
-### 注意事項
-- log 檔案**必須納入同次 git commit**，與程式碼修改一起提交
-- 只記「做了什麼、為什麼、影響哪裡」，不要貼完整程式碼（程式碼在 git diff 裡）
-- 若任務未完成（中斷），記錄到目前為止的狀態與下一步
+- 命名：`log/YYYY-MM-DD_簡短描述.md`，同天多筆加後綴（`fix-a`、`fix-b`）
+- 記錄格式（變更內容 / 原因 / 影響範圍 / 驗證方式）詳見 [`docs/log-template.md`](docs/log-template.md)
 
 ---
 
-## 文件同步強制規則（Documentation Sync，優先順序最高）
+## 文件同步原則
 
-> **此規則的存在原因（真實事故）**：2026-06 發現 `ONBOARDING.md` 與 `CLAUDE.md` 同時嚴重漂移——新增了 `insights` app（第 8 個）、`/free-tools` 公開頁、`/api/insights/*` 端點、`/api/content/milestones/`，且 W4 已移除 jazzmin、測試數已增長，但兩份接手文件全部沒同步，仍寫「7 個 app / Jazzmin / 192 測試」。**過時的接手文件會讓下一個接手者（人或 Claude）依錯誤事實操作、甚至寫出錯誤的專題文件。**
+**核心原則：程式碼是唯一事實來源；文件漂移視同 bug，與程式 bug 同等嚴重。**
 
-**核心原則：程式碼是唯一事實來源（single source of truth）；文件必須與程式碼一致。文件漂移視同 bug，與程式 bug 同等嚴重。**
+改了程式 → 同次 commit 同步所有受影響文件；純文件改動 → 先 `Grep` / `Read` 驗證事實再動筆；改完後掃全檔確認無殘留舊事實。
 
-### 規則 A：改了程式 → 同次提交必須同步文件
-
-任何「會改變對外事實」的程式改動，**必須在同一次 commit 內**更新所有受影響的文件，不可留到下次。對應關係如下：
-
-| 你改了什麼（程式） | 必須同步更新的文件 |
-|---|---|
-| 新增 / 移除 Django app | `CLAUDE.md`（app 數量標題 + 職責邊界表 + API 路由地圖）、`ONBOARDING.md`（§4 目錄樹 + §5 app 表 + §7 API） |
-| 新增 / 改 / 刪 API 端點 | `CLAUDE.md` 後端 API 路由地圖、`ONBOARDING.md` §7 對應子表 |
-| 新增 / 改前端路由（含公開頁） | `CLAUDE.md` 前端路由地圖、`ONBOARDING.md` §6 路由地圖（+ 若是公開頁，§13 TopNav return null 清單） |
-| 改 Model 欄位 / 狀態機 / 列舉值 | `CLAUDE.md` 關鍵 Model 速查、`ONBOARDING.md` §8 資料模型、對應子目錄 `CLAUDE.md` |
-| 新增 / 移除 Python 或 Node 套件 | `CLAUDE.md`（技術棧相關段）、`ONBOARDING.md` §3 技術棧 + §2 安裝步驟 |
-| 改 `ARGUS_*` 等 settings 常數 | `ONBOARDING.md` 附錄 B、`CLAUDE.md` 對應段落 |
-| 新增 / 修改 Skill | `CLAUDE.md` 的 Skills 表格（並跑下方「MD 修改強制核對清單」） |
-| 測試數量變動 | 不要寫死精確數字於多處；以「約 N 項，以 `manage.py test apps` 實跑為準」描述，且全檔一致 |
-
-### 規則 B：純文件改動 → 動筆前必須對照程式碼驗證
-
-即使本次只改文件、不碰程式（例如撰寫專題文件、整理接手文件），**每一條寫進文件的事實都必須先用 `Grep` / `Read` 對照實際程式碼確認**，禁止憑記憶或沿用舊文件的數字／名稱。常見必查項：app 數量、端點清單、路由清單、套件是否還在 `pyproject.toml` / `package.json`、model 欄位、settings 常數。
-
-### 規則 C：完成後一致性檢查（不可跳過）
-
-改完文件後，用 `grep` 掃過全檔，確認沒有殘留的舊事實（例如改 app 數後 grep 是否仍有「7 個 app」；移除套件後 grep 是否仍有該套件名）。跨檔（`CLAUDE.md` ↔ `ONBOARDING.md` ↔ 子目錄 `CLAUDE.md`）對同一事實不可有兩種說法。修改規則／MD 後另須執行本檔下方的「MD 修改強制核對清單」。
-
-### 接手文件清單（須長期與程式碼保持一致）
-- `ONBOARDING.md` — 快速接手流程（事實密度最高，最容易漂移）
-- `CLAUDE.md`（本檔）— 架構表、API/路由地圖、Model 速查
-- `frontend/CLAUDE.md`、`backend/apps/billing/CLAUDE.md`、`backend/apps/scans/CLAUDE.md`
-- `Project_說明.md`、`開發計畫.md`
+詳細對應規則（規則 A/B/C）與接手文件清單見 [`docs/doc-sync-rules.md`](docs/doc-sync-rules.md)。
+MD 修改後必執行核對清單：[`docs/md-checklist.md`](docs/md-checklist.md)。
 
 ---
 
@@ -208,7 +146,7 @@ docker compose up -d --build frontend
 
 | URL 前綴 | Django App | 主要端點 |
 |---|---|---|
-| `/api/auth/` | `accounts` | `google/`（OAuth）、`register/`、`email-login/`、`me/`（GET/PATCH）、`change-password/`（dev-login 已移除） |
+| `/api/auth/` | `accounts` | `google/`（OAuth）、`register/`、`email-login/`、`me/`（GET/PATCH）、`change-password/` |
 | `/api/scans/` | `scans` | `scans/`（CRUD + `status/`/`cancel/`/`report/`/`topology/`/`screenshot`）、`estimate/`、`pages/`、`findings/`、`dashboard/`、`history/`、`audit/`、`findings-by-category/` |
 | `/api/billing/` | `billing` | `wallet/`、`plans/`、`purchase/`、`orders/` |
 | `/api/reviews/` | `reviews` | `reviews/`（CRUD + thread） |
@@ -263,25 +201,20 @@ user（一人一則，OneToOne）、rating（1-5）、comment（TextField）、i
 ```
 
 ### Node 22 portable（build 必用）
-系統 Node 是 v24.13（`C:\Program Files\nodejs`），但 v24 + Rollup 4.x 在 Windows 會 crash（`STATUS_STACK_BUFFER_OVERRUN`，exit `-1073740791`）。已將 Node v22.22.3 解壓到 `D:\node22`（portable，未動 PATH 也未動系統 Node）。
-
-- **build**：用 `frontend/build-node22.ps1`（已自動切 `D:\node22` 走完 build）
-- **dev**：`npm.cmd run dev` 兩種 Node 都能跑（dev 不經 Rollup 打包）
-- **重灌 node_modules**：請用 `D:\node22\npm.cmd install`
-- **未安裝環境**：下載 `https://nodejs.org/dist/latest-v22.x/node-v22.22.3-win-x64.zip` 解壓到 `D:\node22` 即可，不需 admin 也不需改環境變數
+⚠ 系統 Node v24 + Rollup 4.x 在 Windows 會 crash，build 一律用 `frontend/build-node22.ps1`（D:\node22，v22.22.3 portable）。詳細安裝說明見 [`docs/node22-guide.md`](docs/node22-guide.md)。
 
 ### 8 個 Django App 的職責邊界
 
 | app | 職責 | 最重要的檔案 |
 |---|---|---|
-| `accounts` | User model（繼承 AbstractUser）、Google OAuth、Email 註冊/登入、改密碼（dev-login 後門已移除） | `views.py` |
+| `accounts` | User model（繼承 AbstractUser）、Google OAuth、Email 註冊/登入、改密碼 | `views.py` |
 | `scans` | **核心**：ScanJob 狀態機、Playwright 爬蟲、四維 scanner、Word 報告、合作式 cancel | `tasks.py` `crawler.py` `scanners.py` |
 | `agent` | Phase 2 Hermes-Agent：provider chain + tool calling loop（預設 `ARGUS_AGENT_ENABLED=false`） | `providers.py` `loop.py` `runner.py` |
 | `billing` | 點數錢包；**`services.py` 是 wallet 唯一寫入入口**，禁止繞過直接改 model | `services.py` `signals.py` |
 | `reviews` | 平台評論（一人一則 + thread + 圖片） | `models.py` `views.py` |
 | `admin_api` | React `/admin/*` 用的 REST API + AdminAuditLog | `views.py` `permissions.py` |
 | `content` | CMS（ProjectFeature / TeamMember / AppRelease），公開 API | `models.py` `admin.py` |
-| `insights` | 公開免費分析工具（測速 / 釣魚 URL / 釣魚郵件），AllowAny、不扣 coin、本機特徵分類器；供公開頁 `/free-tools` 使用 | `views.py` `analyzers.py` |
+| `insights` | 公開免費分析工具（測速 / 釣魚 URL / 釣魚郵件），AllowAny、不扣 coin；供公開頁 `/free-tools` 使用 | `views.py` `analyzers.py` |
 
 ### 前端：巨型單檔架構
 `frontend/src/App.jsx` 是 **6500+ 行的單檔**，包含所有頁面與元件。修改前必須先 grep 定位，不要從頭瀏覽。路由都在 App.jsx 底部 `<Routes>` 區塊。
@@ -301,7 +234,7 @@ $env:PLAYWRIGHT_BROWSERS_PATH=".ms-playwright"; uv run playwright install chromi
 ### 三種管理介面
 - **前台**：`http://127.0.0.1:8000/` — 一般使用者
 - **React 後台**：`/admin/*` — staff 進入（`IsAdminUser`），superuser 多看「操作紀錄」
-- **Django Admin**：`/django-admin/` — superuser 後門，Django 預設樣式（W4 已 `uv remove` django-jazzmin）
+- **Django Admin**：`/django-admin/` — superuser 後門，Django 預設樣式（W4 已移除 jazzmin）
 
 ### 掃描 Coin 扣點流程
 建立掃描 → `hold_for_scan(max_pages × 10)` → worker 完成 → `settle_scan_actual(actual_pages × 10)` 退差 → 失敗/取消 → `refund_full_for_scan` 全退。
@@ -423,32 +356,18 @@ $env:PLAYWRIGHT_BROWSERS_PATH=".ms-playwright"; uv run playwright install chromi
 | Flutter 修改 | `flutter analyze`（靜態檢查）+ 提醒實機測試 |
 | git 操作 | 確認 status / log 符合預期後才執行 |
 | 設定檔修改 | 重新載入並確認生效 |
-| **cloudflared `config.yml` 修改** | **見下方「cloudflared 設定檔雙路徑陷阱」,絕對不要只改 user 版** |
-| 規則/MD 檔案修改 | 執行下方「MD 修改強制核對清單」，每項逐一確認 |
+| cloudflared `config.yml` 修改 | 見 [`docs/cloudflared-guide.md`](docs/cloudflared-guide.md)，絕對不要只改 user 版 |
+| 規則/MD 檔案修改 | 執行 [`docs/md-checklist.md`](docs/md-checklist.md)，每項逐一確認 |
 
 ---
 
-## ⚠ cloudflared 設定檔雙路徑陷阱（這台機器特有，絕對不要再忘）
+## 特定操作指南（遇到時再查）
 
-**這台機器的 `cloudflared` 是 Windows service,真正讀的 `config.yml` 是 SYSTEM 帳號路徑**：
-
-```
-C:\Windows\System32\config\systemprofile\.cloudflared\config.yml
-```
-
-**不是** `C:\Users\ntub\.cloudflared\config.yml`！只改 user 版的 config.yml 完全沒效,service 永遠讀不到。
-
-確認真實路徑:
-```powershell
-sc.exe qc Cloudflared   # 看 BINARY_PATH_NAME 的 --config 參數
-```
-
-### 強制流程:改 cloudflared ingress 一律走以下步驟
-
-1. **編輯 user 版**(IDE 友善):`C:\Users\ntub\.cloudflared\config.yml`
-2. **UAC 提升,把 user 版 copy 到 system 版**:
-   ```powershell
-   Copy-Item C:\Users\ntub\.cloudflared\config.yml `
-             C:\Windows\System32\config\systemprofile\.cloudflared\config.yml -Force
-   ```
-3. **UAC 提升,重啟
+| 場景 | 文件 |
+|---|---|
+| cloudflared ingress 設定、跨 zone DNS | [`docs/cloudflared-guide.md`](docs/cloudflared-guide.md) |
+| RTK 使用規則（token 壓縮） | [`docs/rtk-guide.md`](docs/rtk-guide.md) |
+| MD / 文件修改核對清單 | [`docs/md-checklist.md`](docs/md-checklist.md) |
+| 文件同步詳細規則 A/B/C | [`docs/doc-sync-rules.md`](docs/doc-sync-rules.md) |
+| log 記錄格式範本 | [`docs/log-template.md`](docs/log-template.md) |
+| Node 22 portable 詳細安裝說明 | [`docs/node22-guide.md`](docs/node22-guide.md) |
