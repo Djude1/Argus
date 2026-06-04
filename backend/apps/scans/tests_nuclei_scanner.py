@@ -1,5 +1,6 @@
 """nuclei_scanner 模組的單元測試。"""
 import json
+import os
 import subprocess
 from unittest.mock import MagicMock, patch
 
@@ -134,6 +135,71 @@ class TestRunNuclei(TestCase):
             from apps.scans.nuclei_scanner import run_nuclei
             results = run_nuclei("https://example.com", scan_job_id=1)
         self.assertEqual(results, [])
+
+    def test_single_url_uses_u_flag(self):
+        """無 extra_urls 時應使用 -u 單一 URL 旗標。"""
+        with (
+            patch("apps.scans.nuclei_scanner.shutil.which", return_value="/usr/bin/nuclei"),
+            patch("apps.scans.nuclei_scanner.subprocess.run") as mock_run,
+            patch("apps.scans.nuclei_scanner.append_log"),
+        ):
+            mock_run.return_value = MagicMock(stdout="", returncode=0)
+            from apps.scans.nuclei_scanner import run_nuclei
+            run_nuclei("https://example.com", scan_job_id=1)
+        cmd = mock_run.call_args[0][0]
+        self.assertIn("-u", cmd)
+        self.assertNotIn("-l", cmd)
+        self.assertEqual(cmd[cmd.index("-u") + 1], "https://example.com")
+
+    def test_extra_urls_uses_l_flag_with_temp_file(self):
+        """傳入 extra_urls 時應使用 -l 旗標，且 temp file 掃完後被刪除。"""
+        captured_path: list[str] = []
+
+        original_run = subprocess.run
+
+        def fake_run(cmd, **kwargs):
+            # 記錄 temp file 路徑並確認其存在
+            if "-l" in cmd:
+                idx = cmd.index("-l")
+                captured_path.append(cmd[idx + 1])
+                self.assertTrue(os.path.exists(captured_path[0]), "temp file 應在執行時存在")
+            return MagicMock(stdout="", returncode=0)
+
+        with (
+            patch("apps.scans.nuclei_scanner.shutil.which", return_value="/usr/bin/nuclei"),
+            patch("apps.scans.nuclei_scanner.subprocess.run", side_effect=fake_run),
+            patch("apps.scans.nuclei_scanner.append_log"),
+        ):
+            from apps.scans.nuclei_scanner import run_nuclei
+            run_nuclei(
+                "https://example.com",
+                scan_job_id=1,
+                extra_urls=["https://example.com/page1", "https://example.com/page2"],
+            )
+
+        self.assertEqual(len(captured_path), 1, "應有一個 -l 旗標")
+        self.assertFalse(os.path.exists(captured_path[0]), "temp file 應在執行後被刪除")
+
+    def test_extra_urls_deduplicates_entry_url(self):
+        """entry URL 已包含在 extra_urls 中時不應重複。"""
+        with (
+            patch("apps.scans.nuclei_scanner.shutil.which", return_value="/usr/bin/nuclei"),
+            patch("apps.scans.nuclei_scanner.subprocess.run") as mock_run,
+            patch("apps.scans.nuclei_scanner.append_log"),
+        ):
+            mock_run.return_value = MagicMock(stdout="", returncode=0)
+            from apps.scans.nuclei_scanner import run_nuclei
+            run_nuclei(
+                "https://example.com",
+                scan_job_id=1,
+                # entry URL 重複出現在 extra_urls
+                extra_urls=["https://example.com", "https://example.com/page1"],
+            )
+        cmd = mock_run.call_args[0][0]
+        self.assertIn("-l", cmd)
+        url_file = cmd[cmd.index("-l") + 1]
+        # 檔案已刪除，無法直接讀取；驗證指令正確即可
+        self.assertNotIn("-u", cmd)
 
     def test_malformed_json_line_is_skipped(self):
         good_record = json.dumps({

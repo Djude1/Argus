@@ -9,8 +9,10 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
+import tempfile
 
 from apps.scans.scan_logger import append_log
 
@@ -39,12 +41,14 @@ def run_nuclei(
     scan_job_id: int,
     *,
     deep: bool = False,
+    extra_urls: list[str] | None = None,
 ) -> list[dict]:
     """執行 Nuclei 掃描並回傳 Finding dict 列表。
 
     deep=False：精選模板
     （cves/vulnerabilities/misconfigurations/exposures/default-logins），6 分鐘硬限。
     deep=True：全部模板，12 分鐘硬限。
+    extra_urls：額外的掃描目標（如已爬取的頁面列表），與 url 合併後整批掃描。
     binary 不存在或任何例外皆 silent-fail 回傳 []。
     """
     if not shutil.which("nuclei"):
@@ -54,9 +58,23 @@ def run_nuclei(
     hard_timeout = 720 if deep else 360
     mode_label = "深度（付費）" if deep else "快速（免費）"
 
+    # 合併並去重 URL 列表（保留插入順序，入口 URL 在最前）
+    all_urls: list[str] = list(dict.fromkeys([url, *(extra_urls or [])]))
+
+    # 決定目標參數：單 URL 用 -u，多 URL 寫 temp file 用 -l
+    url_file: str | None = None
+    if len(all_urls) == 1:
+        target_args = ["-u", all_urls[0]]
+    else:
+        fd, url_file = tempfile.mkstemp(suffix=".txt", prefix="nuclei_urls_")
+        os.close(fd)
+        with open(url_file, "w") as f:
+            f.write("\n".join(all_urls))
+        target_args = ["-l", url_file]
+
     cmd = [
         "nuclei",
-        "-u", url,
+        *target_args,
         "-j",
         "-silent",
         "-timeout", "30" if deep else "15",
@@ -78,6 +96,9 @@ def run_nuclei(
     except Exception as exc:  # noqa: BLE001
         append_log(scan_job_id, f"Nuclei 失敗（{exc.__class__.__name__}），略過", level="warn")
         return []
+    finally:
+        if url_file and os.path.exists(url_file):
+            os.unlink(url_file)
 
     if result.returncode != 0 and not result.stdout.strip():
         append_log(scan_job_id, f"Nuclei 異常退出（exit={result.returncode}），略過", level="warn")

@@ -170,6 +170,10 @@ def run_scan_job(self, scan_job_id: int) -> dict:
             "資安補充掃描開始 — Katana（JS 秘鑰 / 技術棧）並行 Nuclei"
             f"（{'深度付費' if deep_mode else '快速免費'}）",
         )
+        # 收集已爬取的頁面 URL（排除被阻擋的頁面），整批餵給 Nuclei
+        crawled_urls = [
+            p["url"] for p in crawled_pages if not p.get("blocked_reason")
+        ]
         with ThreadPoolExecutor(max_workers=2) as executor:
             f_katana = executor.submit(
                 run_katana,
@@ -182,6 +186,7 @@ def run_scan_job(self, scan_job_id: int) -> dict:
                 scan_job.normalized_url,
                 scan_job_id,
                 deep=deep_mode,
+                extra_urls=crawled_urls,
             )
         try:
             katana_findings, katana_tech = f_katana.result()
