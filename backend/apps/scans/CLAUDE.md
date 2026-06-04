@@ -93,6 +93,37 @@ refund_full_for_scan(scan)  ← 全退（冪等）
 
 ---
 
+## 整合測試規則（必讀）
+
+**掃描功能整合測試一律使用 Docker 環境（`localhost:8080`），禁止用本機 runserver 測試。**
+
+原因：本機 runserver 缺少 Redis（Celery broker 無法運作）、Celery worker、正確前端 dist，繞過這些限制需要大量額外工作且驗證不完整。
+
+```powershell
+# 標準整合測試流程
+docker compose up -d --build web worker   # 含最新程式碼重建
+
+# 給測試帳號補充 coin
+docker exec argus-web-1 uv run python manage.py shell -c "
+from django.contrib.auth import get_user_model
+from apps.billing.services import get_or_create_wallet, admin_adjust
+User = get_user_model()
+user = User.objects.filter(email='YOUR_EMAIL').first()
+admin = User.objects.filter(is_superuser=True).first()
+admin_adjust(target_user=user, delta=999999, admin_actor=admin, note='test')
+"
+
+# 開啟 localhost:8080，用 UI 建立掃描並觀察 log
+```
+
+確認 Docker worker 有安裝 nuclei/katana：
+```powershell
+docker exec argus-worker-1 nuclei -version
+docker exec argus-worker-1 katana -version
+```
+
+---
+
 ## 禁止事項
 
 | 禁止 | 原因 |
@@ -102,3 +133,4 @@ refund_full_for_scan(scan)  ← 全退（冪等）
 | `playwright install` 不加 `PLAYWRIGHT_BROWSERS_PATH` | 污染全域路徑 |
 | Nuclei deep mode 需 `scan_mode=active AND active_testing_authorized` | 未授權的主動測試 |
 | 直接 `ScanJob.objects.filter(...).update(status=...)` | 繞過 signal，狀態不一致 |
+| 用本機 `runserver` 做掃描整合測試 | 缺少 Redis/Celery，驗證不完整 |

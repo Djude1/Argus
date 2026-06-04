@@ -30,3 +30,28 @@ Docker worker 容器執行 Celery 掃描任務，但先前未安裝 nuclei/katan
 - 透過 Argus UI（localhost:8080）建立掃描：
   - passive 掃描（#15）：log 顯示「Nuclei（快速免費）」，完成 ✅
   - active+authorized 掃描（#14）：log 顯示「Nuclei（深度付費）」，完成 ✅
+
+## 教訓：整合測試一律用 Docker，不用本機 runserver
+
+**問題**：本次驗證最初嘗試用 `uv run python manage.py runserver` 本機開發環境，導致：
+- Celery 需要 Redis broker，本機未安裝 Redis → `RuntimeError: Retry limit exceeded`
+- Playwright browser 路徑不一致（`.ms-playwright` vs 全域路徑）
+- `monthly_limit` 前端/後端版本不同步導致 crash
+- 需要繞過 UI 改用 Django shell 直接呼叫 task
+- 浪費大量時間安裝 Node 22、嘗試 build 前端
+
+**正確做法**：掃描功能整合測試一律使用 Docker 環境（`localhost:8080`）：
+```powershell
+# 1. 確認 Docker 已啟動
+docker compose ps
+
+# 2. 若程式碼有改動，重建 worker（含 nuclei/katana）
+docker compose up -d --build web worker
+
+# 3. 給測試帳號補充 coin
+docker exec argus-web-1 uv run python manage.py shell -c "..."
+
+# 4. 開啟 localhost:8080 透過 UI 測試
+```
+
+Docker 環境包含完整 Redis、Celery worker、nginx、前端 dist，與正式部署完全一致，不需要額外安裝任何工具。
