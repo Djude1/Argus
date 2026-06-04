@@ -18,6 +18,20 @@ def robots_txt(request):
     return HttpResponse("\n".join(lines), content_type="text/plain")
 
 
+def _serve_immutable(request, path, document_root=None):
+    """雜湊命名的 build 資產（/assets/*）內容變更即檔名變更，可長期快取以改善重訪效能。"""
+    response = serve(request, path, document_root=document_root)
+    response["Cache-Control"] = "public, max-age=31536000, immutable"
+    return response
+
+
+def _serve_no_cache(request, path, document_root=None):
+    """PWA 控制檔（service-worker / manifest / icon）必須每次重新驗證，否則更新不會生效。"""
+    response = serve(request, path, document_root=document_root)
+    response["Cache-Control"] = "no-cache"
+    return response
+
+
 urlpatterns = [
     path("robots.txt", robots_txt),
     # Django Admin 搬到 /django-admin/，把 /admin/* 讓給 React 後台
@@ -32,13 +46,13 @@ urlpatterns = [
     # 由 Django 直接服務 Vite build 出的靜態 assets，讓 runserver 模式不必另開 npm dev
     re_path(
         r"^assets/(?P<path>.*)$",
-        serve,
+        _serve_immutable,
         {"document_root": FRONTEND_DIST / "assets"},
     ),
     # PWA 必要檔案（從 frontend/dist 根目錄 serve）
     re_path(
         r"^(?P<path>manifest\.webmanifest|service-worker\.js|pwa-icon\.svg)$",
-        serve,
+        _serve_no_cache,
         {"document_root": FRONTEND_DIST},
     ),
     # SPA fallback：其他路徑（含 /admin/*）都回傳 index.html，由 React Router 處理

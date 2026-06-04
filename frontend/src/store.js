@@ -12,6 +12,19 @@ export const useArgusStore = create((set, get) => ({
   walletLoading: false,
   // 目前登入者的 staff 旗標；用於決定是否顯示後台入口
   me: null,
+  // 首次進站動畫旗標（localStorage argus_intro_seen 持久化）；品牌 icon 可呼叫 replayIntro 重播
+  introSeen: (() => {
+    try { return window.localStorage.getItem("argus_intro_seen") === "1"; }
+    catch { return true; }
+  })(),
+  markIntroSeen: () => {
+    try { window.localStorage.setItem("argus_intro_seen", "1"); } catch { /* 無痕模式 */ }
+    set({ introSeen: true });
+  },
+  replayIntro: () => {
+    try { window.localStorage.removeItem("argus_intro_seen"); } catch { /* 無痕模式 */ }
+    set({ introSeen: false });
+  },
   setToken: (token) => {
     if (token) {
       window.localStorage.setItem("argus_access_token", token);
