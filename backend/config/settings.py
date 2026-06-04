@@ -174,6 +174,7 @@ GOOGLE_OAUTH_CLIENT_ID = os.getenv("GOOGLE_OAUTH_CLIENT_ID", "")
 ARGUS_MONTHLY_BONUS_COINS = int(os.getenv("ARGUS_MONTHLY_BONUS_COINS", "200"))
 ARGUS_COIN_PER_PAGE = int(os.getenv("ARGUS_COIN_PER_PAGE", "10"))
 
-# Django Admin：保留 `/django-admin/` 為 superuser 應急後門，使用 Django 預設樣式
-# 主要管理介面已搬到 React `/admin/*`（admin_api 提供 CRUD endpoint）
+# Django Admin 已完全移除（不再提供 `/django-admin/` 後門）；唯一後台為 React `/admin/*`
+# （admin_api 提供 CRUD endpoint）。`django.contrib.admin` 仍留在 INSTALLED_APPS：
+# 提供 LogEntry 等基礎設施並避免動到既有 migration，但已無對外 URL、無法存取。
 # 舊 jazzmin 設定常數已於 W4 移除（套件已 uv remove）

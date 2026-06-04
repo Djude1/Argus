@@ -13,11 +13,11 @@ from apps.billing.services import grant_monthly_bonus_if_needed
 
 
 class GoogleLoginView(views.APIView):
-    """以 Google ID Token 完成登入或註冊（一般使用者唯一的登入方式）。
+    """以 Google ID Token 完成登入或註冊（一般使用者登入方式之一，另有 email/密碼）。
 
     首次成功驗證的 Google 帳號會自動建立對應的 User（username=email）。
-    管理員仍透過 Django Admin（/admin/）以 username/password 登入，
-    本端點不簽發 superuser/staff 權限。
+    管理員亦以前台 email 登入後進 React /admin（django-admin 已移除）；
+    本端點不簽發 superuser/staff 權限（staff/superuser 僅由 seed_admin 設定）。
     """
 
     permission_classes = [permissions.AllowAny]

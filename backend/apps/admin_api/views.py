@@ -510,7 +510,7 @@ def active_announcements(request):
 
 
 @api_view(["GET", "POST"])
-@permission_classes([permissions.IsAdminUser])
+@permission_classes([IsSuperuser])
 def announcements_admin(request):
     """管理員列表 / 建立公告（含停用、過期者）。"""
     if request.method == "GET":
@@ -523,7 +523,7 @@ def announcements_admin(request):
 
 
 @api_view(["GET", "PATCH", "DELETE"])
-@permission_classes([permissions.IsAdminUser])
+@permission_classes([IsSuperuser])
 def announcement_detail(request, pk: int):
     """管理員取得 / 部分更新 / 刪除單一公告。"""
     obj = get_object_or_404(Announcement, pk=pk)

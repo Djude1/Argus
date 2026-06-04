@@ -1,5 +1,4 @@
 from django.conf import settings
-from django.contrib import admin
 from django.http import HttpResponse
 from django.urls import include, path, re_path
 from django.views.generic import TemplateView
@@ -12,7 +11,6 @@ def robots_txt(request):
     lines = [
         "User-agent: *",
         "Disallow: /admin/",
-        "Disallow: /django-admin/",
         "",
     ]
     return HttpResponse("\n".join(lines), content_type="text/plain")
@@ -20,8 +18,7 @@ def robots_txt(request):
 
 urlpatterns = [
     path("robots.txt", robots_txt),
-    # Django Admin 搬到 /django-admin/，把 /admin/* 讓給 React 後台
-    path("django-admin/", admin.site.urls),
+    # Django Admin 已完全移除；唯一後台為 React /admin/*（由 admin_api 提供 REST API）
     path("api/auth/", include("apps.accounts.urls")),
     path("api/billing/", include("apps.billing.urls")),
     path("api/reviews/", include("apps.reviews.urls")),
@@ -44,7 +41,7 @@ urlpatterns = [
     # SPA fallback：其他路徑（含 /admin/*）都回傳 index.html，由 React Router 處理
     # （Docker 模式由 nginx 處理 SPA fallback，此路由在容器內為惰性 fallback）
     re_path(
-        r"^(?!django-admin/|api/|static/|media/).*$",
+        r"^(?!api/|static/|media/).*$",
         TemplateView.as_view(template_name="index.html"),
     ),
 ]

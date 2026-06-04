@@ -2447,6 +2447,17 @@
     height: 100vh;
     box-shadow: 2px 0 24px -8px rgba(15, 23, 42, 0.25);
   }
+  /* 科技主控台微光：sidebar 頂部一道靜態 cyan accent（克制、無動畫，符合後台冷靜原則） */
+  .admin-sidebar::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, rgba(34, 211, 238, 0.75), transparent);
+    pointer-events: none;
+  }
 
   .admin-brand {
     @apply flex items-center gap-3;
@@ -4992,3 +5003,173 @@ details[open] .scan-log-summary::before { transform: rotate(90deg); }
 .scan-log-warn .scan-log-msg { color: #fbbf24; }
 .scan-log-error .scan-log-lvl { color: #f87171; }
 .scan-log-error .scan-log-msg { color: #fca5a5; }
+
+/* ============================================================
+   首次進站粒子過場動畫（IntroSequence）
+   移植自「過場動畫和網站設計範本/index.html」的青藍科技風 overlay；
+   播完淡出露出首頁。樣式自包含，不依賴其他 token。
+   ============================================================ */
+.argus-intro {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  background: radial-gradient(ellipse at center, #001428 0%, #000308 70%, #000 100%);
+  font-family: "Consolas", "Courier New", monospace;
+  color: #00d4ff;
+  overflow: hidden;
+  opacity: 1;
+  transition: opacity 0.6s ease;
+}
+.argus-intro--out {
+  opacity: 0;
+  pointer-events: none;
+}
+.argus-intro-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(0, 200, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 200, 255, 0.05) 1px, transparent 1px);
+  background-size: 50px 50px;
+  pointer-events: none;
+}
+.argus-intro-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.argus-intro-corner {
+  position: absolute;
+  width: 44px;
+  height: 44px;
+  border: 2px solid #00f7ff;
+  pointer-events: none;
+}
+.argus-intro-corner.tl { top: 16px; left: 16px; border-right: none; border-bottom: none; }
+.argus-intro-corner.tr { top: 16px; right: 16px; border-left: none; border-bottom: none; }
+.argus-intro-corner.bl { bottom: 16px; left: 16px; border-right: none; border-top: none; }
+.argus-intro-corner.br { bottom: 16px; right: 16px; border-left: none; border-top: none; }
+.argus-intro-hud {
+  position: absolute;
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  color: #00f7ff;
+  line-height: 1.7;
+  font-weight: bold;
+  pointer-events: none;
+  text-shadow: 0 0 8px rgba(0, 247, 255, 0.6);
+}
+.argus-intro-hud.tl { top: 32px; left: 32px; }
+.argus-intro-hud.tr { top: 32px; right: 32px; text-align: right; }
+.argus-intro-hud.br { bottom: 32px; right: 32px; text-align: right; }
+.argus-intro-hud .v { color: #fff; }
+.argus-intro-hud .dim { opacity: 0.55; }
+.argus-intro-flash {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  opacity: 0;
+  pointer-events: none;
+}
+.argus-intro-skip {
+  position: absolute;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 10px 26px;
+  background: rgba(0, 8, 20, 0.7);
+  border: 1px solid rgba(0, 247, 255, 0.6);
+  color: #00f7ff;
+  font-family: inherit;
+  font-size: 12px;
+  letter-spacing: 3px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background 0.2s ease, letter-spacing 0.2s ease;
+}
+.argus-intro-skip:hover { background: rgba(0, 247, 255, 0.18); letter-spacing: 5px; }
+.argus-intro-skip:focus-visible { outline: 2px solid #00f7ff; outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  /* 偏好減少動態者：元件層已直接略過並 onComplete，這裡確保不殘留任何 overlay 畫面 */
+  .argus-intro { display: none; }
+}
+
+/* ============================================================
+   首頁 page2 科技主控台視覺（公開頁 hero 的 console 變體）
+   參考「過場動畫和網站設計範本/page2.html」：科技網格漂移 / 掃描線 / HUD 邊角 / 發光標題。
+   內容沿用 .public-shell 放大規則，解決 page2 原稿「字太小」的問題。
+   ============================================================ */
+.public-hero--console {
+  position: relative;
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(0, 60, 110, 0.45) 0%, rgba(6, 11, 31, 0) 60%),
+    radial-gradient(ellipse at center, #001a2e 0%, #050a1c 60%, #03060f 100%);
+  border-bottom: 1px solid rgba(0, 247, 255, 0.18);
+  overflow: hidden;
+}
+.public-hero--console .hero-grid {
+  position: absolute;
+  inset: -2px;
+  background-image:
+    linear-gradient(rgba(0, 200, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 200, 255, 0.06) 1px, transparent 1px);
+  background-size: 48px 48px;
+  animation: heroGridDrift 14s linear infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+@keyframes heroGridDrift {
+  0% { transform: translate(0, 0); }
+  100% { transform: translate(48px, 48px); }
+}
+.public-hero--console .hero-scan {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(0, 247, 255, 0.55) 50%, transparent);
+  box-shadow: 0 0 18px rgba(0, 247, 255, 0.6);
+  animation: heroScan 6s linear infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+@keyframes heroScan {
+  0% { top: -4px; }
+  100% { top: 100%; }
+}
+.public-hero--console .hero-corner {
+  position: absolute;
+  width: 46px;
+  height: 46px;
+  border: 2px solid rgba(0, 247, 255, 0.75);
+  box-shadow: 0 0 16px rgba(0, 247, 255, 0.4);
+  pointer-events: none;
+  z-index: 1;
+}
+.public-hero--console .hero-corner.tl { top: 18px; left: 18px; border-right: none; border-bottom: none; }
+.public-hero--console .hero-corner.tr { top: 18px; right: 18px; border-left: none; border-bottom: none; }
+.public-hero--console .hero-corner.bl { bottom: 18px; left: 18px; border-right: none; border-top: none; }
+.public-hero--console .hero-corner.br { bottom: 18px; right: 18px; border-left: none; border-top: none; }
+.public-hero--console .public-hero-content { position: relative; z-index: 2; }
+.public-hero--console .public-hero-title {
+  color: #f2feff;
+  text-shadow: 0 0 14px rgba(0, 247, 255, 0.55), 0 0 38px rgba(0, 247, 255, 0.35);
+  animation: heroTitleGlow 3.2s ease-in-out infinite;
+}
+@keyframes heroTitleGlow {
+  0%, 100% { text-shadow: 0 0 14px rgba(0, 247, 255, 0.55), 0 0 38px rgba(0, 247, 255, 0.35); }
+  50% { text-shadow: 0 0 22px rgba(0, 247, 255, 0.85), 0 0 60px rgba(0, 247, 255, 0.55); }
+}
+.public-hero--console .public-hero-eyebrow {
+  color: #67e8f9;
+  text-shadow: 0 0 10px rgba(0, 247, 255, 0.5);
+}
+@media (prefers-reduced-motion: reduce) {
+  .public-hero--console .hero-grid,
+  .public-hero--console .hero-scan,
+  .public-hero--console .public-hero-title { animation: none; }
+}
+

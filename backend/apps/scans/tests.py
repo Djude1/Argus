@@ -494,28 +494,6 @@ class GeoFastScannerTests(APITestCase):
         self.assertEqual(findings, [])
 
 
-class ScanAdminTests(APITestCase):
-    def setUp(self):
-        self.admin = get_user_model().objects.create_superuser(
-            username="root",
-            email="root@example.com",
-            password="safe-test-password",
-        )
-        self.client.force_login(self.admin)
-
-    def test_scanjob_changelist_shows_summary(self):
-        response = self.client.get("/django-admin/scans/scanjob/")
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertContains(response, "掃描總覽")
-
-    def test_authorization_consent_admin_is_view_only(self):
-        # 授權同意書是法律證據，不允許透過 Admin 新增
-        response = self.client.get("/django-admin/scans/authorizationconsent/add/")
-
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-
-
 class RerunScanCommandTests(APITestCase):
     def test_rerun_scan_regenerates_findings_from_saved_pages(self):
         user = get_user_model().objects.create_user(

@@ -5,9 +5,15 @@ Claude 操作 `backend/apps/admin_api/` 時，本檔在專案層 `CLAUDE.md` 之
 ## 職責
 React `/admin/*` 後台用的 REST API + `AdminAuditLog` 稽核。端點**刻意扁平、隱藏內部 model**（AgentSession / Page / Finding 等不外露）。
 
-## 權限
-- 一般後台端點：`IsAdminUser`（`is_staff=True`，與 Django Admin 一致）。
-- 高敏感（audit-log 等）：`IsSuperuser`（`permissions.py`）。
+## 權限（超管 / 一般管理員分權）
+登入唯一入口為前台 email / Google（`accounts`）；`is_staff` 才能進 React `/admin`，`is_superuser` 為超級管理員。授予 staff / superuser 只能用 `manage.py seed_admin`（或 shell），**auth 端點一律不簽發**（防權限提升）。
+
+| 層級 | 可用功能 | 權限類別 |
+|---|---|---|
+| 一般管理員（is_staff） | 總覽 / 儀表板 / 使用者（檢視＋調點） / 交易 / 評論（回覆） / 掃描 / 訂單 / CMS（features·team·releases·plans） | `IsAdminUser` |
+| 超級管理員（is_superuser） | 上述全部 ＋ 操作日誌（audit-log） ＋ 公告管理（announcements） | `IsSuperuser` |
+
+前端 `AdminLayout` 依 `me.is_superuser` 顯示「操作日誌📜 / 公告管理📢」，與後端 `IsSuperuser` 一致。（django-admin 已移除，不再有第二後台。）
 
 ## 關鍵檔案 / 端點（`/api/admin/`）
 - `views.py`：`overview`、`users`、`users/<id>`、`users/<id>/adjust-coin`、`transactions`、`reviews`、`reviews/<id>/reply`、`scans`、`scans/<id>`、`orders`、`dashboard`、`audit-log`、`announcements/*`

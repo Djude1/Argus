@@ -284,8 +284,7 @@ docker compose up -d --build frontend
 | `/api/content/` | `content` | `features/`、`team/`、`releases/`、`milestones/`（公開 CMS） |
 | `/api/insights/` | `insights` | `speed-test/`、`phishing-url/`、`phishing-email/`（公開免費工具，AllowAny、不扣 coin） |
 | `/api/admin/` | `admin_api` | `me/`、`overview/`、`dashboard/`、`users/`、`transactions/`、`scans/`、`reviews/`、`orders/`、`audit-log/`、`announcements/*`、`cms/*` |
-| `/django-admin/` | Django Admin | superuser 後門（Django 預設樣式，W4 已移除 jazzmin） |
-| `/` ～ `/*` | SPA fallback | 回傳 `frontend/dist/index.html`，由 React Router 處理 |
+| `/` ～ `/*` | SPA fallback | 回傳 `frontend/dist/index.html`，由 React Router 處理（含已移除的 `/django-admin/`） |
 
 ---
 
@@ -367,10 +366,10 @@ Chromium 必須裝在專案 `.ms-playwright`，不可污染全域：
 $env:PLAYWRIGHT_BROWSERS_PATH=".ms-playwright"; uv run playwright install chromium
 ```
 
-### 三種管理介面
-- **前台**：`http://127.0.0.1:8000/` — 一般使用者
-- **React 後台**：`/admin/*` — staff 進入（`IsAdminUser`），superuser 多看「操作紀錄」
-- **Django Admin**：`/django-admin/` — superuser 後門，Django 預設樣式（W4 已 `uv remove` django-jazzmin）
+### 管理介面（React /admin 為唯一後台）
+- **前台**：`http://127.0.0.1:8000/` — 一般使用者（首次進站播粒子過場動畫，localStorage `argus_intro_seen`）
+- **React 後台**：`/admin/*` — staff 進入（`IsAdminUser`），superuser 多看「操作紀錄／公告管理」
+- **Django Admin 已移除**：原 `/django-admin/` superuser 後門已於本次整併移除；授予 staff/superuser 改用 `manage.py seed_admin`（或 Django shell）。管理員登入改走前台 email 登入。
 
 ### 掃描 Coin 扣點流程
 建立掃描 → `hold_for_scan(max_pages × 10)` → worker 完成 → `settle_scan_actual(actual_pages × 10)` 退差 → 失敗/取消 → `refund_full_for_scan` 全退。

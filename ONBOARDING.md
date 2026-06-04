@@ -12,10 +12,10 @@
 - **技術棧**：Django 5 + DRF + Celery + Playwright Python async + React 18 + Vite + Tailwind + Zustand
 - **資料**：SQLite（dev）/ PostgreSQL（prod）；media 存截圖與評論圖片
 - **後端約 252 個測試全綠**（測試方法數；以 `manage.py test apps` 實跑為準）、ruff All checks passed、frontend build 通過
-- **三個介面層**：
-  - 前台（使用者）：`/dashboard /scans /history /billing /reviews /settings` + 公開頁 `/project /team /purchase /download`
-  - React 後台：`/admin/*`（dark cyan + 淺色內容；staff 可進、有 `📜 操作紀錄` 僅 superuser）
-  - Django Admin（Django 預設樣式，W4 已移除 django-jazzmin）：`/django-admin/`（superuser 後門）
+- **兩個介面層**：
+  - 前台（使用者）：`/dashboard /scans /history /billing /reviews /settings` + 公開頁 `/project /team /purchase /download`（首次進站播粒子過場動畫）
+  - React 後台：`/admin/*`（**唯一後台**；dark cyan + 淺色內容；staff 可進、`📜 操作紀錄`/`📢 公告管理` 僅 superuser）
+  - （django-admin 已於 2026-06 整併移除；管理員改走前台 email 登入）
 - **真實 PWA**：可一鍵安裝到桌面/手機主畫面
 - **已是 git repo**，最新 commit 在 `origin/main`
 
@@ -98,8 +98,8 @@ uv run python backend/manage.py runserver 127.0.0.1:8000
 打開 http://127.0.0.1:8000 ：
 - 未登入 → 自動跳 `/project`（公開介紹頁）
 - 登入後 → `/dashboard`
-- Superuser 登入後右上角會看到「🛡️ 後台」chip → `/admin/overview`
-- `/django-admin/` 進 Django Admin（預設樣式，jazzmin 已於 W4 移除）
+- staff 登入後右上角會看到「🛡️ 後台」chip → `/admin/overview`（superuser 多看操作紀錄/公告管理）
+- 管理員帳號（如 `115401@gmail.com`）以前台 email 登入即可進 `/admin`；授予 staff/superuser 用 `manage.py seed_admin`（django-admin 已移除）
 
 ### 2.5 驗證一切正常
 ```powershell
@@ -122,7 +122,7 @@ docker compose up -d --build
 | 層級 | 套件 |
 |---|---|
 | 前端 | React 18 (Vite 6)、Tailwind CSS、Zustand、Axios、react-router-dom v7、reactflow（拓撲圖）、@react-oauth/google |
-| 後端 | Django 5 + DRF + SimpleJWT + google-auth + Pillow（圖片）+ python-docx + python-dotenv（W4 已 uv remove django-jazzmin，/django-admin 用 Django 預設樣式） |
+| 後端 | Django 5 + DRF + SimpleJWT + google-auth + Pillow（圖片）+ python-docx + python-dotenv（django-admin 已整併移除，唯一後台為 React `/admin/*`） |
 | 任務 | Celery + Redis |
 | 爬蟲 | Playwright Python async（Chromium headless） |
 | DB | SQLite（dev）/ PostgreSQL（prod，via dj-database-url） |
@@ -233,10 +233,10 @@ Argus/
 | `/admin/plans` | staff（**inline CRUD** 編輯 PricingPlan） |
 | `/admin/audit-log` | **superuser** |
 
-### 6.3 Django Admin（**已砍 Jazzmin**，superuser 應急後門）
-- `/django-admin/` — Django 預設樣式（醜但 functional）
-- 主要 admin 介面已搬到 React `/admin/*`
-- W4 移除 django-jazzmin 套件，settings 內保留 `_JAZZMIN_*_DEPRECATED` 命名常數供未來參考
+### 6.3 ~~Django Admin~~（已於 2026-06 整併移除）
+- 原 `/django-admin/` superuser 後門已移除；**唯一後台為 React `/admin/*`**。
+- 管理員改走前台 email 登入；授予 staff/superuser 用 `manage.py seed_admin`（或 Django shell）。
+- `/django-admin/*` 現在落入 SPA fallback（回 `index.html`），不再是 Django Admin。
 
 ### 6.4 PWA 必要檔（Django runserver 用 re_path 明確 serve）
 - `/manifest.webmanifest`
