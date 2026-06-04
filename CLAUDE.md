@@ -282,7 +282,7 @@ docker compose up -d --build frontend
 | `/api/billing/` | `billing` | `wallet/`、`plans/`、`purchase/`、`orders/` |
 | `/api/reviews/` | `reviews` | `reviews/`（CRUD + thread） |
 | `/api/content/` | `content` | `features/`、`team/`、`releases/`、`milestones/`（公開 CMS） |
-| `/api/insights/` | `insights` | `speed-test/`、`phishing-url/`、`phishing-email/`（公開免費工具，AllowAny、不扣 coin） |
+| `/api/insights/` | `insights` | `speed-test/`、`phishing-url/`、`phishing-email/`、`quick-scan/`（公開免費工具，AllowAny、不扣 coin） |
 | `/api/admin/` | `admin_api` | `me/`、`overview/`、`dashboard/`、`users/`、`transactions/`、`scans/`、`reviews/`、`orders/`、`audit-log/`、`announcements/*`、`cms/*` |
 | `/` ～ `/*` | SPA fallback | 回傳 `frontend/dist/index.html`，由 React Router 處理（含已移除的 `/django-admin/`） |
 

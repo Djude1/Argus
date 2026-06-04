@@ -24,6 +24,7 @@ import "reactflow/dist/style.css";
 import { api } from "./api";
 import { useArgusStore } from "./store";
 import introLogo from "./assets/intro-logo.png";
+import brandLogo from "./assets/brand-logo.png";
 
 // ============================================================
 // 常數
@@ -650,10 +651,7 @@ function ScanJobForm({ onCreated }) {
       fetchWallet();
       onCreated(response.data);
     } catch (errorResponse) {
-      const data = errorResponse.response?.data;
-      setError(
-        (data && (data.coin || data.detail)) || JSON.stringify(data || "建立掃描失敗。"),
-      );
+      setError(apiErrorMessage(errorResponse, "建立掃描失敗。"));
     } finally {
       setSubmitting(false);
     }
@@ -1902,7 +1900,7 @@ function LoginPage() {
         )}
 
         <p className="login-notice">
-          系統管理員透過 <code>/django-admin/</code> 以 username/password 登入。
+          管理員請用上方 Email 登入，登入後於右上角進入 <code>/admin</code> 後台。
         </p>
       </div>
     </div>
@@ -2297,6 +2295,7 @@ const NAV_ITEMS = [
 
 function TopNav() {
   const accessToken = useArgusStore((state) => state.accessToken);
+  const replayIntro = useArgusStore((s) => s.replayIntro);
   const location = useLocation();
   if (!accessToken) return null;
   // /admin/* 與公開頁走獨立 layout，不顯示前台 TopNav
@@ -2307,13 +2306,10 @@ function TopNav() {
   return (
     <nav className="argus-nav">
       <div className="argus-nav-inner">
-        <NavLink to="/project" className="argus-brand" aria-label="回首頁">
-          <span className="argus-brand-glyph">⟡</span>
-          <span>
-            <span className="argus-brand-title">ARGUS</span>
-            <span className="argus-brand-sub">AI 網站健檢平台</span>
-          </span>
-        </NavLink>
+        <button type="button" className="argus-brand active" onClick={replayIntro} title="重播開場動畫" aria-label="重播 ARGUS 開場動畫">
+          <img src={brandLogo} className="argus-brand-logo" alt="ARGUS — AI 網站健檢平台" />
+          <span className="argus-brand-sub">AI 網站健檢平台</span>
+        </button>
         <div className="argus-nav-links">
           {NAV_ITEMS.map((item) => (
             <NavLink
@@ -3850,7 +3846,7 @@ function SettingsPage() {
 
 const PUBLIC_NAV_ITEMS = [
   { to: "/project", label: "專案介紹" },
-  { to: "/free-tools", label: "免費分析" },
+  { to: "/free-tools", label: "快速檢查" },
   { to: "/team", label: "團隊" },
   { to: "/purchase", label: "購買" },
   { to: "/download", label: "下載" },
@@ -3859,16 +3855,14 @@ const PUBLIC_NAV_ITEMS = [
 
 function PublicNav() {
   const accessToken = useArgusStore((s) => s.accessToken);
+  const replayIntro = useArgusStore((s) => s.replayIntro);
   return (
     <nav className="public-nav">
       <div className="public-nav-inner">
-        <NavLink to="/project" className="public-brand">
-          <span className="public-brand-glyph">⟡</span>
-          <span>
-            <span className="public-brand-title">ARGUS</span>
-            <span className="public-brand-sub">AI 網站健檢平台</span>
-          </span>
-        </NavLink>
+        <button type="button" className="public-brand active" onClick={replayIntro} title="重播開場動畫" aria-label="重播 ARGUS 開場動畫">
+          <img src={brandLogo} className="public-brand-logo" alt="ARGUS — AI 網站健檢平台" />
+          <span className="public-brand-sub">AI 網站健檢平台</span>
+        </button>
         <div className="public-nav-links">
           {PUBLIC_NAV_ITEMS.map((item) => (
             <NavLink
@@ -3978,10 +3972,10 @@ const TECH_STACK_CHIPS = [
 ];
 
 const PROJECT_PLATFORM_STATS = [
-  { label: "Django Apps", value: "7", hint: "accounts / scans / agent / billing / reviews / admin_api / content" },
+  { label: "Django Apps", value: "8", hint: "accounts / scans / agent / billing / reviews / admin_api / content / insights" },
   { label: "資料模型", value: "20+", hint: "ScanJob、Finding、CoinWallet、PurchaseOrder…" },
-  { label: "自動化測試", value: "210+", hint: "API / 權限 / billing 流程 / 圖片上傳" },
-  { label: "REST 端點", value: "40+", hint: "billing / reviews / content / admin / scans" },
+  { label: "自動化測試", value: "250+", hint: "API / 權限 / billing 流程 / 圖片上傳" },
+  { label: "REST 端點", value: "40+", hint: "billing / reviews / content / admin / scans / insights" },
 ];
 
 function ProjectScanDemo() {
@@ -4064,7 +4058,7 @@ function ProjectPage() {
             並輸出結構化問題 Prompt 給你帶去 ChatGPT / Claude 取得修補方向。
           </p>
           <div className="public-hero-actions">
-            <NavLink to="/purchase" className="public-cta-primary">立即購買 →</NavLink>
+            <NavLink to="/login" className="public-cta-primary">登入進行詳細檢查 →</NavLink>
             <NavLink to="/download" className="public-cta-ghost">下載 PWA</NavLink>
           </div>
         </div>
@@ -4160,7 +4154,7 @@ function ProjectPage() {
         <div className="public-final-cta">
           <div>
             <h2 className="public-final-cta-title">準備好健檢你的網站了嗎？</h2>
-            <p className="public-final-cta-sub">新會員每月送 200 coin，最小規模試用免費。</p>
+            <p className="public-final-cta-sub">想先試用？「快速檢查」免登入、不扣點；登入後每月自動贈 200 coin，掃描依實際頁數計點。</p>
           </div>
           <NavLink to="/purchase" className="public-cta-primary public-final-cta-btn">
             查看方案 →
@@ -4261,7 +4255,7 @@ function TeamPage() {
         <div className="public-hero-content">
           <span className="public-hero-eyebrow">TEAM · 團隊</span>
           <h1 className="public-hero-title">
-            打造 Argus 的<span className="hero-grad">人們</span>
+            打造 Argus 的<span className="hero-grad">團隊</span>
           </h1>
           <p className="public-hero-sub">
             {members.length} 位成員跨領域協作，從 Playwright 爬蟲、LLM Agent
@@ -4512,6 +4506,11 @@ function FreeToolsPage() {
   const [emailLoading, setEmailLoading] = useState(false);
   const [emailResult, setEmailResult] = useState(null);
   const [emailError, setEmailError] = useState("");
+  const [quickForm, setQuickForm] = useState({ url: "", authorization_confirmed: false });
+  const [quickLoading, setQuickLoading] = useState(false);
+  const [quickResult, setQuickResult] = useState(null);
+  const [quickError, setQuickError] = useState("");
+  const [tool, setTool] = useState("scan"); // 免費工具分頁：scan / speed / phish
 
   const runSpeedTest = async (event) => {
     event.preventDefault();
@@ -4525,6 +4524,21 @@ function FreeToolsPage() {
       setSpeedError(apiErrorMessage(err, "測速失敗，請確認網址可公開連線。"));
     } finally {
       setSpeedLoading(false);
+    }
+  };
+
+  const runQuickScan = async (event) => {
+    event.preventDefault();
+    setQuickLoading(true);
+    setQuickError("");
+    setQuickResult(null);
+    try {
+      const res = await api.post("/insights/quick-scan/", quickForm);
+      setQuickResult(res.data);
+    } catch (err) {
+      setQuickError(apiErrorMessage(err, "單頁快速檢查失敗，請確認網址可公開連線。"));
+    } finally {
+      setQuickLoading(false);
     }
   };
 
@@ -4567,20 +4581,101 @@ function FreeToolsPage() {
           <span className="hero-orb hero-orb-3" />
         </div>
         <div className="public-hero-content">
-          <span className="public-hero-eyebrow">FREE TOOLS · 免費分析</span>
+          <span className="public-hero-eyebrow">QUICK CHECK · 快速檢查</span>
           <h1 className="public-hero-title">
-            先用<span className="hero-grad">免費工具</span>快速判斷
+            先用<span className="hero-grad">快速檢查</span>初步判斷
           </h1>
           <p className="public-hero-sub">
-            單頁測速參考 PageSpeed / Lighthouse 的效能思路；釣魚 URL 與郵件判斷使用本機特徵分類器，
-            不把內容送到大模型 API。
+            <strong>免登入、不扣點數、即時出結果。</strong>單頁測速參考 PageSpeed / Lighthouse 的效能思路；
+            釣魚網址與郵件判斷使用本機特徵分類器，不把內容送到大模型 API。
           </p>
         </div>
       </section>
 
+      <div className="insight-tabs">
+        <button type="button" className={`insight-tab ${tool === "scan" ? "active" : ""}`} onClick={() => setTool("scan")}>🩺 單頁檢查</button>
+        <button type="button" className={`insight-tab ${tool === "speed" ? "active" : ""}`} onClick={() => setTool("speed")}>⚡ 網站測速</button>
+        <button type="button" className={`insight-tab ${tool === "phish" ? "active" : ""}`} onClick={() => setTool("phish")}>🛡️ 釣魚偵測</button>
+      </div>
+
+      {tool === "scan" && (
       <section className="public-section">
         <header className="public-section-head">
-          <h2>免費測速分析</h2>
+          <h2>單頁快速檢查</h2>
+          <p>輸入一個網址，立即看 SEO / 資安 / AEO·GEO 的單頁體檢分數與重點問題；完整多頁＋AI 深掃請登入後到「掃描」</p>
+        </header>
+        <div className="insight-tool-layout">
+          <form className="insight-tool-card" onSubmit={runQuickScan}>
+            <h3 className="insight-card-title">單頁快速檢查</h3>
+            <label className="insight-field">
+              <span>網址</span>
+              <input
+                value={quickForm.url}
+                onChange={(e) => setQuickForm((f) => ({ ...f, url: e.target.value }))}
+                placeholder="https://example.com/"
+                required
+              />
+            </label>
+            <label className="insight-check">
+              <input
+                type="checkbox"
+                checked={quickForm.authorization_confirmed}
+                onChange={(e) => setQuickForm((f) => ({ ...f, authorization_confirmed: e.target.checked }))}
+              />
+              <span>我確認此頁面可公開檢測，或我擁有分析授權。</span>
+            </label>
+            {quickError && <div className="insight-error">{quickError}</div>}
+            <button type="submit" className="public-cta-primary" disabled={quickLoading}>
+              {quickLoading ? "檢查中..." : "開始單頁檢查"}
+            </button>
+          </form>
+
+          <div className="insight-result-card">
+            {!quickResult ? (
+              <div className="insight-empty">
+                <strong>會輸出哪些結果</strong>
+                <span>整體分數 + SEO / 資安 / AEO·GEO 三維單頁分數與重點問題清單。</span>
+              </div>
+            ) : (
+              <>
+                <div className="insight-score-row">
+                  <div className={`insight-score score-${quickResult.grade}`}>
+                    {quickResult.overall_score}
+                  </div>
+                  <div>
+                    <div className="insight-result-title">{quickResult.final_url}</div>
+                    <div className="insight-result-sub">單頁快速檢查（不含多頁爬蟲 / Playwright）</div>
+                  </div>
+                </div>
+                <div className="insight-metrics-grid">
+                  {quickResult.categories.map((c) => (
+                    <div key={c.key}><span>{c.label}</span><strong>{c.score}</strong></div>
+                  ))}
+                </div>
+                {quickResult.findings.length > 0 ? (
+                  <ul className="insight-finding-list">
+                    {quickResult.findings.map((f, idx) => (
+                      <li key={`${f.title}-${idx}`}>
+                        <strong>{f.title}</strong>
+                        <span>{f.detail}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="insight-success">單頁檢查未發現明顯問題。</div>
+                )}
+                <p className="insight-note">{quickResult.note}</p>
+              </>
+            )}
+          </div>
+        </div>
+      </section>
+      )}
+
+      {tool === "speed" && (
+      <section className="public-section">
+        <header className="public-section-head">
+          <h2>網站測速分析</h2>
           <p>單一 URL、單次請求，不扣 coin，不啟動全站爬蟲</p>
         </header>
         <div className="insight-tool-layout">
@@ -4649,15 +4744,17 @@ function FreeToolsPage() {
           </div>
         </div>
       </section>
+      )}
 
+      {tool === "phish" && (
       <section className="public-section">
         <header className="public-section-head">
-          <h2>釣魚 URL / 郵件風險</h2>
-          <p>本機特徵分類器，先看證據，不把判斷全交給大模型</p>
+          <h2>可疑網址 / 詐騙郵件檢測</h2>
+          <p>貼上一個網址或一封郵件內容，本機特徵分類器幫你判斷「是否可能是釣魚／詐騙」（不外送大模型 API）</p>
         </header>
         <div className="insight-two-col">
           <form className="insight-tool-card" onSubmit={runUrlCheck}>
-            <h3 className="insight-card-title">URL 風險判斷</h3>
+            <h3 className="insight-card-title">網址安全檢測（防釣魚）</h3>
             <label className="insight-field">
               <span>可疑連結</span>
               <input
@@ -4691,7 +4788,7 @@ function FreeToolsPage() {
           </form>
 
           <form className="insight-tool-card" onSubmit={runEmailCheck}>
-            <h3 className="insight-card-title">郵件原始碼判斷</h3>
+            <h3 className="insight-card-title">郵件詐騙檢測（防釣魚信）</h3>
             <label className="insight-field">
               <span>.eml / 原始信件內容</span>
               <textarea
@@ -4730,6 +4827,7 @@ function FreeToolsPage() {
           </form>
         </div>
       </section>
+      )}
     </div>
   );
 }
@@ -4769,7 +4867,7 @@ function DownloadPage() {
                 className="public-cta-primary public-install-cta"
                 onClick={() => document.getElementById("install-guide")?.scrollIntoView({ behavior: "smooth" })}
               >
-                ⬇ 查看安裝方式
+                ⬇ 下載 / 安裝 App
               </button>
             )}
             {!installed && latest?.download_url && (
@@ -6494,9 +6592,9 @@ function AuditLogTab() {
 // 尊重 prefers-reduced-motion：偏好減少動態時直接略過。
 // ============================================================
 
-const INTRO_PHASE = { storm: 2000, assemble: 2400, display: 1500, explode: 300, warp: 2000 };
+const INTRO_PHASE = { storm: 2000, assemble: 2400, display: 400, warp: 2200 };
 const INTRO_TOTAL =
-  INTRO_PHASE.storm + INTRO_PHASE.assemble + INTRO_PHASE.display + INTRO_PHASE.explode + INTRO_PHASE.warp;
+  INTRO_PHASE.storm + INTRO_PHASE.assemble + INTRO_PHASE.display + INTRO_PHASE.warp;
 const INTRO_STORM_CHARS = "01ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$&*+={}/<>";
 const INTRO_ARGUS_CHARS = "ARGUS";
 const INTRO_STORM_COLORS = [
@@ -6512,7 +6610,6 @@ function IntroSequence({ onComplete }) {
   const timeRef = useRef(null);
   const fpsRef = useRef(null);
   const countRef = useRef(null);
-  const flashRef = useRef(null);
   const finishRef = useRef(null);
   const completeRef = useRef(onComplete);
   completeRef.current = onComplete;
@@ -6655,9 +6752,14 @@ function IntroSequence({ onComplete }) {
     }
 
     function initWarp() {
+      // 從粒子「目前位置」(剛聚合成 logo 的位置) 直接往外發射 →
+      // logo 散開無縫接上時空穿越，中間不經過白色閃光。
+      const cx = W / 2, cy = H / 2;
       for (let i = 0; i < particles.length; i++) {
-        particles[i].warpAng = Math.random() * Math.PI * 2;
-        particles[i].warpDist = Math.random() * 80;
+        const p = particles[i];
+        const dx = p.x - cx, dy = p.y - cy;
+        p.warpAng = Math.atan2(dy, dx);
+        p.warpDist = Math.max(2, Math.hypot(dx, dy));
       }
     }
 
@@ -6711,20 +6813,11 @@ function IntroSequence({ onComplete }) {
         } else if (phase === "DISPLAY") {
           const breath = Math.sin(elapsed * 0.003 + p.phase) * 1;
           p.x = p.tx + breath; p.y = p.ty + breath * 0.5;
-        } else if (phase === "EXPLODE") {
-          const e = 1 - Math.pow(1 - pt, 3);
-          p.x = p.tx + Math.cos(p.eAng) * p.eSpd * e;
-          p.y = p.ty + Math.sin(p.eAng) * p.eSpd * e;
         }
         let fill;
         if (phase === "STORM") fill = INTRO_STORM_COLORS[i & 7];
         else if (phase === "ASSEMBLE") fill = pt > 0.5 ? p.displayColor : INTRO_STORM_COLORS[i & 7];
-        else if (phase === "DISPLAY") fill = p.displayColor;
-        else {
-          const a = 1 - pt * 1.15;
-          if (a < 0.03) continue;
-          fill = `rgba(${Math.min(255, p.r + 100)}, ${Math.min(255, p.g + 100)}, ${Math.min(255, p.b + 100)}, ${a})`;
-        }
+        else fill = p.displayColor;
         if (p.size !== lastSize) { ctx.font = `bold ${p.size}px 'Consolas', monospace`; lastSize = p.size; }
         ctx.fillStyle = fill;
         ctx.fillText(p.char, p.x, p.y);
@@ -6744,22 +6837,16 @@ function IntroSequence({ onComplete }) {
       if (elapsed < P.storm) { phaseName = "STORM"; pt = elapsed / P.storm; }
       else if (elapsed < P.storm + P.assemble) { phaseName = "ASSEMBLE"; pt = (elapsed - P.storm) / P.assemble; }
       else if (elapsed < P.storm + P.assemble + P.display) { phaseName = "DISPLAY"; pt = (elapsed - P.storm - P.assemble) / P.display; }
-      else if (elapsed < P.storm + P.assemble + P.display + P.explode) { phaseName = "EXPLODE"; pt = (elapsed - P.storm - P.assemble - P.display) / P.explode; }
-      else if (elapsed < INTRO_TOTAL) { phaseName = "WARP"; pt = (elapsed - P.storm - P.assemble - P.display - P.explode) / P.warp; }
+      else if (elapsed < INTRO_TOTAL) { phaseName = "WARP"; pt = (elapsed - P.storm - P.assemble - P.display) / P.warp; }
       else { if (finishRef.current) finishRef.current(); return; }
       if (phaseRef.current) phaseRef.current.textContent = phaseName;
-      const STATUS_MAP = { STORM: "ANALYZING", ASSEMBLE: "CONVERGING", DISPLAY: "LOCKED-ON", EXPLODE: "DISPERSING", WARP: "HYPERSPACE" };
+      const STATUS_MAP = { STORM: "ANALYZING", ASSEMBLE: "CONVERGING", DISPLAY: "LOCKED-ON", WARP: "HYPERSPACE" };
       if (statusRef.current) statusRef.current.textContent = STATUS_MAP[phaseName];
 
       if (phaseName === "WARP") {
         if (!warpInited) { initWarp(); warpInited = true; }
         const zoom = 1 + pt * pt * 0.65;
         canvas.style.transform = `scale(${zoom})`;
-        if (flashRef.current) {
-          flashRef.current.style.opacity = String(
-            pt < 0.85 ? Math.max(0.15, 1 - pt * 1.15) : 0.15 + (pt - 0.85) / 0.15 * 0.85,
-          );
-        }
         ctx.fillStyle = "rgba(15, 20, 45, 0.25)"; ctx.fillRect(0, 0, W, H);
         const cxw = W / 2, cyw = H / 2;
         const speed = 5 + pt * pt * 75;
@@ -6793,9 +6880,6 @@ function IntroSequence({ onComplete }) {
         else if (fallbackCanvas) ctx.drawImage(fallbackCanvas, 0, 0);
         ctx.restore();
       }
-      if (flashRef.current) {
-        flashRef.current.style.opacity = phaseName === "EXPLODE" ? String(Math.min(1, pt * 5)) : "0";
-      }
       updateAndDraw(phaseName, pt, elapsed);
       mainRAF = requestAnimationFrame(mainLoop);
     }
@@ -6811,6 +6895,11 @@ function IntroSequence({ onComplete }) {
 
     const onResize = () => { resize(); if (imgRef) buildLogoBox(); };
     window.addEventListener("resize", onResize);
+    // 點畫面任一處 / Esc / Enter / 空白鍵 皆可跳過動畫
+    const onKey = (e) => {
+      if (e.key === "Escape" || e.key === "Enter" || e.key === " ") { e.preventDefault(); finish(); }
+    };
+    window.addEventListener("keydown", onKey);
 
     const img = new Image();
     img.onload = () => { imgRef = img; buildLogoBox(); buildTargets(); startTime = performance.now(); fpsTimer = startTime; mainRAF = requestAnimationFrame(mainLoop); };
@@ -6819,13 +6908,18 @@ function IntroSequence({ onComplete }) {
 
     return () => {
       window.removeEventListener("resize", onResize);
+      window.removeEventListener("keydown", onKey);
       if (mainRAF) cancelAnimationFrame(mainRAF);
       if (finishTimer) clearTimeout(finishTimer);
     };
   }, []);
 
   return (
-    <div className={`argus-intro ${fading ? "argus-intro--out" : ""}`} role="presentation">
+    <div
+      className={`argus-intro ${fading ? "argus-intro--out" : ""}`}
+      role="presentation"
+      onClick={() => { if (finishRef.current) finishRef.current(); }}
+    >
       <div className="argus-intro-grid" />
       <canvas ref={canvasRef} className="argus-intro-canvas" />
       <span className="argus-intro-corner tl" />
@@ -6846,14 +6940,7 @@ function IntroSequence({ onComplete }) {
         <span className="dim">PARTICLES</span> <span className="v" ref={countRef}>0</span><br />
         <span className="dim">FPS</span> <span className="v" ref={fpsRef}>--</span>
       </div>
-      <div className="argus-intro-flash" ref={flashRef} />
-      <button
-        type="button"
-        className="argus-intro-skip"
-        onClick={() => { if (finishRef.current) finishRef.current(); }}
-      >
-        略過 ▶
-      </button>
+      <div className="argus-intro-hint">點擊任意處跳過</div>
     </div>
   );
 }
@@ -6871,17 +6958,14 @@ function AppShell() {
     location.pathname.startsWith(p),
   );
   const showTopNav = !isAdmin && !isPublic;
-  // 首次進站才播過場動畫：localStorage 無 argus_intro_seen 旗標時播放，播完寫旗標並導向首頁
-  const [introSeen, setIntroSeen] = useState(() => {
-    try { return window.localStorage.getItem("argus_intro_seen") === "1"; }
-    catch { return true; }
-  });
+  // 首次進站才播過場動畫（旗標在 store/localStorage）；品牌 ⟡ icon 可呼叫 replayIntro 重播
+  const introSeen = useArgusStore((s) => s.introSeen);
+  const markIntroSeen = useArgusStore((s) => s.markIntroSeen);
   function handleIntroDone() {
-    try { window.localStorage.setItem("argus_intro_seen", "1"); } catch { /* 無痕模式：忽略 */ }
-    setIntroSeen(true);
-    // 首次進站播完導向首頁（使用者需求：第一次都跳首頁）；唯獨 /login 不覆寫，讓登入流程自身導向
+    markIntroSeen();
+    // 播完一律導向首頁 /project（含已登入者；唯獨 /login 不覆寫，讓登入流程自身導向）
     if (location.pathname !== "/login") {
-      navigate(accessToken ? "/dashboard" : "/project", { replace: true });
+      navigate("/project", { replace: true });
     }
   }
   return (

@@ -318,6 +318,168 @@ def analyze_speed(url: str, session=requests, timeout: int = 10) -> dict:
     }
 
 
+class _QuickScanParser(HTMLParser):
+    """擷取單頁健檢需要的標籤：title / meta / h1 / html lang / JSON-LD / canonical / 語意標籤。"""
+
+    def __init__(self):
+        super().__init__()
+        self.title = ""
+        self._in_title = False
+        self.meta_description = ""
+        self.has_viewport = False
+        self.html_lang = ""
+        self.h1_count = 0
+        self.jsonld = 0
+        self.has_canonical = False
+        self.landmarks = 0
+        self.password_inputs = 0
+
+    def handle_starttag(self, tag, attrs):
+        a = {k.lower(): (v or "") for k, v in attrs}
+        if tag == "html":
+            self.html_lang = a.get("lang", "")
+        elif tag == "title":
+            self._in_title = True
+        elif tag == "meta":
+            name = a.get("name", "").lower()
+            if name == "description":
+                self.meta_description = a.get("content", "")
+            elif name == "viewport":
+                self.has_viewport = True
+        elif tag == "h1":
+            self.h1_count += 1
+        elif tag == "script" and a.get("type", "").lower() == "application/ld+json":
+            self.jsonld += 1
+        elif tag == "link" and "canonical" in a.get("rel", "").lower():
+            self.has_canonical = True
+        elif tag in {"main", "article", "header", "nav", "footer", "section"}:
+            self.landmarks += 1
+        elif tag == "input" and a.get("type", "").lower() == "password":
+            self.password_inputs += 1
+
+    def handle_endtag(self, tag):
+        if tag == "title":
+            self._in_title = False
+
+    def handle_data(self, data):
+        if self._in_title:
+            self.title += data.strip()
+
+
+def analyze_quick_scan(url: str, session=requests, timeout: int = 10) -> dict:
+    """免登入「單頁健檢」(試用版)：HTTP 抓單頁 + 跑不需瀏覽器的輕量四維檢查。
+
+    不啟動 Playwright、不爬多頁、不扣 coin；SSRF 防護沿用 assert_public_url + _safe_get。
+    完整多頁＋四維深掃請登入後使用 /scans。
+    """
+    normalized = assert_public_url(url)
+    response = _safe_get(session, normalized, timeout)
+    content = response.content[:2_000_000]
+    text = content.decode(response.encoding or "utf-8", errors="ignore")
+    p = _QuickScanParser()
+    p.feed(text)
+    headers = response.headers
+    is_https = str(response.url or normalized).lower().startswith("https://")
+
+    findings: list[dict] = []
+    seo = sec = geo = 100
+
+    # --- 資安（HTTP 標頭 + HTTPS）---
+    if not is_https:
+        sec -= 35
+        findings.append({"category": "security", "severity": "high", "title": "未使用 HTTPS",
+                         "detail": "頁面以 HTTP 提供，傳輸可被竊聽 / 竄改；應改用 HTTPS 並自動導向。"})
+        if p.password_inputs:
+            sec -= 20
+            findings.append({"category": "security", "severity": "high", "title": "在非 HTTPS 頁面收集密碼",
+                             "detail": "偵測到密碼輸入欄卻非 HTTPS，使用者憑證可能外洩。"})
+    if is_https and not headers.get("Strict-Transport-Security"):
+        sec -= 10
+        findings.append({"category": "security", "severity": "medium", "title": "缺少 HSTS 標頭",
+                         "detail": "建議加 Strict-Transport-Security 強制瀏覽器走 HTTPS。"})
+    if not headers.get("Content-Security-Policy"):
+        sec -= 12
+        findings.append({"category": "security", "severity": "medium", "title": "缺少 Content-Security-Policy",
+                         "detail": "CSP 可大幅降低 XSS / 資料注入風險。"})
+    if not headers.get("X-Content-Type-Options"):
+        sec -= 6
+        findings.append({"category": "security", "severity": "low", "title": "缺少 X-Content-Type-Options",
+                         "detail": "建議加 nosniff，避免瀏覽器誤判內容型別。"})
+    csp = (headers.get("Content-Security-Policy") or "").lower()
+    if not headers.get("X-Frame-Options") and "frame-ancestors" not in csp:
+        sec -= 8
+        findings.append({"category": "security", "severity": "low", "title": "可能可被 iframe 嵌入（點擊劫持）",
+                         "detail": "建議設定 X-Frame-Options 或 CSP frame-ancestors。"})
+
+    # --- SEO ---
+    if not p.title:
+        seo -= 25
+        findings.append({"category": "seo", "severity": "high", "title": "缺少 <title>",
+                         "detail": "title 是搜尋結果標題與排名的關鍵。"})
+    elif len(p.title) > 60 or len(p.title) < 10:
+        seo -= 6
+        findings.append({"category": "seo", "severity": "low", "title": "title 長度不理想",
+                         "detail": f"目前 {len(p.title)} 字；建議約 10–60 字。"})
+    if not p.meta_description:
+        seo -= 15
+        findings.append({"category": "seo", "severity": "medium", "title": "缺少 meta description",
+                         "detail": "描述會影響搜尋結果摘要與點擊率。"})
+    if p.h1_count == 0:
+        seo -= 12
+        findings.append({"category": "seo", "severity": "medium", "title": "缺少 H1 主標題",
+                         "detail": "每頁應有一個清楚的 H1 表達主題。"})
+    elif p.h1_count > 1:
+        seo -= 5
+        findings.append({"category": "seo", "severity": "low", "title": f"H1 有 {p.h1_count} 個",
+                         "detail": "建議每頁僅一個 H1，其餘改用 H2/H3。"})
+    if not p.has_viewport:
+        seo -= 10
+        findings.append({"category": "seo", "severity": "medium", "title": "缺少 viewport meta",
+                         "detail": "缺 viewport 在手機上版面異常，影響行動裝置排名。"})
+    if not p.html_lang:
+        seo -= 5
+        findings.append({"category": "seo", "severity": "low", "title": "<html> 缺少 lang 屬性",
+                         "detail": "宣告語言有助無障礙與搜尋引擎理解。"})
+
+    # --- AEO / GEO（給 AI / 答案引擎讀的結構）---
+    if p.jsonld == 0:
+        geo -= 18
+        findings.append({"category": "aeo_geo", "severity": "medium", "title": "缺少結構化資料（JSON-LD）",
+                         "detail": "Schema.org JSON-LD 讓搜尋 / AI 更易理解內容並被引用。"})
+    if not p.has_canonical:
+        geo -= 8
+        findings.append({"category": "aeo_geo", "severity": "low", "title": "缺少 canonical 連結",
+                         "detail": "canonical 可避免重複內容並集中網頁權重。"})
+    if p.landmarks < 2:
+        geo -= 10
+        findings.append({"category": "aeo_geo", "severity": "low", "title": "語意化結構偏少",
+                         "detail": "善用 main / article / nav 等語意標籤，有助機器理解版面。"})
+
+    seo = max(0, min(100, seo))
+    sec = max(0, min(100, sec))
+    geo = max(0, min(100, geo))
+    overall = round((seo + sec + geo) / 3)
+    grade = "good" if overall >= 85 else "needs_work" if overall >= 60 else "poor"
+
+    return {
+        "url": normalized,
+        "final_url": str(response.url or normalized),
+        "status_code": response.status_code,
+        "overall_score": overall,
+        "grade": grade,
+        "categories": [
+            {"key": "seo", "label": "SEO", "score": seo},
+            {"key": "security", "label": "資安", "score": sec},
+            {"key": "aeo_geo", "label": "AEO/GEO", "score": geo},
+        ],
+        "findings": findings,
+        "note": (
+            "這是「單頁快速檢查」：只抓這一頁、不跑多頁爬蟲與 Playwright、不含 AI Agent 驗證。"
+            "完整多頁＋四維深掃＋互動報告請登入後到「掃描」功能。"
+        ),
+    }
+
+
 def _registrable_parts(hostname: str) -> list[str]:
     return [part for part in hostname.lower().split(".") if part]
 
