@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import shutil
@@ -56,6 +57,28 @@ _SECRET_SEVERITY: dict[str, str] = {
     "api_key": "high",
     "apikey": "high",
 }
+
+
+def _evidence_metadata(rule_id: str, evidence: str, source: str) -> dict:
+    return {
+        "rule_id": rule_id,
+        "evidence_type": "katana_jsonl",
+        "evidence_json": {
+            "type": "katana_jsonl",
+            "source": source,
+            "excerpt": evidence[:1000],
+        },
+        "evidence_source": source,
+        "ai_explanation": "",
+        "ai_remediation": "",
+        "llm_model": "",
+        "llm_generated_at": None,
+    }
+
+
+def _rule_id(prefix: str, value: str) -> str:
+    digest = hashlib.sha1(value.encode("utf-8")).hexdigest()[:10].upper()
+    return f"{prefix}_{digest}"
 
 
 def run_katana(
@@ -220,9 +243,15 @@ def _build_secret_finding(secret: dict[str, Any], endpoint: str) -> dict | None:
         evidence_parts.append(f"行號：{line_no}")
     evidence_parts.append(f"比對值（遮罩）：{masked}")
 
+    evidence = "；".join(evidence_parts)
     return {
         "category": "security",
         "severity": severity,
+        **_evidence_metadata(
+            _rule_id("KATANA_JS_SECRET", f"{endpoint}:{secret_type}:{line_no}"),
+            evidence,
+            "katana_jsluice",
+        ),
         "title": f"JS 檔案含硬編碼秘鑰：{secret_type}",
         "description": (
             f"在 {endpoint} 偵測到疑似硬編碼的 {secret_type}。"
@@ -234,7 +263,7 @@ def _build_secret_finding(secret: dict[str, Any], endpoint: str) -> dict | None:
             "改用環境變數或密鑰管理服務（Vault、AWS Secrets Manager 等）注入，"
             "確保秘鑰絕不進入版本控制或前端打包產物。"
         ),
-        "evidence": "；".join(evidence_parts),
+        "evidence": evidence,
         "selector": "",
         "bounding_box": None,
         "impact_area": "secret_disclosure",
@@ -276,9 +305,15 @@ def _detect_vite_dev_exposure(record: dict[str, Any]) -> dict | None:
     if not (is_vite or is_source):
         return None
 
+    evidence = f"Katana 偵測：GET {endpoint} → HTTP {status_int}（應回傳 404）"
     return {
         "category": "security",
         "severity": "critical",
+        **_evidence_metadata(
+            _rule_id("KATANA_VITE_DEV_EXPOSURE", endpoint),
+            evidence,
+            "katana_tech_detection",
+        ),
         "title": "生產環境暴露 Vite Dev Server 原始碼",
         "description": (
             f"偵測到 {endpoint} 回傳 HTTP {status_int}，"
@@ -291,7 +326,7 @@ def _detect_vite_dev_exposure(record: dict[str, Any]) -> dict | None:
             "確認 Web Server（Nginx/Cloudflare）只提供 `dist/` 目錄下的靜態檔案，"
             "並封鎖對 `/src/`、`/node_modules/`、`/@vite/`、`/@react-refresh` 等路徑的存取。"
         ),
-        "evidence": f"Katana 偵測：GET {endpoint} → HTTP {status_int}（應回傳 404）",
+        "evidence": evidence,
         "selector": "",
         "bounding_box": None,
         "impact_area": "source_code_exposure",
@@ -346,9 +381,15 @@ def _extract_endpoint_finding(record: dict[str, Any]) -> dict | None:
     if "/api/" not in low and not low.endswith("/api"):
         return None
 
+    evidence = f"Katana JS 解析：{endpoint} → HTTP {status_int}（來源：{source}）"
     return {
         "category": "security",
         "severity": "medium",
+        **_evidence_metadata(
+            _rule_id("KATANA_HIDDEN_API_ENDPOINT", f"{endpoint}:{source}"),
+            evidence,
+            "katana_js_endpoint",
+        ),
         "title": f"JS 中發現隱藏 API 端點：{endpoint}",
         "description": (
             f"Katana 從 JavaScript 原始碼中解析出 API 端點 {endpoint}，"
@@ -359,7 +400,7 @@ def _extract_endpoint_finding(record: dict[str, Any]) -> dict | None:
             "確認此端點是否需要對公開網路開放；若否，加上認證中介軟體或 IP 白名單。"
             "建議對所有 API 端點實施統一的認證與授權策略。"
         ),
-        "evidence": f"Katana JS 解析：{endpoint} → HTTP {status_int}（來源：{source}）",
+        "evidence": evidence,
         "selector": "",
         "bounding_box": None,
         "impact_area": "exposed_endpoints",
