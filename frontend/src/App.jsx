@@ -3856,6 +3856,8 @@ const PUBLIC_NAV_ITEMS = [
 function PublicNav() {
   const accessToken = useArgusStore((s) => s.accessToken);
   const replayIntro = useArgusStore((s) => s.replayIntro);
+  const theme = useArgusStore((s) => s.theme);
+  const toggleTheme = useArgusStore((s) => s.toggleTheme);
   return (
     <nav className="public-nav">
       <div className="public-nav-inner">
@@ -3877,6 +3879,18 @@ function PublicNav() {
           ))}
         </div>
         <div className="public-nav-cta">
+          <button
+            type="button"
+            className="theme-toggle"
+            onClick={toggleTheme}
+            title="切換深色 / 淺色主題"
+            aria-label="切換深色 / 淺色主題"
+          >
+            <span className="theme-toggle-icon" aria-hidden="true">
+              {theme === "light" ? "☾" : "☀"}
+            </span>
+            <span>{theme === "light" ? "夜間" : "日間"}</span>
+          </button>
           {accessToken ? (
             <NavLink to="/dashboard" className="public-cta-primary">
               進入 Dashboard
@@ -4048,6 +4062,7 @@ function ProjectPage() {
           <span className="hero-corner br" />
         </div>
         <div className="public-hero-content">
+          <img src={brandLogo} className="public-hero-logo" alt="ARGUS" />
           <span className="public-hero-eyebrow">PROJECT · 專案介紹</span>
           <h1 className="public-hero-title">
             一鍵看見<span className="hero-grad">網站的所有問題</span>
@@ -4144,7 +4159,7 @@ function ProjectPage() {
             <span
               key={t.label}
               className="public-tech-chip"
-              style={{ borderColor: t.colour + "60", color: t.colour }}
+              style={{ borderColor: t.colour + "60", "--chip-color": t.colour }}
             >{t.label}</span>
           ))}
         </div>
@@ -6602,6 +6617,16 @@ const INTRO_STORM_COLORS = [
   "rgba(140, 240, 255, 0.6)", "rgba(70, 210, 250, 0.75)", "rgba(170, 245, 255, 0.55)",
   "rgba(40, 180, 220, 0.65)", "rgba(110, 230, 255, 0.7)",
 ];
+// 時空穿越光束色盤（沿用開頭動畫的青藍系，不另加雜色）
+const INTRO_WARP_COLORS = [
+  [56, 189, 248],   // argus-cyan
+  [103, 232, 249],  // cyan-glow
+  [125, 211, 252],  // sky
+  [14, 165, 233],   // cyan-dot
+  [150, 220, 255],  // 淺藍
+  [224, 242, 254],  // 近白 cyan tint
+  [255, 255, 255],  // 白
+];
 
 function IntroSequence({ onComplete }) {
   const canvasRef = useRef(null);
@@ -6751,6 +6776,13 @@ function IntroSequence({ onComplete }) {
       makeParticles(pts);
     }
 
+    function randomizeWarp(p) {
+      // 不規則：每粒子隨機顏色 / 寬度 / 拉長長度 / 速度
+      p.warpColor = INTRO_WARP_COLORS[(Math.random() * INTRO_WARP_COLORS.length) | 0];
+      p.warpWidth = 2 + Math.random() * 9;        // 粗細不一
+      p.warpLenK = 0.7 + Math.random() * 2.8;     // 拉長長度不一
+      p.warpSpeedK = 0.6 + Math.random() * 1.2;   // 速度不一
+    }
     function initWarp() {
       // 從粒子「目前位置」(剛聚合成 logo 的位置) 直接往外發射 →
       // logo 散開無縫接上時空穿越，中間不經過白色閃光。
@@ -6760,6 +6792,7 @@ function IntroSequence({ onComplete }) {
         const dx = p.x - cx, dy = p.y - cy;
         p.warpAng = Math.atan2(dy, dx);
         p.warpDist = Math.max(2, Math.hypot(dx, dy));
+        randomizeWarp(p);
       }
     }
 
@@ -6847,24 +6880,39 @@ function IntroSequence({ onComplete }) {
         if (!warpInited) { initWarp(); warpInited = true; }
         const zoom = 1 + pt * pt * 0.65;
         canvas.style.transform = `scale(${zoom})`;
-        ctx.fillStyle = "rgba(15, 20, 45, 0.25)"; ctx.fillRect(0, 0, W, H);
+        // 觀測者越來越快 → 每幀清除越少、上一幀殘留越久 → 粒子拉出長殘影拖曳
+        const trailFade = Math.max(0.05, 0.2 - pt * 0.15);
+        ctx.fillStyle = `rgba(12, 16, 38, ${trailFade})`;
+        ctx.fillRect(0, 0, W, H);
         const cxw = W / 2, cyw = H / 2;
-        const speed = 5 + pt * pt * 75;
-        const maxD = Math.max(W, H) * 1.3;
-        ctx.lineCap = "round";
+        const baseSpeed = 5 + pt * pt * 80;
+        const maxD = Math.max(W, H) * 1.35;
         for (let i = 0; i < particles.length; i++) {
           const p = particles[i];
-          p.warpDist += speed;
-          if (p.warpDist > maxD) { p.warpDist = Math.random() * 30; p.warpAng = Math.random() * Math.PI * 2; }
+          p.warpDist += baseSpeed * p.warpSpeedK;
+          if (p.warpDist > maxD) {
+            // 回收：隨機角度 + 重抽顏色/寬/長 → 持續不規則放射
+            p.warpDist = Math.random() * 40;
+            p.warpAng = Math.random() * Math.PI * 2;
+            randomizeWarp(p);
+          }
           const cosA = Math.cos(p.warpAng), sinA = Math.sin(p.warpAng);
           const x = cxw + cosA * p.warpDist, y = cyw + sinA * p.warpDist;
-          const tailLen = speed * 1.5 + p.warpDist * 0.2;
+          // 拉長：長度隨距離增加且每粒子不一
+          const tailLen = (baseSpeed * 1.5 + p.warpDist * 0.3) * p.warpLenK;
           const tx = cxw + cosA * (p.warpDist - tailLen), ty = cyw + sinA * (p.warpDist - tailLen);
-          const inner = p.warpDist < 250;
-          const a = Math.min(1, p.warpDist / 60);
-          ctx.strokeStyle = inner ? `rgba(255, 255, 255, ${a})` : `rgba(150, 220, 255, ${a * 0.9})`;
-          ctx.lineWidth = inner ? 2 : 1.5;
-          ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(x, y); ctx.stroke();
+          // 外端寬、內端收尖的錐形（垂直方向取半寬）
+          const hw = p.warpWidth * Math.min(1, p.warpDist / 200);
+          const px = -sinA, py = cosA;
+          const a = Math.min(0.82, p.warpDist / 130);
+          const c = p.warpColor;
+          ctx.fillStyle = `rgba(${c[0]}, ${c[1]}, ${c[2]}, ${a})`;
+          ctx.beginPath();
+          ctx.moveTo(tx, ty);                   // 內端尖點
+          ctx.lineTo(x + px * hw, y + py * hw); // 外端一側
+          ctx.lineTo(x - px * hw, y - py * hw); // 外端另一側
+          ctx.closePath();
+          ctx.fill();
         }
         mainRAF = requestAnimationFrame(mainLoop);
         return;
