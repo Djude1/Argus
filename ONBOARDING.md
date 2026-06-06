@@ -156,7 +156,7 @@ Argus/
 │   │   └── asgi.py / wsgi.py
 │   └── apps/               ← 8 個 app
 │       ├── accounts/       ← User model（繼承 AbstractUser）+ Google OAuth + Email 註冊/登入 + 改密碼
-│       ├── scans/          ← 核心：ScanJob、Page、Finding、AgentSession、AgentStep、AuthorizationConsent、crawler、scanners、reports、active_probes、cancellation
+│       ├── scans/          ← 核心：ScanJob、Page、Finding、AgentSession、AgentStep、AuthorizationConsent、crawler、scanners、reports、nuclei_scanner、cancellation
 │       ├── agent/          ← Hermes-Agent：providers/tools/loop/runner/findings
 │       ├── billing/        ← CoinWallet、CoinTransaction、PricingPlan、PurchaseOrder + service 唯一寫入入口
 │       ├── reviews/        ← PlatformReview（OneToOne）+ ReviewMessage（thread）

@@ -1088,6 +1088,112 @@ function FindingsGroupList({
   );
 }
 
+function formatEvidenceJson(value) {
+  if (!value || (typeof value === "object" && Object.keys(value).length === 0)) {
+    return "";
+  }
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return "";
+  }
+}
+
+function buildEvidenceCopyText(finding) {
+  const lines = [
+    `Finding: ${finding.title || ""}`,
+    `Category: ${finding.category || ""}`,
+    `Severity: ${finding.severity || ""}`,
+    `Rule ID: ${finding.rule_id || "N/A"}`,
+    `Evidence Source: ${finding.evidence_source || "N/A"}`,
+    `Evidence Type: ${finding.evidence_type || "N/A"}`,
+    "",
+    "Deterministic Evidence:",
+    finding.evidence || "N/A",
+  ];
+  const evidenceJson = formatEvidenceJson(finding.evidence_json);
+  if (evidenceJson) {
+    lines.push("", "Evidence JSON:", evidenceJson);
+  }
+  return lines.join("\n");
+}
+
+function EvidencePanel({ finding }) {
+  const evidenceJson = formatEvidenceJson(finding.evidence_json);
+  const hasEvidence =
+    finding.evidence ||
+    finding.rule_id ||
+    finding.evidence_type ||
+    finding.evidence_source ||
+    evidenceJson;
+
+  if (!hasEvidence) {
+    return (
+      <div className="evidence-panel is-empty">
+        <div className="evidence-panel-header">
+          <span className="evidence-panel-title">Deterministic Evidence</span>
+        </div>
+        <p>此 Finding 尚未提供可追溯證據。</p>
+      </div>
+    );
+  }
+
+  return (
+    <details className="evidence-panel" open>
+      <summary className="evidence-panel-header">
+        <span className="evidence-panel-title">Deterministic Evidence</span>
+        <span className="evidence-panel-subtitle">規則引擎產生，AI 僅負責解釋</span>
+      </summary>
+
+      <div className="evidence-meta-grid">
+        <div>
+          <span>規則 ID</span>
+          <strong>{finding.rule_id || "未標示"}</strong>
+        </div>
+        <div>
+          <span>證據來源</span>
+          <strong>{finding.evidence_source || "rule_engine"}</strong>
+        </div>
+        <div>
+          <span>證據型態</span>
+          <strong>{finding.evidence_type || "text"}</strong>
+        </div>
+      </div>
+
+      {finding.evidence && (
+        <div className="evidence-block">
+          <span className="evidence-block-label">Evidence</span>
+          <pre>{finding.evidence}</pre>
+        </div>
+      )}
+
+      {evidenceJson && (
+        <div className="evidence-block">
+          <span className="evidence-block-label">Evidence JSON</span>
+          <pre>{evidenceJson}</pre>
+        </div>
+      )}
+
+      {(finding.ai_explanation || finding.ai_remediation || finding.llm_model) && (
+        <div className="ai-explanation-block">
+          <span className="evidence-block-label">AI 解釋與建議</span>
+          {finding.llm_model && <p className="ai-model">模型：{finding.llm_model}</p>}
+          {finding.ai_explanation && <p>{finding.ai_explanation}</p>}
+          {finding.ai_remediation && <p>{finding.ai_remediation}</p>}
+        </div>
+      )}
+
+      <button
+        className="secondary-button evidence-copy-button"
+        type="button"
+        onClick={() => navigator.clipboard.writeText(buildEvidenceCopyText(finding))}
+      >
+        複製 Evidence
+      </button>
+    </details>
+  );
+}
+
 // ============================================================
 // 截圖畫布（接 selectedFinding 為 prop，以對應 URL 來源）
 // ============================================================
@@ -1592,6 +1698,7 @@ function FindingsWorkspace({ scan }) {
               <p>{selectedFinding.description}</p>
               <p className="font-semibold">修補方向</p>
               <p>{selectedFinding.remediation}</p>
+              <EvidencePanel finding={selectedFinding} />
               <button
                 className="primary-button"
                 type="button"

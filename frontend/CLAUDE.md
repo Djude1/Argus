@@ -83,3 +83,43 @@ D:\node22\npm.cmd install 套件名
 | `fetch()` / `axios` 直接呼叫 | 繞過 api.js 的 token 處理 |
 | inline style（除動態值）| 難以維護，破壞主題一致性 |
 | 新增獨立元件檔案 | 破壞單檔架構 |
+
+---
+
+## 前端路由地圖
+
+> 所有路由定義在 `App.jsx` 底部 `<Routes>` 區塊（約第 6460 行起）。
+
+| 路由 | 元件 / 頁面 | 說明 |
+|---|---|---|
+| `/login` | `LoginPage` | Google OAuth 登入 |
+| `/project` | `ProjectPage` | 公開行銷頁：產品特色 |
+| `/free-tools` | `FreeToolsPage` | 公開免費分析（測速 / URL 風險 / 郵件風險），呼叫 `/api/insights/*` |
+| `/team` | `TeamPage` | 公開行銷頁：團隊介紹 |
+| `/purchase` | `PurchasePage` | 購買點數（3 步驟結帳 wizard） |
+| `/download` | `DownloadPage` | 下載報告 |
+| `/scans` | `ScansPlaceholder` → `ScanListPage` | 掃描列表（需登入） |
+| `/scans/:scanId` | `ScanDetailPage` | 掃描結果詳情 + findings |
+| `/scans/:scanId/topology` | `TopologyPage` | 網站拓樸圖（ReactFlow） |
+| `/reviews` | `ReviewsPage` | 平台評論 |
+| `/admin` | → redirect `/admin/overview` | staff 進入點 |
+| `/admin/overview` | `AdminOverviewPage` | 後台總覽 |
+| `/admin/users` | `AdminUsersPage` | 使用者管理 |
+| `/admin/users/:userId` | `AdminUserDetailPage` | 使用者詳情 + 點數調整 |
+| `/admin/transactions` | `AdminTransactionsPage` | 交易紀錄 |
+| `/admin/reviews` | `AdminReviewsPage` | 評論管理（可回覆） |
+| `/admin/scans` | `AdminScansPage` | 掃描任務管理 |
+| `/admin/scans/:scanId` | `AdminScanDetailPage` | 掃描詳情（管理員視角） |
+| `/admin/content` | `AdminContentPage` | CMS 內容管理 |
+| `/admin/plans` | `AdminPlansPage` | 定價方案管理 |
+| `/admin/audit-log` | `AdminAuditLogPage` | 操作紀錄（superuser 限定） |
+
+## 核心檔案
+
+| 檔案 | 職責 |
+|---|---|
+| `src/App.jsx` | 6500+ 行，所有頁面元件與路由定義全在此 |
+| `src/api.js` | Axios instance，統一處理 base URL 與 CSRF token |
+| `src/store.js` | Zustand 全域狀態（user、wallet 等） |
+| `src/main.jsx` | React entry point，Provider 掛載 |
+| `src/styles.css` | 全域樣式（含 admin 深色 sidebar 變數） |

@@ -17,6 +17,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **子目錄 CLAUDE.md 位置**（完整地圖＋ SKILL 索引見 [`專案導覽.md`](專案導覽.md)）：
 - [`frontend/CLAUDE.md`](frontend/CLAUDE.md) — React/Vite build、App.jsx 操作規範
+- [`backend/CLAUDE.md`](backend/CLAUDE.md) — API 路由地圖、Model 速查、App 職責
 - [`backend/apps/accounts/CLAUDE.md`](backend/apps/accounts/CLAUDE.md) — User / JWT / Google 登入，不簽發 staff
 - [`backend/apps/scans/CLAUDE.md`](backend/apps/scans/CLAUDE.md) — ScanJob 狀態機、Playwright、取消機制
 - [`backend/apps/agent/CLAUDE.md`](backend/apps/agent/CLAUDE.md) — Hermes-Agent（預設關閉）、禁印 key、same-origin
@@ -26,62 +27,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - [`backend/apps/content/CLAUDE.md`](backend/apps/content/CLAUDE.md) — 公開 CMS 讀取（寫入走 admin_api/cms）
 - [`backend/apps/insights/CLAUDE.md`](backend/apps/insights/CLAUDE.md) — 免費工具 `/free-tools`（SSRF 防護）
 
----
+### CLAUDE.md 跨層同步規則（強制）
 
-## Skills 表格（專案技能）
+**任何一層的 CLAUDE.md 有內容異動，必須在同一次 commit 內同步所有受影響的層。**
 
-`.claude/skills/` 下的 skill 會被 Claude Code 自動發現，並依 `description` 在相關情境**自動載入**，無需手動呼叫。新增 / 修改 skill 後須同步本表（見「文件同步強制規則」與行為準則 4）。
+| 你改了哪一層 | 必須同時檢查並同步 |
+|---|---|
+| 本檔（專案層） | 所有相關子目錄 CLAUDE.md（規則是否矛盾、索引連結是否仍正確） |
+| 任一子目錄 CLAUDE.md | 本檔索引表（涵蓋內容欄位是否需要更新） + 兄弟層（同模組其他 CLAUDE.md）|
+| 新增子目錄 CLAUDE.md | 本檔「子目錄 CLAUDE.md 位置」清單與「子模組詳細資訊」索引表 |
+| 刪除或移動 CLAUDE.md | 本檔及所有引用它的 CLAUDE.md 的連結必須同步移除或改路徑 |
 
-| Skill | 觸發時機 | 位置 |
-|---|---|---|
-| `argus-ui-design` | 新增 / 修改任何**前端介面**時（`App.jsx` 頁面與元件、`styles.css`、前台公開頁、後台 `/admin/*`、按鈕 / 導覽 / 分頁 / 動畫 / 特效 / 配色 / 版面 / 互動，或「美化、調版面、做動畫、改視覺」需求） | [`.claude/skills/argus-ui-design/SKILL.md`](.claude/skills/argus-ui-design/SKILL.md) |
-| `argus-git-safety` | 任何 `git add` / `commit` / `push`，或討論部署 / 上線 / 共用 repo / 與組員協作時（內含公網部署現況與 push 前強制清單） | [`.claude/skills/argus-git-safety/SKILL.md`](.claude/skills/argus-git-safety/SKILL.md) |
-| `scope-and-environment-check` | 開工前環境感知（worktree / 並行）、全稱問題範圍宣告、糾錯反思循環、PowerShell / `.env` / worktree 環境陷阱 | [`.claude/skills/scope-and-environment-check/SKILL.md`](.claude/skills/scope-and-environment-check/SKILL.md) |
-
----
-
-## 交接與不確定性鐵則（最高優先，每次對話必守）
-
-### A. 工作額度達 85% 強制交接
-**每次處理工作時，若該工作的額度（對話 context / token 預算）已達約 85%，必須立刻強制交接手頭工作**：把「目前目標、成功條件、已完成、未完成的下一步、關鍵決策與地雷」寫進交接檔（`.sisyphus/argus-handoff.local.md` 或對應 `log/`），**以防額度用盡、下一個接手的 Claude 只能不知所措**。寧可提早交接，也不要做到一半斷掉、沒留下狀態。
-
-### B. 指令不具體 → 先問 / 先驗證，禁止猜測
-使用者的命令可能並不具體或不清楚。動手前：
-- 不清楚就**詳細詢問使用者**，或**認真驗證使用者的真正想法（Why）**再製作。
-- **禁止隨意猜測**；需要時**多考證網路上的業界做法**（找厲害的、不瞎找）。
-- 此狀況也常出現在「**交接不完全**」時，導致 Claude 根本不知道自己在幹嘛 → 所以交接檔與文件必須寫完整、寫清楚（呼應上方 A 與下方「文件同步強制規則」）。
-
-### C. 開工前環境與並行檢查（Phase 0，避免多 Claude 撞車）
-動工前先確認「自己在哪、有沒有別人同時在改」（曾發生兩個 Claude 並行於主 repo 與 worktree 撞車）：
-```powershell
-git worktree list                        # 是否有兄弟 worktree（可能有另一個 Claude 在改）
-git fetch origin
-git log --all --oneline --decorate -15   # 全分支版圖
-git status --short                        # 自己的未提交變更
-```
-- **worktree 看不到主 repo 的未追蹤檔/未提交變更** → 在 worktree 工作時，必要時 `git -C <主 repo 路徑> status --short` 看主樹。
-- 事實以**程式碼**為準、不以文件為準（文件可能漂移）。
-- 全稱問題（「整個 / 所有 / 每個 / 介紹專案…」）回答第一句先講「**已查範圍 + 已知盲區**」再答內容。
-- 詳見 skill [`scope-and-environment-check`](.claude/skills/scope-and-environment-check/SKILL.md)。
-
----
-
-## 品質保證（QA）鐵則：假設一定有問題，去找出來
-
-**心態（最重要）**：你的第一次產出幾乎不可能完全正確。**QA 是「找出錯誤的過程」，不是「確認沒問題的步驟」。若第一次檢查沒發現任何問題，代表你檢查得還不夠仔細**——再查一輪。
-
-### A. 內容 QA
-- 逐項檢查是否有：**內容缺失、拼字錯誤、順序錯誤**。
-- 用範本 / 樣板時，檢查是否殘留**佔位符文字**（placeholder，如 `TODO`、`XXX`、`<...>`、「待補」、lorem）。用 `grep` 掃；**只要 grep 有結果，就先修掉再宣布完成**。
-
-### B. 視覺 / 交叉 QA（fresh eyes）
-- ⚠️ **即使只有兩三處內容修改，也要用子代理（sub-agent）做一次 fresh-eyes 檢查**。你一直盯著自己寫的東西，看到的是「**你期望的結果**」，不是「**實際存在的內容**」；子代理有全新視角，能抓到你的盲點。
-- 子代理審查時前提同上：**假設一定有問題、把問題找出來**；找不到就再查。
-
-### C. 找到錯誤 → 加倍驗證（N+1 不同方法）
-- 每找到 **N 個問題**，就再做 **N+1 個測試**，且**必須用不同方法 + 包含原方法重跑一次**（只用同一招容易漏同類錯）。
-- 「N」是廣義的：執行錯誤、認知遺漏、未驗證的假設、使用者的糾錯，都算。
-- 使用者糾錯一次 → 不只改當下：**回頭掃同類問題，並修補「規則本身」**讓同類錯不再發生。
+**檢查方式**：改完後執行 `grep -r "對應關鍵字" */CLAUDE.md`，確認跨檔描述一致、無殘留舊事實。
 
 ---
 
@@ -106,83 +63,21 @@ git status --short                        # 自己的未提交變更
 
 ## 任務完成記錄規則（log 資料夾）
 
-**每次完成任務後，必須在 `log/` 資料夾建立一筆記錄**，哪怕是小改動也要記。這是為了讓其他組員（或下次的 Claude）能快速了解「誰動了什麼、為什麼動、影響哪裡」，不必靠記憶或翻 git diff 猜測。
+**每次完成任務後，必須在 `log/` 建立記錄並納入同次 git commit。**
 
-### 檔案命名
-
-```
-log/YYYY-MM-DD_簡短描述.md
-```
-
-- 日期格式 ISO 8601（`2026-05-26`）
-- 描述用連字號分隔，中英文均可
-- 同一天多筆加後綴：`2026-05-26_fix-a.md`、`2026-05-26_fix-b.md`
-
-### 記錄格式
-
-```markdown
-# 簡短描述
-
-**日期**：YYYY-MM-DD  
-**操作者**：（誰執行，如：Claude / 組員 A）
-
-## 變更內容
-- 修改了哪個檔案的哪個函式 / 哪段邏輯
-- 新增了什麼
-
-## 原因
-使用者請求或 bug 描述（Why，不只是 What）
-
-## 影響範圍
-- 哪些功能受影響
-- 需要注意的副作用或相依關係
-
-## 驗證方式
-- 執行了哪些測試或手動確認步驟
-- 測試結果（pass / 手動確認 OK）
-```
-
-### 注意事項
-- log 檔案**必須納入同次 git commit**，與程式碼修改一起提交
-- 只記「做了什麼、為什麼、影響哪裡」，不要貼完整程式碼（程式碼在 git diff 裡）
-- 若任務未完成（中斷），記錄到目前為止的狀態與下一步
+- 命名：`log/YYYY-MM-DD_簡短描述.md`，同天多筆加後綴（`fix-a`、`fix-b`）
+- 記錄格式（變更內容 / 原因 / 影響範圍 / 驗證方式）詳見 [`docs/log-template.md`](docs/log-template.md)
 
 ---
 
-## 文件同步強制規則（Documentation Sync，優先順序最高）
+## 文件同步原則
 
-> **此規則的存在原因（真實事故）**：2026-06 發現 `ONBOARDING.md` 與 `CLAUDE.md` 同時嚴重漂移——新增了 `insights` app（第 8 個）、`/free-tools` 公開頁、`/api/insights/*` 端點、`/api/content/milestones/`，且 W4 已移除 jazzmin、測試數已增長，但兩份接手文件全部沒同步，仍寫「7 個 app / Jazzmin / 192 測試」。**過時的接手文件會讓下一個接手者（人或 Claude）依錯誤事實操作、甚至寫出錯誤的專題文件。**
+**核心原則：程式碼是唯一事實來源；文件漂移視同 bug，與程式 bug 同等嚴重。**
 
-**核心原則：程式碼是唯一事實來源（single source of truth）；文件必須與程式碼一致。文件漂移視同 bug，與程式 bug 同等嚴重。**
+改了程式 → 同次 commit 同步所有受影響文件；純文件改動 → 先 `Grep` / `Read` 驗證事實再動筆；改完後掃全檔確認無殘留舊事實。
 
-### 規則 A：改了程式 → 同次提交必須同步文件
-
-任何「會改變對外事實」的程式改動，**必須在同一次 commit 內**更新所有受影響的文件，不可留到下次。對應關係如下：
-
-| 你改了什麼（程式） | 必須同步更新的文件 |
-|---|---|
-| 新增 / 移除 Django app | `CLAUDE.md`（app 數量標題 + 職責邊界表 + API 路由地圖）、`ONBOARDING.md`（§4 目錄樹 + §5 app 表 + §7 API） |
-| 新增 / 改 / 刪 API 端點 | `CLAUDE.md` 後端 API 路由地圖、`ONBOARDING.md` §7 對應子表 |
-| 新增 / 改前端路由（含公開頁） | `CLAUDE.md` 前端路由地圖、`ONBOARDING.md` §6 路由地圖（+ 若是公開頁，§13 TopNav return null 清單） |
-| 改 Model 欄位 / 狀態機 / 列舉值 | `CLAUDE.md` 關鍵 Model 速查、`ONBOARDING.md` §8 資料模型、對應子目錄 `CLAUDE.md` |
-| 新增 / 移除 Python 或 Node 套件 | `CLAUDE.md`（技術棧相關段）、`ONBOARDING.md` §3 技術棧 + §2 安裝步驟 |
-| 改 `ARGUS_*` 等 settings 常數 | `ONBOARDING.md` 附錄 B、`CLAUDE.md` 對應段落 |
-| 新增 / 修改 Skill | `CLAUDE.md` 的 Skills 表格（並跑下方「MD 修改強制核對清單」） |
-| 測試數量變動 | 不要寫死精確數字於多處；以「約 N 項，以 `manage.py test apps` 實跑為準」描述，且全檔一致 |
-
-### 規則 B：純文件改動 → 動筆前必須對照程式碼驗證
-
-即使本次只改文件、不碰程式（例如撰寫專題文件、整理接手文件），**每一條寫進文件的事實都必須先用 `Grep` / `Read` 對照實際程式碼確認**，禁止憑記憶或沿用舊文件的數字／名稱。常見必查項：app 數量、端點清單、路由清單、套件是否還在 `pyproject.toml` / `package.json`、model 欄位、settings 常數。
-
-### 規則 C：完成後一致性檢查（不可跳過）
-
-改完文件後，用 `grep` 掃過全檔，確認沒有殘留的舊事實（例如改 app 數後 grep 是否仍有「7 個 app」；移除套件後 grep 是否仍有該套件名）。跨檔（`CLAUDE.md` ↔ `ONBOARDING.md` ↔ 子目錄 `CLAUDE.md`）對同一事實不可有兩種說法。修改規則／MD 後另須執行本檔下方的「MD 修改強制核對清單」。
-
-### 接手文件清單（須長期與程式碼保持一致）
-- `ONBOARDING.md` — 快速接手流程（事實密度最高，最容易漂移）
-- `CLAUDE.md`（本檔）— 架構表、API/路由地圖、Model 速查
-- `frontend/CLAUDE.md`、`backend/apps/billing/CLAUDE.md`、`backend/apps/scans/CLAUDE.md`
-- `Project_說明.md`、`開發計畫.md`
+詳細對應規則（規則 A/B/C）與接手文件清單見 [`docs/doc-sync-rules.md`](docs/doc-sync-rules.md)。
+MD 修改後必執行核對清單：[`docs/md-checklist.md`](docs/md-checklist.md)。
 
 ---
 
@@ -225,154 +120,20 @@ docker compose up -d --build frontend
 ### 整體資料流
 使用者在前端填網址 → `POST /api/scans/`（billing 預扣 coin）→ Celery worker 啟動 Playwright BFS 爬蟲 → 四維 scanner → 可選 Hermes-Agent → 結果寫 DB → 前端 polling 取 findings。
 
----
+### 子模組詳細資訊（修改前先查對應 CLAUDE.md）
 
-### 前端路由地圖（`frontend/src/App.jsx`）
-
-> 所有路由定義在 App.jsx 底部 `<Routes>` 區塊（約第 6460 行起）。
-
-| 路由 | 元件 / 頁面 | 說明 |
+| 模組 | 涵蓋內容 | 文件 |
 |---|---|---|
-| `/login` | `LoginPage` | Google OAuth 登入 |
-| `/project` | `ProjectPage` | 公開行銷頁：產品特色 |
-| `/free-tools` | `FreeToolsPage` | 公開免費分析（測速 / URL 風險 / 郵件風險），呼叫 `/api/insights/*` |
-| `/team` | `TeamPage` | 公開行銷頁：團隊介紹 |
-| `/purchase` | `PurchasePage` | 購買點數（3 步驟結帳 wizard） |
-| `/download` | `DownloadPage` | 下載報告 |
-| `/reviews` | `ReviewsPage` | 平台評論（公開） |
-| `/dashboard` | `DashboardPage` | 登入後預設落地頁（需登入；未匹配路由也導向此） |
-| `/scans` | `ScansPlaceholder` | 掃描列表（需登入） |
-| `/scans/:scanId` | `ScanDetailPage` | 掃描結果詳情 + findings |
-| `/scans/:scanId/topology` | `TopologyPage` | 網站拓樸圖（ReactFlow） |
-| `/history` | `HistoryPage` | 掃描歷史紀錄（需登入） |
-| `/billing` | `BillingPage` | 點數與帳務（需登入） |
-| `/settings` | `SettingsPage` | 個人設定（需登入） |
-| `/admin` | → redirect `/admin/overview` | staff 進入點 |
-| `/admin/overview` | `AdminOverviewPage` | 後台總覽 |
-| `/admin/users` | `AdminUsersPage` | 使用者管理 |
-| `/admin/users/:userId` | `AdminUserDetailPage` | 使用者詳情 + 點數調整 |
-| `/admin/transactions` | `AdminTransactionsPage` | 交易紀錄 |
-| `/admin/reviews` | `AdminReviewsPage` | 評論管理（可回覆） |
-| `/admin/scans` | `AdminScansPage` | 掃描任務管理 |
-| `/admin/scans/:scanId` | `AdminScanDetailPage` | 掃描詳情（管理員視角） |
-| `/admin/content` | `AdminContentPage` | CMS 內容管理 |
-| `/admin/plans` | `AdminPlansPage` | 定價方案管理 |
-| `/admin/audit-log` | `AdminAuditLogPage` | 操作紀錄（superuser 限定） |
-| `/admin/announcements` | `AdminAnnouncementsPage` | 公告管理 |
-| `*` | → redirect `/dashboard`（已登入）或 `/project`（未登入） | 未匹配路由 catch-all |
-
-**前端核心檔案：**
-
-| 檔案 | 職責 |
-|---|---|
-| `frontend/src/App.jsx` | 6500+ 行，所有頁面元件與路由定義全在此 |
-| `frontend/src/api.js` | Axios instance，統一處理 base URL 與 CSRF token |
-| `frontend/src/store.js` | Zustand 全域狀態（user、wallet 等） |
-| `frontend/src/main.jsx` | React entry point，Provider 掛載 |
-| `frontend/src/styles.css` | 全域樣式（含 admin 深色 sidebar 變數） |
-
----
-
-### 後端 API 路由地圖（`backend/config/urls.py`）
-
-| URL 前綴 | Django App | 主要端點 |
-|---|---|---|
-| `/api/auth/` | `accounts` | `google/`（OAuth）、`register/`、`email-login/`、`me/`（GET/PATCH）、`change-password/`（dev-login 已移除） |
-| `/api/scans/` | `scans` | `scans/`（CRUD + `status/`/`cancel/`/`report/`/`topology/`/`screenshot`）、`estimate/`、`pages/`、`findings/`、`dashboard/`、`history/`、`audit/`、`findings-by-category/` |
-| `/api/billing/` | `billing` | `wallet/`、`plans/`、`purchase/`、`orders/` |
-| `/api/reviews/` | `reviews` | `reviews/`（CRUD + thread） |
-| `/api/content/` | `content` | `features/`、`team/`、`releases/`、`milestones/`（公開 CMS） |
-| `/api/insights/` | `insights` | `speed-test/`、`phishing-url/`、`phishing-email/`、`quick-scan/`（公開免費工具，AllowAny、不扣 coin） |
-| `/api/admin/` | `admin_api` | `me/`、`overview/`、`dashboard/`、`users/`、`transactions/`、`scans/`、`reviews/`、`orders/`、`audit-log/`、`announcements/*`、`cms/*` |
-| `/` ～ `/*` | SPA fallback | 回傳 `frontend/dist/index.html`，由 React Router 處理（含已移除的 `/django-admin/`） |
-
----
-
-### 關鍵 Model 速查
-
-**ScanJob**（`apps/scans/models.py`）
-```
-狀態機：queued → crawling → scanning → [agent_testing] → completed
-                                                        ↘ failed / cancelled
-欄位重點：original_url、status、scan_mode（passive/active）、
-         max_depth、max_pages、progress（JSON 即時進度）、
-         overall_score、category_scores（JSON）、top_actions（JSON）
-```
-
-**CoinWallet**（`apps/billing/models.py`）
-```
-balance（目前餘額）、total_purchased_ntd、total_scans_used
-last_bonus_year / last_bonus_month（月贈點冪等欄位）
-→ 所有寫入必須經過 billing/services.py，禁止直接 .save()
-```
-
-**CoinTransaction**（`apps/billing/models.py`）
-```
-wallet FK、amount（正=入帳、負=扣款）、balance_after（異動後餘額快照）
-kind（monthly_bonus / purchase / scan_hold / scan_refund / admin_adjust）
-scan_job FK（nullable）、plan FK（nullable）、admin_actor FK（nullable）、note
-→ 審計不可改；補正交易用 kind=admin_adjust（不是 type，也沒有 manual 值）
-```
-
-**AdminAuditLog**（`apps/admin_api/models.py`）
-```
-admin_actor FK（staff user）、target_user FK（nullable）、
-action（coin_adjust / review_reply / review_delete / user_toggle_staff / other）、
-target_object_repr、payload（JSON）、created_at
-→ 透過 log_admin_action() 集中寫入（調整點數、回覆評論等）
-```
-
-**PlatformReview**（`apps/reviews/models.py`）
-```
-user（一人一則，OneToOne）、rating（1-5）、comment（TextField）、is_featured
-→ thread 回覆是獨立 model ReviewMessage（review FK、author、is_admin、body、image）
-→ 沒有 content / images(JSON) / parent 欄位（勿沿用舊敘述）
-→ 「有幫助」標記：ReviewHelpful / ReviewMessageHelpful（per user 唯一）
-```
-
-### Node 22 portable（build 必用）
-系統 Node 是 v24.13（`C:\Program Files\nodejs`），但 v24 + Rollup 4.x 在 Windows 會 crash（`STATUS_STACK_BUFFER_OVERRUN`，exit `-1073740791`）。已將 Node v22.22.3 解壓到 `D:\node22`（portable，未動 PATH 也未動系統 Node）。
-
-- **build**：用 `frontend/build-node22.ps1`（已自動切 `D:\node22` 走完 build）
-- **dev**：`npm.cmd run dev` 兩種 Node 都能跑（dev 不經 Rollup 打包）
-- **重灌 node_modules**：請用 `D:\node22\npm.cmd install`
-- **未安裝環境**：下載 `https://nodejs.org/dist/latest-v22.x/node-v22.22.3-win-x64.zip` 解壓到 `D:\node22` 即可，不需 admin 也不需改環境變數
-
-### 8 個 Django App 的職責邊界
-
-| app | 職責 | 最重要的檔案 |
-|---|---|---|
-| `accounts` | User model（繼承 AbstractUser）、Google OAuth、Email 註冊/登入、改密碼（dev-login 後門已移除） | `views.py` |
-| `scans` | **核心**：ScanJob 狀態機、Playwright 爬蟲、四維 scanner、Word 報告、合作式 cancel | `tasks.py` `crawler.py` `scanners.py` |
-| `agent` | Phase 2 Hermes-Agent：provider chain + tool calling loop（預設 `ARGUS_AGENT_ENABLED=false`） | `providers.py` `loop.py` `runner.py` |
-| `billing` | 點數錢包；**`services.py` 是 wallet 唯一寫入入口**，禁止繞過直接改 model | `services.py` `signals.py` |
-| `reviews` | 平台評論（一人一則 + thread + 圖片） | `models.py` `views.py` |
-| `admin_api` | React `/admin/*` 用的 REST API + AdminAuditLog | `views.py` `permissions.py` |
-| `content` | CMS（ProjectFeature / TeamMember / ProjectMilestone / AppRelease），公開 API | `models.py` `admin.py` |
-| `insights` | 公開免費分析工具（測速 / 釣魚 URL / 釣魚郵件），AllowAny、不扣 coin、本機特徵分類器；供公開頁 `/free-tools` 使用 | `views.py` `analyzers.py` |
-
-### 前端：巨型單檔架構
-`frontend/src/App.jsx` 是 **6500+ 行的單檔**，包含所有頁面與元件。修改前必須先 grep 定位，不要從頭瀏覽。路由都在 App.jsx 底部 `<Routes>` 區塊。
-
-### Billing 的冪等安全閘
-`billing/services.py` 所有函式都用 `select_for_update` + `transaction.atomic` + 冪等判斷（e.g. `last_bonus_year/month`）。掃描取消或失敗時 worker 和 cancel API 都會呼叫 `refund_full_for_scan`，兩邊都呼叫是安全的。
+| 前端 | 路由地圖、核心檔案、元件/樣式規範 | [`frontend/CLAUDE.md`](frontend/CLAUDE.md) |
+| 後端整體 | API 路由地圖、Model 速查、App 職責、管理介面 | [`backend/CLAUDE.md`](backend/CLAUDE.md) |
+| 掃描引擎 | ScanJob 狀態機、Playwright、取消機制、Coin 扣點 | [`backend/apps/scans/CLAUDE.md`](backend/apps/scans/CLAUDE.md) |
+| 計費系統 | services.py 函式、冪等機制、kind 枚舉 | [`backend/apps/billing/CLAUDE.md`](backend/apps/billing/CLAUDE.md) |
 
 ### Django 直接 serve 前端
 開發時不需要另開 Vite dev server，Django `runserver` 透過 `config/urls.py` 的 SPA fallback 直接服務 `frontend/dist`。**必須先 build 前端**，改了 React code 要重 build 才會生效。
 
-### Playwright 瀏覽器路徑
-Chromium 必須裝在專案 `.ms-playwright`，不可污染全域：
-```powershell
-$env:PLAYWRIGHT_BROWSERS_PATH=".ms-playwright"; uv run playwright install chromium
-```
-
-### 管理介面（React /admin 為唯一後台）
-- **前台**：`http://127.0.0.1:8000/` — 一般使用者（首次進站播粒子過場動畫，localStorage `argus_intro_seen`）
-- **React 後台**：`/admin/*` — staff 進入（`IsAdminUser`），superuser 多看「操作紀錄／公告管理」
-- **Django Admin 已移除**：原 `/django-admin/` superuser 後門已於本次整併移除；授予 staff/superuser 改用 `manage.py seed_admin`（或 Django shell）。管理員登入改走前台 email 登入。
-
-### 掃描 Coin 扣點流程
-建立掃描 → `hold_for_scan(max_pages × 10)` → worker 完成 → `settle_scan_actual(actual_pages × 10)` 退差 → 失敗/取消 → `refund_full_for_scan` 全退。
+### Node 22 portable（build 必用）
+⚠ 系統 Node v24 + Rollup 4.x 在 Windows 會 crash，build 一律用 `frontend/build-node22.ps1`（D:\node22，v22.22.3）。詳細說明見 [`docs/node22-guide.md`](docs/node22-guide.md)。
 
 ---
 
@@ -491,52 +252,18 @@ $env:PLAYWRIGHT_BROWSERS_PATH=".ms-playwright"; uv run playwright install chromi
 | Flutter 修改 | `flutter analyze`（靜態檢查）+ 提醒實機測試 |
 | git 操作 | 確認 status / log 符合預期後才執行 |
 | 設定檔修改 | 重新載入並確認生效 |
-| **cloudflared `config.yml` 修改** | **見下方「cloudflared 設定檔雙路徑陷阱」,絕對不要只改 user 版** |
-| 規則/MD 檔案修改 | 執行下方「MD 修改強制核對清單」，每項逐一確認 |
+| cloudflared `config.yml` 修改 | 見 [`docs/cloudflared-guide.md`](docs/cloudflared-guide.md)，絕對不要只改 user 版 |
+| 規則/MD 檔案修改 | 執行 [`docs/md-checklist.md`](docs/md-checklist.md)，每項逐一確認 |
 
 ---
 
-## ⚠ cloudflared 設定檔雙路徑陷阱（這台機器特有，絕對不要再忘）
+## 特定操作指南（遇到時再查）
 
-**這台機器的 `cloudflared` 是 Windows service,真正讀的 `config.yml` 是 SYSTEM 帳號路徑**：
-
-```
-C:\Windows\System32\config\systemprofile\.cloudflared\config.yml
-```
-
-**不是** `C:\Users\ntub\.cloudflared\config.yml`！只改 user 版的 config.yml 完全沒效,service 永遠讀不到。
-
-確認真實路徑:
-```powershell
-sc.exe qc Cloudflared   # 看 BINARY_PATH_NAME 的 --config 參數
-```
-
-### 強制流程:改 cloudflared ingress 一律走以下步驟
-
-1. **編輯 user 版**(IDE 友善):`C:\Users\ntub\.cloudflared\config.yml`
-2. **UAC 提升,把 user 版 copy 到 system 版**:
-   ```powershell
-   Copy-Item C:\Users\ntub\.cloudflared\config.yml `
-             C:\Windows\System32\config\systemprofile\.cloudflared\config.yml -Force
-   ```
-3. **UAC 提升,重啟 service**:
-   ```powershell
-   sc.exe stop Cloudflared
-   Start-Sleep 3
-   taskkill /IM cloudflared.exe /F
-   sc.exe start Cloudflared
-   ```
-4. **驗證 ingress 真的生效**(必做):
-   - `curl.exe -sI http://<hostname>/` 確認**不是** cloudflared 的 catch-all 404
-   - cloudflared 自家 404 特徵:`Connection: keep-alive` 但**沒有** `Server: cloudflare`
-   - 正常經過 Cloudflare 邊緣的回應(200 / 後端 404 都算)會帶 `Server: cloudflare` + `CF-RAY`
-
-### cloudflared CLI 跨 zone 也是地雷
-
-`cloudflared tunnel route dns <id> <hostname>` 對**非 origincert 對應 zone** 的 hostname 會 silently 把它 append 到預設 zone(不會報錯,但 DNS 建到錯位的 zone)。
-
-例子:origincert = `aiglasses.qzz.io`,跑 `cloudflared tunnel route dns ... xn--gst.tw` → 結果建了 `xn--gst.tw.aiglasses.qzz.io` CNAME,不是在 巧.tw zone 上!
-
-**跨 zone 建 DNS → 一律去 Cloudflare Dashboard 手動加 CNAME**,目標 `<tunnel-uuid>.cfargotunnel.com`,Proxy 橘雲開。**永遠不要對跨 zone hostname 跑 `cloudflared tunnel route dns`。**
-
-跑了之後也要看 log 訊息「Added CNAME <full-hostname>」確認 hostname 是預期值,別只看到 "Added" 就放心。
+| 場景 | 文件 |
+|---|---|
+| cloudflared ingress 設定、跨 zone DNS | [`docs/cloudflared-guide.md`](docs/cloudflared-guide.md) |
+| RTK 使用規則（token 壓縮） | [`docs/rtk-guide.md`](docs/rtk-guide.md) |
+| MD / 文件修改核對清單 | [`docs/md-checklist.md`](docs/md-checklist.md) |
+| 文件同步詳細規則 A/B/C | [`docs/doc-sync-rules.md`](docs/doc-sync-rules.md) |
+| log 記錄格式範本 | [`docs/log-template.md`](docs/log-template.md) |
+| Node 22 portable 詳細安裝說明 | [`docs/node22-guide.md`](docs/node22-guide.md) |
