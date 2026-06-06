@@ -1206,8 +1206,9 @@ function ScreenshotCanvas({ scan, targetPage, findings, selectedFinding, onSelec
   useEffect(() => {
     let objectUrl = "";
     async function loadScreenshot() {
+      // 立即清除舊截圖，避免 revoke 後的失效 URL 讓容器高度歸零，導致 highlight 不可見
+      setImageUrl("");
       if (!scan || !targetPage) {
-        setImageUrl("");
         return;
       }
       try {
@@ -1219,7 +1220,6 @@ function ScreenshotCanvas({ scan, targetPage, findings, selectedFinding, onSelec
         setImageUrl(objectUrl);
       } catch {
         // 該頁面尚未產生截圖（爬蟲還沒跑到、或被 robots 擋）靜默失敗
-        setImageUrl("");
       }
     }
     loadScreenshot();
@@ -1581,10 +1581,14 @@ function FindingsWorkspace({ scan }) {
           </button>
           {pages.map((page) => {
             const isHome = page.depth === 0;
+            const urlPath = (page.url || "")
+              .replace(scan.origin, "")
+              .split("?")[0]
+              .replace(/^\//, "");
             const label = isHome
               ? "首頁"
-              : page.title?.slice(0, 14) ||
-                page.url?.replace(scan.origin, "").slice(0, 18) ||
+              : urlPath.slice(0, 18) ||
+                page.title?.slice(0, 16) ||
                 `Page ${page.id}`;
             const cnt = findingsPerPage.perPage.get(page.id) || 0;
             return (
@@ -1661,28 +1665,34 @@ function FindingsWorkspace({ scan }) {
             )}
           </div>
           <div className="flex gap-2">
-            <select
-              className="input"
-              value={categoryFilter}
-              onChange={(event) => setCategoryFilter(event.target.value)}
-            >
-              {CATEGORY_FILTERS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <select
-              className="input"
-              value={severityFilter}
-              onChange={(event) => setSeverityFilter(event.target.value)}
-            >
-              {SEVERITY_FILTERS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+            <label className="flex flex-1 flex-col gap-1">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">分類</span>
+              <select
+                className="input"
+                value={categoryFilter}
+                onChange={(event) => setCategoryFilter(event.target.value)}
+              >
+                {CATEGORY_FILTERS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-1 flex-col gap-1">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">嚴重度</span>
+              <select
+                className="input"
+                value={severityFilter}
+                onChange={(event) => setSeverityFilter(event.target.value)}
+              >
+                {SEVERITY_FILTERS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
           <FindingsGroupList
             findings={filteredFindings}
