@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { GoogleLogin } from "@react-oauth/google";
 import {
+  Link,
   Navigate,
   NavLink,
   Outlet,
@@ -7177,6 +7178,7 @@ function AppShell() {
       {showTopNav && <TopNav />}
       <main className={`argus-main ${accessToken && showTopNav ? "with-nav" : ""} ${isAdmin ? "is-admin" : ""} ${isPublic ? "is-public" : ""}`}>
         <Routes>
+          <Route path="/" element={<Navigate to={accessToken ? "/dashboard" : "/project"} replace />} />
           <Route path="/login" element={<LoginPage />} />
           <Route element={<PublicLayout />}>
             <Route path="/project" element={<ProjectPage />} />
