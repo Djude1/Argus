@@ -1582,10 +1582,14 @@ function FindingsWorkspace({ scan }) {
           </button>
           {pages.map((page) => {
             const isHome = page.depth === 0;
+            const urlPath = (page.url || "")
+              .replace(scan.origin, "")
+              .split("?")[0]
+              .replace(/^\//, "");
             const label = isHome
               ? "首頁"
-              : page.title?.slice(0, 14) ||
-                page.url?.replace(scan.origin, "").slice(0, 18) ||
+              : urlPath.slice(0, 18) ||
+                page.title?.slice(0, 16) ||
                 `Page ${page.id}`;
             const cnt = findingsPerPage.perPage.get(page.id) || 0;
             return (
