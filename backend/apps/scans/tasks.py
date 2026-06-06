@@ -199,6 +199,48 @@ def run_scan_job(self, scan_job_id: int) -> dict:
             append_log(scan_job_id, f"Nuclei 略過（{exc.__class__.__name__}）", level="warn")
             nuclei_findings = []
 
+        # 若 Nuclei 無發現，且 Katana 偵測到已知 WAF / CDN，
+        # 新增 info finding 向使用者說明探針遭攔截、保護機制有效
+        if not nuclei_findings and katana_tech:
+            _WAF_KEYWORDS = {"cloudflare", "fastly", "akamai", "aws waf", "imperva", "sucuri", "f5"}
+            detected_wafs = [t for t in katana_tech if any(w in t.lower() for w in _WAF_KEYWORDS)]
+            if detected_wafs:
+                waf_names = "、".join(detected_wafs)
+                scanned_count = len(crawled_urls) + 1  # entry URL + crawled
+                nuclei_findings = [{
+                    "category": "security",
+                    "severity": "info",
+                    "title": f"Nuclei 資安掃描受 WAF / CDN 保護攔截（{waf_names}）",
+                    "description": (
+                        f"偵測到 {waf_names} 等 WAF / CDN 保護機制，"
+                        f"Nuclei 對 {scanned_count} 個頁面發出的主動探針請求可能被攔截，"
+                        "導致掃描回傳 0 項發現。"
+                        "這表示您的網站已部署有效的入侵防護，屬正向安全指標。"
+                    ),
+                    "remediation": (
+                        "此為資訊性提示，無需修復。"
+                        "如需完整弱點掃描，建議在 WAF 規則中加入可信掃描來源 IP 的例外，"
+                        "或在 staging 環境（無 WAF）執行深度資安稽核。"
+                    ),
+                    "evidence": (
+                        f"偵測技術棧：{', '.join(katana_tech)}；"
+                        f"Nuclei 掃描 {scanned_count} 個 URL，回傳 0 項發現"
+                    ),
+                    "selector": "",
+                    "bounding_box": None,
+                    "impact_area": "vulnerability",
+                    "confidence": 0.9,
+                    "priority_score": 10.0,
+                    "ai_handoff_prompt": (
+                        f"網站部署了 {waf_names} WAF / CDN 保護，Nuclei 資安探針被攔截。"
+                        "這是良好的安全措施。建議定期在授權環境下進行深度內部安全掃描。"
+                    ),
+                }]
+                append_log(
+                    scan_job_id,
+                    f"偵測到 WAF 保護（{waf_names}），Nuclei 探針可能被攔截，已新增說明 finding",
+                )
+
         for finding in katana_findings + nuclei_findings:
             Finding.objects.create(scan_job=scan_job, page=None, **finding)
         all_findings.extend(katana_findings + nuclei_findings)
