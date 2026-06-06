@@ -5,6 +5,12 @@ import { api, setAccessToken } from "./api";
 const storedToken = window.localStorage.getItem("argus_access_token");
 setAccessToken(storedToken);
 
+const storedTheme = (() => {
+  try { return window.localStorage.getItem("argus_theme") === "light" ? "light" : "dark"; }
+  catch { return "dark"; }
+})();
+try { document.documentElement.setAttribute("data-theme", storedTheme); } catch { /* 無 DOM 環境 */ }
+
 export const useArgusStore = create((set, get) => ({
   accessToken: storedToken,
   // wallet 為 null 代表尚未載入；登入後 fetchWallet 會填上
@@ -24,6 +30,14 @@ export const useArgusStore = create((set, get) => ({
   replayIntro: () => {
     try { window.localStorage.removeItem("argus_intro_seen"); } catch { /* 無痕模式 */ }
     set({ introSeen: false });
+  },
+  // 雙色主題（dark 預設 / light）；data-theme 設在 <html>，公開頁 shell 套用 light
+  theme: storedTheme,
+  toggleTheme: () => {
+    const next = get().theme === "light" ? "dark" : "light";
+    try { window.localStorage.setItem("argus_theme", next); } catch { /* 無痕 */ }
+    try { document.documentElement.setAttribute("data-theme", next); } catch { /* 無 DOM */ }
+    set({ theme: next });
   },
   setToken: (token) => {
     if (token) {
