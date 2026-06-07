@@ -75,8 +75,9 @@ def overview(request):
         .order_by("-created_at")[:5]
     )
     recent_scans = (
-        ScanJob.objects.select_related("user").order_by("-created_at")[:5]
+        ScanJob.objects.select_related("user")
         .annotate(findings_count=Count("findings"), pages_count=Count("pages"))
+        .order_by("-created_at")[:5]
     )
 
     total_orders = PurchaseOrder.objects.count()

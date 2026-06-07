@@ -548,7 +548,7 @@ function NavActions() {
       >
         <span className="coin-chip-icon" aria-hidden="true">💎</span>
         <span className="coin-chip-value">
-          {balance === undefined ? "—" : balance.toLocaleString()}
+          {balance == null ? "—" : balance.toLocaleString()}
         </span>
         <span className="coin-chip-unit">coin</span>
       </button>
@@ -3728,7 +3728,7 @@ function ReviewsPage() {
     <section className="panel space-y-4">
       <div>
         <p className="eyebrow">使用者評論</p>
-        <h2 className="section-title">大家對 Argus 的評價</h2>
+        <h1 className="section-title">大家對 Argus 的評價</h1>
         <p className="mt-1 text-xs text-slate-500">
           星等一人只能評一次（送出後鎖定）；後續可在留言區補充意見、附上問題照片，與管理員對話。
         </p>
@@ -5330,7 +5330,7 @@ function AdminOverviewPage() {
   if (!data || !dash) return <div className="admin-loading">載入中…</div>;
   const t = data.totals;
   const providerMaxTokens = Math.max(
-    ...dash.provider_breakdown.map((r) => r.tokens), 1,
+    ...(dash.provider_breakdown || []).map((r) => r.tokens), 1,
   );
 
   return (
