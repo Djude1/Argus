@@ -3440,7 +3440,17 @@
 
   .public-team-grid-pro {
     @apply grid gap-6;
-    grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  @media (max-width: 1024px) {
+    .public-team-grid-pro {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+  @media (max-width: 560px) {
+    .public-team-grid-pro {
+      grid-template-columns: minmax(0, 1fr);
+    }
   }
   .public-team-card-pro {
     @apply rounded-2xl p-6 transition;

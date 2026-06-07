@@ -401,10 +401,14 @@ function CrawlingAnimation({
 
   // ETA：基於當前 phase 的 elapsed × (total / done - 1)
   let etaSec = null;
+  let etaPending = false;
   if (hasProgress && done > 0 && done < total && progress?.phase_started_at) {
     const phaseStart = new Date(progress.phase_started_at).getTime();
     const phaseElapsed = Math.max(1, Math.floor((Date.now() - phaseStart) / 1000));
     etaSec = Math.max(0, Math.round(phaseElapsed * (total / done - 1)));
+  } else if (hasProgress && done === 0) {
+    // 剛開始掃、還沒抓到第一頁時：avg ≈ 2 秒/頁的粗估，先給使用者一個範圍
+    etaPending = true;
   }
 
   return (
@@ -433,6 +437,10 @@ function CrawlingAnimation({
           {etaSec !== null ? (
             <span className="crawl-meta-chip is-eta">
               剩餘約 <strong>{formatMMSS(etaSec)}</strong>
+            </span>
+          ) : etaPending ? (
+            <span className="crawl-meta-chip is-eta">
+              剩餘時間 <strong>估算中…</strong>
             </span>
           ) : null}
         </div>
@@ -651,6 +659,14 @@ function ScanJobForm({ onCreated }) {
       clearScanDraft();
       fetchWallet();
       onCreated(response.data);
+      // 保險：直接 navigate 到新掃描的詳情頁。原本依賴 parent ScanLayout 的
+      // handleScanCreated 內 navigate，但實機測試發現 setState batch 之後
+      // 那個 navigate 偶爾不生效（URL 不變），導致使用者按了「建立掃描」後
+      // 還要手動點列表才能進詳情頁。ScanJobForm 自己持有 useNavigate（604 行），
+      // 直接呼叫一次最可靠。
+      if (response.data?.id) {
+        navigate(`/scans/${response.data.id}`);
+      }
     } catch (errorResponse) {
       setError(apiErrorMessage(errorResponse, "建立掃描失敗。"));
     } finally {
@@ -662,11 +678,13 @@ function ScanJobForm({ onCreated }) {
     if (!url || scope === "single") return;
     setEstimating(true);
     setEstimate(null);
+    setError("");
     try {
       const res = await api.post("/estimate/", { url });
       setEstimate(res.data);
-    } catch {
-      setEstimate({ estimated_pages: "?", estimated_cost: "?", confidence: "low" });
+    } catch (err) {
+      setError(apiErrorMessage(err, "預估費用失敗，請確認網址格式正確、可公開連線。"));
+      setEstimate(null);
     } finally {
       setEstimating(false);
     }
@@ -4181,19 +4199,57 @@ function ProjectPage() {
         </div>
         <div className="public-hero-content">
           <img src={brandLogo} className="public-hero-logo" alt="ARGUS" />
-          <span className="public-hero-eyebrow">PROJECT · 專案介紹</span>
+          <span className="public-hero-eyebrow">掃描 · 洞察 · 證據</span>
           <h1 className="public-hero-title">
             一鍵看見<span className="hero-grad">網站的所有問題</span>
           </h1>
           <p className="public-hero-sub">
-            Argus 整合全站爬蟲、四維靜態掃描與 LLM Agent 行為測試，
-            為「你授權的網站」產出可互動報告與管理層 Word 文件，
-            並輸出結構化問題 Prompt 給你帶去 ChatGPT / Claude 取得修補方向。
+            把網站問題整理成可以執行的改善順序。
+            整合全站爬蟲、四維靜態掃描與 LLM Agent 行為測試，
+            為你授權的網站產出可互動報告與 Word 文件，
+            並輸出結構化 Prompt 帶去 ChatGPT / Claude 取得修補方向。
           </p>
           <div className="public-hero-actions">
             <NavLink to="/login" className="public-cta-primary">登入進行詳細檢查 →</NavLink>
             <NavLink to="/download" className="public-cta-ghost">下載 PWA</NavLink>
           </div>
+        </div>
+      </section>
+
+      <section className="public-section">
+        <header className="public-section-head">
+          <h2>安全邊界</h2>
+          <p>不是文宣口號，每一項都對應實際程式碼</p>
+        </header>
+        <div className="public-feature-grid">
+          <article className="public-feature-card">
+            <div className="public-feature-icon">🔐</div>
+            <h3 className="public-feature-title">授權確認</h3>
+            <p className="public-feature-desc">
+              每次任務記錄 IP、時間、User-Agent 與授權勾選狀態；第三方或敏感網域要求二次確認。
+            </p>
+          </article>
+          <article className="public-feature-card">
+            <div className="public-feature-icon">🌐</div>
+            <h3 className="public-feature-title">同網域邏輯</h3>
+            <p className="public-feature-desc">
+              爬蟲與 finding 證據只限授權目標的同網域頁面，不會跨域追蹤或污染他站。
+            </p>
+          </article>
+          <article className="public-feature-card">
+            <div className="public-feature-icon">🛡️</div>
+            <h3 className="public-feature-title">SSRF 防護（已實作）</h3>
+            <p className="public-feature-desc">
+              阻擋 localhost、私網段、雲端 metadata、IP 字面，且逐跳 redirect 都重新檢查目標主機。
+            </p>
+          </article>
+          <article className="public-feature-card">
+            <div className="public-feature-icon">👀</div>
+            <h3 className="public-feature-title">預設被動模式</h3>
+            <p className="public-feature-desc">
+              Phase 1 不做破壞性或主動式漏洞攻擊；主動模式需額外勾選且記入稽核軌跡。
+            </p>
+          </article>
         </div>
       </section>
 
@@ -4985,7 +5041,7 @@ function DownloadPage() {
             <span className="hero-grad">隨身</span>使用 Argus
           </h1>
           <p className="public-hero-sub">
-            PWA（漸進式網頁應用）— 一鍵安裝到主畫面，像 App 一樣開啟，支援離線瀏覽既有報告。
+            Argus 是 PWA（漸進式網頁應用），無需透過 App Store — 直接從瀏覽器加到主畫面，像 App 一樣開啟，支援離線瀏覽既有報告。
           </p>
           <div className="public-hero-actions">
             {installed ? (
@@ -5000,7 +5056,7 @@ function DownloadPage() {
                 className="public-cta-primary public-install-cta"
                 onClick={() => document.getElementById("install-guide")?.scrollIntoView({ behavior: "smooth" })}
               >
-                ⬇ 下載 / 安裝 App
+                📖 查看安裝步驟
               </button>
             )}
             {!installed && latest?.download_url && (
