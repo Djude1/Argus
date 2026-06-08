@@ -99,3 +99,42 @@ class TestSslScanner(TestCase):
 
     def test_verify_error_unknown_returns_empty(self):
         self.assertEqual(ssl_scanner._eval_cert_verify_error("some other error"), [])
+
+
+from apps.scans.security import cookie_scanner
+
+
+class TestCookieScanner(TestCase):
+    def test_missing_secure_on_https_is_medium(self):
+        headers = {"set-cookie": "sid=abc; Path=/; HttpOnly"}
+        findings = cookie_scanner.analyze_cookies(headers, "https://example.com")
+        rules = {f["rule_id"]: f for f in findings}
+        self.assertIn("cookie-no-secure", rules)
+        self.assertEqual(rules["cookie-no-secure"]["severity"], "medium")
+
+    def test_missing_httponly_is_low(self):
+        headers = {"set-cookie": "sid=abc; Path=/; Secure"}
+        findings = cookie_scanner.analyze_cookies(headers, "https://example.com")
+        rules = {f["rule_id"]: f for f in findings}
+        self.assertEqual(rules["cookie-no-httponly"]["severity"], "low")
+
+    def test_samesite_none_without_secure_is_medium(self):
+        headers = {"set-cookie": "sid=abc; SameSite=None"}
+        findings = cookie_scanner.analyze_cookies(headers, "https://example.com")
+        rules = {f["rule_id"] for f in findings}
+        self.assertIn("cookie-samesite-none", rules)
+
+    def test_secure_httponly_strict_no_findings(self):
+        headers = {"set-cookie": "sid=abc; Secure; HttpOnly; SameSite=Strict"}
+        self.assertEqual(cookie_scanner.analyze_cookies(headers, "https://example.com"), [])
+
+    def test_no_set_cookie_returns_empty(self):
+        self.assertEqual(cookie_scanner.analyze_cookies({}, "https://example.com"), [])
+
+    def test_multiple_cookies_split_by_newline(self):
+        headers = {"set-cookie": "a=1; HttpOnly\nb=2; Secure"}
+        findings = cookie_scanner.analyze_cookies(headers, "https://example.com")
+        self.assertGreaterEqual(len(findings), 2)
+
+    def test_bad_input_returns_empty(self):
+        self.assertEqual(cookie_scanner.analyze_cookies(None, "https://example.com"), [])
