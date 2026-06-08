@@ -29,7 +29,7 @@ def _eval_headers(headers: dict, url: str) -> list[dict]:
             out.append(make_finding(
                 category="security", severity="high", rule_id="header-cors-credentials",
                 title="CORS 萬用字元搭配 credentials（高風險）",
-                description="Access-Control-Allow-Origin: * 同時允許 credentials，等同對任意來源開放憑證。",
+                description="ACAO: * 同時允許 credentials，等同對任意來源開放憑證。",
                 remediation="勿同時使用 * 與 Allow-Credentials；改為白名單來源。",
                 evidence="ACAO: *; ACAC: true", impact_area="vulnerability",
             ))
@@ -46,7 +46,7 @@ def _eval_headers(headers: dict, url: str) -> list[dict]:
         out.append(make_finding(
             category="security", severity="medium", rule_id="header-csp-unsafe",
             title="CSP 含 unsafe-inline / unsafe-eval（品質不佳）",
-            description="Content-Security-Policy 使用 unsafe-inline 或 unsafe-eval，削弱 XSS 防護。",
+            description="CSP 使用 unsafe-inline 或 unsafe-eval，削弱 XSS 防護。",
             remediation="移除 unsafe-inline/unsafe-eval，改用 nonce 或 hash。",
             evidence=csp[:500], impact_area="vulnerability",
         ))

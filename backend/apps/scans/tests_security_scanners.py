@@ -5,6 +5,13 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from apps.scans.models import Finding, ScanJob
+from apps.scans.security import (
+    cookie_scanner,
+    header_scanner,
+    owasp_mapper,
+    ssl_scanner,
+)
+from apps.scans.serializers import FindingSerializer
 
 
 def _make_scan():
@@ -40,12 +47,10 @@ class TestFindingOwaspFields(TestCase):
         self.assertEqual(finding.cwe_id, "CWE-200")
 
 
-from apps.scans.security import ssl_scanner
-
-
 class TestSslScanner(TestCase):
     def test_cert_expiry_high_when_within_30_days(self):
-        import ssl as _ssl, time
+        import ssl as _ssl
+        import time
         not_after = _ssl.cert_time_to_seconds  # noqa: F841 — 確認 API 存在
         future = time.strftime("%b %d %H:%M:%S %Y GMT", time.gmtime(time.time() + 20 * 86400))
         findings = ssl_scanner._eval_cert_expiry(future)
@@ -101,9 +106,6 @@ class TestSslScanner(TestCase):
         self.assertEqual(ssl_scanner._eval_cert_verify_error("some other error"), [])
 
 
-from apps.scans.security import cookie_scanner
-
-
 class TestCookieScanner(TestCase):
     def test_missing_secure_on_https_is_medium(self):
         headers = {"set-cookie": "sid=abc; Path=/; HttpOnly"}
@@ -138,9 +140,6 @@ class TestCookieScanner(TestCase):
 
     def test_bad_input_returns_empty(self):
         self.assertEqual(cookie_scanner.analyze_cookies(None, "https://example.com"), [])
-
-
-from apps.scans.security import header_scanner
 
 
 class TestHeaderScanner(TestCase):
@@ -186,9 +185,6 @@ class TestHeaderScanner(TestCase):
         self.assertEqual(header_scanner.analyze_headers(None), [])
 
 
-from apps.scans.security import owasp_mapper
-
-
 class TestOwaspMapper(TestCase):
     def test_tag_security_finding_fills_fields(self):
         finding = {"category": "security", "rule_id": "ssl-weak-cipher"}
@@ -229,9 +225,6 @@ class TestOwaspMapper(TestCase):
         owasp_mapper.backfill(scan)
         f.refresh_from_db()
         self.assertEqual(f.owasp_category, "")
-
-
-from apps.scans.serializers import FindingSerializer
 
 
 class TestFindingSerializerOwasp(TestCase):
