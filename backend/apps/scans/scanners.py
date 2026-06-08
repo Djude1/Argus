@@ -21,9 +21,20 @@ CREDIT_CARD_PATTERN = re.compile(r"(?<!\d)(?:\d[\s\-]?){12,18}\d(?!\d)")
 
 # B1: 移除 SVG 元素（雷達圖等動態 SVG 內 polygon points / path d 屬性的浮點座標
 # 數字片段巧合通過 Luhn 會被誤判為卡號，已實證 https://camb.xn--gst.tw 雷達圖案例）。
+# 用非貪婪 + DOTALL，能抓含巢狀子元素的整段 <svg>...</svg>。
 _HTML_SVG_STRIP = re.compile(r"<svg\b[^>]*>.*?</svg>", re.IGNORECASE | re.DOTALL)
-# 同步移除單獨的 points / d 屬性（保險，殘留 <polygon> 不含整個 <svg> 也接住）
-_HTML_PATH_ATTR = re.compile(r"""\b(?:points|d)\s*=\s*(?:"[^"]*"|'[^']*')""", re.IGNORECASE)
+# 殘留的 SVG 子元素標籤（裸的 <polygon>、<path>、<circle>...）整段移除，避免外層 <svg> 缺失時座標漏掉。
+_HTML_SVG_ELEMENTS = re.compile(
+    r"<(?:polygon|polyline|path|circle|ellipse|line|rect|use|g|defs|symbol|marker|pattern|mask|clipPath|filter|feGaussianBlur|feOffset|feMerge|feMergeNode|feColorMatrix|feFlood|feComposite|stop|linearGradient|radialGradient)\b[^>]*/?>",
+    re.IGNORECASE,
+)
+# 同步移除所有 SVG 座標 / 尺寸 / 變換屬性殘留值（保險：若整段 SVG 沒匹配到，仍可清掉純屬性）。
+# 補齊比上一版更完整的屬性清單：除 points/d 外含 cx/cy/r/rx/ry/x/y/x1/y1/x2/y2/dx/dy/fx/fy/
+# width/height/transform/viewBox/stroke-width/stroke-dasharray/stroke-dashoffset/font-size。
+_HTML_PATH_ATTR = re.compile(
+    r"""\b(?:points|d|cx|cy|r|rx|ry|x|y|x1|y1|x2|y2|dx|dy|fx|fy|width|height|transform|viewBox|stroke-width|stroke-dasharray|stroke-dashoffset|font-size)\s*=\s*(?:"[^"]*"|'[^']*')""",
+    re.IGNORECASE,
+)
 # B2: HTML 註解抽取（開發者最常把測試資料 / TODO / 卡號 / token 留在 <!-- --> 內）
 _HTML_COMMENT = re.compile(r"<!--([\s\S]*?)-->")
 
@@ -694,8 +705,9 @@ def analyze_data_exposure(page_input: PageAnalysisInput) -> list[dict]:
     """
     raw_html = page_input.html or ""
 
-    # B1: 移除 SVG 整段 + 殘留的 points/d 屬性；避免浮點座標誤判為卡號
+    # B1: 移除 SVG 整段 → 殘留的 SVG 子元素 → 殘留的 SVG 座標屬性；三層防護避免浮點誤判為卡號
     safe_html = _HTML_SVG_STRIP.sub(" ", raw_html)
+    safe_html = _HTML_SVG_ELEMENTS.sub(" ", safe_html)
     safe_html = _HTML_PATH_ATTR.sub(" ", safe_html)
     pii_main = detect_pii_in_text(safe_html)
 
