@@ -63,6 +63,10 @@ def build_scan_report(scan_job: ScanJob) -> str:
         document.add_heading(finding.title, level=2)
         document.add_paragraph(f"分類：{finding.category} / 嚴重度：{severity_display}")
         document.add_paragraph(f"規則 ID：{finding.rule_id or '未標示'}")
+        if finding.owasp_category or finding.cwe_id:
+            owasp = finding.owasp_category or "—"
+            cwe = finding.cwe_id or "—"
+            document.add_paragraph(f"OWASP：{owasp} / CWE：{cwe}")
 
         if finding.page:
             document.add_paragraph(f"頁面：{finding.page.final_url}")

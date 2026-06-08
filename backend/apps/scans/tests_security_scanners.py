@@ -229,3 +229,20 @@ class TestOwaspMapper(TestCase):
         owasp_mapper.backfill(scan)
         f.refresh_from_db()
         self.assertEqual(f.owasp_category, "")
+
+
+from apps.scans.serializers import FindingSerializer
+
+
+class TestFindingSerializerOwasp(TestCase):
+    def test_serializer_includes_owasp_cwe(self):
+        scan = _make_scan()
+        f = Finding.objects.create(
+            scan_job=scan, category="security", severity="medium",
+            rule_id="cookie-no-secure", title="t", description="d",
+            remediation="r", ai_handoff_prompt="p",
+            owasp_category="A05", cwe_id="CWE-614",
+        )
+        data = FindingSerializer(f).data
+        self.assertEqual(data["owasp_category"], "A05")
+        self.assertEqual(data["cwe_id"], "CWE-614")
