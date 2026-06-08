@@ -19,6 +19,14 @@ TW_NATIONAL_ID_PATTERN = re.compile(r"\b[A-Z][12]\d{8}\b")
 # 信用卡號：13-19 位數字，常見 16 位 4-4-4-4 格式或無分隔。需另經 is_valid_luhn 驗證
 CREDIT_CARD_PATTERN = re.compile(r"(?<!\d)(?:\d[\s\-]?){12,18}\d(?!\d)")
 
+# B1: 移除 SVG 元素（雷達圖等動態 SVG 內 polygon points / path d 屬性的浮點座標
+# 數字片段巧合通過 Luhn 會被誤判為卡號，已實證 https://camb.xn--gst.tw 雷達圖案例）。
+_HTML_SVG_STRIP = re.compile(r"<svg\b[^>]*>.*?</svg>", re.IGNORECASE | re.DOTALL)
+# 同步移除單獨的 points / d 屬性（保險，殘留 <polygon> 不含整個 <svg> 也接住）
+_HTML_PATH_ATTR = re.compile(r"""\b(?:points|d)\s*=\s*(?:"[^"]*"|'[^']*')""", re.IGNORECASE)
+# B2: HTML 註解抽取（開發者最常把測試資料 / TODO / 卡號 / token 留在 <!-- --> 內）
+_HTML_COMMENT = re.compile(r"<!--([\s\S]*?)-->")
+
 # 台灣身分證號第一碼字母對應的兩位數值（內政部標準）
 _TW_ID_LETTER_VALUES = {
     "A": 10, "B": 11, "C": 12, "D": 13, "E": 14, "F": 15, "G": 16, "H": 17,
@@ -674,8 +682,38 @@ def analyze_data_exposure(page_input: PageAnalysisInput) -> list[dict]:
     顯示原始 PII 在 finding evidence 中（依使用者明確要求，不做遮罩）；
     description 前置警示文字，讓報告閱讀者意識到本報告含未遮罩個資的法律責任。
     身分證與信用卡含檢查碼驗證以降低 false positive。
+
+    防誤報（B1）：移除 SVG 元素與所有 points/d 屬性，避免雷達圖等動態
+    SVG 內的浮點座標數字（如 133.4346474264069）剛好 13-19 位且巧合通過
+    Luhn 被誤判為信用卡號（實機在 cekb.local 測試靶機已觀察到此 FP）。
+
+    強化覆蓋率（B2）：額外掃 HTML <!-- --> 註解內容，因為開發者最常把
+    測試資料（PCI 測試卡 4111-1111-1111-1111、員工聯絡簿、TODO 含路徑、
+    API key sample）以註解形式留在 production HTML。同類 evidence 會
+    在文案上標示「含 HTML 註解 X 筆」讓使用者注意成因。
     """
-    pii = detect_pii_in_text(page_input.html)
+    raw_html = page_input.html or ""
+
+    # B1: 移除 SVG 整段 + 殘留的 points/d 屬性；避免浮點座標誤判為卡號
+    safe_html = _HTML_SVG_STRIP.sub(" ", raw_html)
+    safe_html = _HTML_PATH_ATTR.sub(" ", safe_html)
+    pii_main = detect_pii_in_text(safe_html)
+
+    # B2: 額外掃 HTML 註解內容（開發者常留測試資料 / TODO / 卡號 / token）
+    comments_text = "\n".join(_HTML_COMMENT.findall(raw_html))
+    pii_comments = detect_pii_in_text(comments_text) if comments_text else {}
+
+    # 合併 main + comments（去重保序）
+    pii = {}
+    comment_only_counts: dict[str, int] = {}
+    for key in ("email", "mobile", "national_id", "credit_card"):
+        main_list = pii_main.get(key) or []
+        comment_list = pii_comments.get(key) or []
+        merged = list(dict.fromkeys(main_list + comment_list))
+        pii[key] = merged
+        # 計算「只在註解中發現」的筆數，提供使用者明確線索
+        comment_only_counts[key] = len([v for v in comment_list if v not in main_list])
+
     total = sum(len(v) for v in pii.values())
     if total == 0:
         return []
@@ -691,7 +729,10 @@ def analyze_data_exposure(page_input: PageAnalysisInput) -> list[dict]:
     for key, label in pii_labels:
         values = pii[key]
         if values:
-            parts.append(f"{label}（{len(values)} 筆）：{', '.join(values[:50])}")
+            comment_note = ""
+            if comment_only_counts.get(key):
+                comment_note = f"，其中 {comment_only_counts[key]} 筆在 HTML 註解中"
+            parts.append(f"{label}（{len(values)} 筆{comment_note}）：{', '.join(values[:50])}")
     evidence = "\n".join(parts)
 
     return [

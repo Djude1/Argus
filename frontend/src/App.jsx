@@ -1604,11 +1604,10 @@ function FindingsWorkspace({ scan }) {
               .replace(scan.origin, "")
               .split("?")[0]
               .replace(/^\//, "");
-            const label = isHome
-              ? "首頁"
-              : urlPath.slice(0, 18) ||
-                page.title?.slice(0, 16) ||
-                `Page ${page.id}`;
+            // 標籤優先用 page.title（更語意化），缺則 fallback 到 URL path
+            // 截斷統一 18 字並加 ellipsis，避免「p/412-1000-172.ph」這種被切掉副檔名字尾的歧義
+            const rawLabel = (page.title?.trim() || urlPath || `Page ${page.id}`);
+            const label = isHome ? "首頁" : (rawLabel.length > 18 ? rawLabel.slice(0, 18) + "…" : rawLabel);
             const cnt = findingsPerPage.perPage.get(page.id) || 0;
             return (
               <button
