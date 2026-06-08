@@ -750,13 +750,19 @@ function ScanJobForm({ onCreated }) {
             </button>
             {estimate && (
               <div className={`scan-estimate-result conf-${estimate.confidence}`}>
-                <span>約 <strong>{estimate.estimated_pages}</strong> 頁</span>
-                <span>≈ <strong>{estimate.estimated_cost}</strong> coin</span>
+                <span>預估約 <strong>{estimate.estimated_pages}</strong> 頁 ≈ <strong>{estimate.estimated_cost}</strong> coin</span>
                 <span className="scan-estimate-conf">
                   {estimate.confidence === "high" ? "（sitemap 精準）" :
                    estimate.confidence === "medium" ? "（連結計算，中等精確）" :
                    "（估算，實際可能不同）"}
                 </span>
+                {/* 避免使用者看到「10 coin」卻被預扣 500 coin 而誤以為 bug：明示預扣與結算機制 */}
+                {Number.isFinite(estimate.estimated_cost) && estimatedCost > estimate.estimated_cost && (
+                  <span className="scan-estimate-hold">
+                    ⓘ 系統先預扣 <strong>{estimatedCost.toLocaleString()}</strong> coin
+                    （上限 {effectivePages} 頁），結束後依實際爬到頁數退回差額。
+                  </span>
+                )}
               </div>
             )}
           </div>
