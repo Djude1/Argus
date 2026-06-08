@@ -58,6 +58,7 @@ class TestSslScanner(TestCase):
         past = time.strftime("%b %d %H:%M:%S %Y GMT", time.gmtime(time.time() - 86400))
         findings = ssl_scanner._eval_cert_expiry(past)
         self.assertEqual(findings[0]["severity"], "critical")
+        self.assertEqual(findings[0]["rule_id"], "ssl-cert-expired")
 
     def test_cert_expiry_none_when_far(self):
         import time
@@ -85,3 +86,16 @@ class TestSslScanner(TestCase):
 
     def test_analyze_ssl_connection_error_returns_empty(self):
         self.assertEqual(ssl_scanner.analyze_ssl("invalid.invalid", port=443), [])
+
+    def test_verify_error_expired_is_critical(self):
+        findings = ssl_scanner._eval_cert_verify_error("certificate has expired")
+        self.assertEqual(findings[0]["severity"], "critical")
+        self.assertEqual(findings[0]["rule_id"], "ssl-cert-expired")
+
+    def test_verify_error_self_signed_is_medium(self):
+        findings = ssl_scanner._eval_cert_verify_error("self signed certificate")
+        self.assertEqual(findings[0]["severity"], "medium")
+        self.assertEqual(findings[0]["rule_id"], "ssl-self-signed")
+
+    def test_verify_error_unknown_returns_empty(self):
+        self.assertEqual(ssl_scanner._eval_cert_verify_error("some other error"), [])
