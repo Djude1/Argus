@@ -184,3 +184,48 @@ class TestHeaderScanner(TestCase):
 
     def test_bad_input_returns_empty(self):
         self.assertEqual(header_scanner.analyze_headers(None), [])
+
+
+from apps.scans.security import owasp_mapper
+
+
+class TestOwaspMapper(TestCase):
+    def test_tag_security_finding_fills_fields(self):
+        finding = {"category": "security", "rule_id": "ssl-weak-cipher"}
+        tagged = owasp_mapper.tag(finding)
+        self.assertEqual(tagged["owasp_category"], "A02")
+        self.assertEqual(tagged["cwe_id"], "CWE-327")
+
+    def test_tag_unknown_rule_empty_strings(self):
+        finding = {"category": "security", "rule_id": "totally-unknown"}
+        tagged = owasp_mapper.tag(finding)
+        self.assertEqual(tagged["owasp_category"], "")
+        self.assertEqual(tagged["cwe_id"], "")
+
+    def test_tag_non_security_untouched(self):
+        finding = {"category": "seo", "rule_id": "x"}
+        tagged = owasp_mapper.tag(finding)
+        self.assertNotIn("owasp_category", tagged)
+
+    def test_backfill_updates_existing_security_findings(self):
+        scan = _make_scan()
+        f = Finding.objects.create(
+            scan_job=scan, category="security", severity="medium",
+            rule_id="cookie-no-secure", title="t", description="d",
+            remediation="r", ai_handoff_prompt="p",
+        )
+        owasp_mapper.backfill(scan)
+        f.refresh_from_db()
+        self.assertEqual(f.owasp_category, "A05")
+        self.assertEqual(f.cwe_id, "CWE-614")
+
+    def test_backfill_skips_non_security(self):
+        scan = _make_scan()
+        f = Finding.objects.create(
+            scan_job=scan, category="seo", severity="low",
+            rule_id="cookie-no-secure", title="t", description="d",
+            remediation="r", ai_handoff_prompt="p",
+        )
+        owasp_mapper.backfill(scan)
+        f.refresh_from_db()
+        self.assertEqual(f.owasp_category, "")
