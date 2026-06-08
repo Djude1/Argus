@@ -38,3 +38,50 @@ class TestFindingOwaspFields(TestCase):
         finding.refresh_from_db()
         self.assertEqual(finding.owasp_category, "A05")
         self.assertEqual(finding.cwe_id, "CWE-200")
+
+
+from apps.scans.security import ssl_scanner
+
+
+class TestSslScanner(TestCase):
+    def test_cert_expiry_high_when_within_30_days(self):
+        import ssl as _ssl, time
+        not_after = _ssl.cert_time_to_seconds  # noqa: F841 — 確認 API 存在
+        future = time.strftime("%b %d %H:%M:%S %Y GMT", time.gmtime(time.time() + 20 * 86400))
+        findings = ssl_scanner._eval_cert_expiry(future)
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0]["severity"], "high")
+        self.assertEqual(findings[0]["rule_id"], "ssl-cert-expiring")
+
+    def test_cert_expiry_critical_when_expired(self):
+        import time
+        past = time.strftime("%b %d %H:%M:%S %Y GMT", time.gmtime(time.time() - 86400))
+        findings = ssl_scanner._eval_cert_expiry(past)
+        self.assertEqual(findings[0]["severity"], "critical")
+
+    def test_cert_expiry_none_when_far(self):
+        import time
+        far = time.strftime("%b %d %H:%M:%S %Y GMT", time.gmtime(time.time() + 365 * 86400))
+        self.assertEqual(ssl_scanner._eval_cert_expiry(far), [])
+
+    def test_protocol_old_tls_is_high(self):
+        findings = ssl_scanner._eval_protocol("TLSv1")
+        self.assertEqual(findings[0]["severity"], "high")
+        self.assertEqual(findings[0]["rule_id"], "ssl-weak-protocol")
+
+    def test_protocol_modern_tls_empty(self):
+        self.assertEqual(ssl_scanner._eval_protocol("TLSv1.3"), [])
+
+    def test_cipher_weak_is_high(self):
+        findings = ssl_scanner._eval_cipher("ECDHE-RSA-RC4-SHA")
+        self.assertEqual(findings[0]["severity"], "high")
+        self.assertEqual(findings[0]["rule_id"], "ssl-weak-cipher")
+
+    def test_cipher_strong_empty(self):
+        self.assertEqual(ssl_scanner._eval_cipher("ECDHE-RSA-AES128-GCM-SHA256"), [])
+
+    def test_analyze_ssl_empty_host_returns_empty(self):
+        self.assertEqual(ssl_scanner.analyze_ssl(""), [])
+
+    def test_analyze_ssl_connection_error_returns_empty(self):
+        self.assertEqual(ssl_scanner.analyze_ssl("invalid.invalid", port=443), [])
