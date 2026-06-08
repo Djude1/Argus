@@ -138,3 +138,49 @@ class TestCookieScanner(TestCase):
 
     def test_bad_input_returns_empty(self):
         self.assertEqual(cookie_scanner.analyze_cookies(None, "https://example.com"), [])
+
+
+from apps.scans.security import header_scanner
+
+
+class TestHeaderScanner(TestCase):
+    def _page(self, headers):
+        return [{"headers": headers, "final_url": "https://example.com", "url": "https://example.com"}]
+
+    def test_server_version_leak_is_low(self):
+        findings = header_scanner.analyze_headers(self._page({"server": "Apache/2.4.49"}))
+        rules = {f["rule_id"]: f for f in findings}
+        self.assertEqual(rules["header-server-version"]["severity"], "low")
+
+    def test_x_powered_by_is_low(self):
+        findings = header_scanner.analyze_headers(self._page({"x-powered-by": "PHP/7.4.3"}))
+        self.assertIn("header-x-powered-by", {f["rule_id"] for f in findings})
+
+    def test_cors_wildcard_is_medium(self):
+        findings = header_scanner.analyze_headers(self._page({"access-control-allow-origin": "*"}))
+        rules = {f["rule_id"]: f for f in findings}
+        self.assertEqual(rules["header-cors-wildcard"]["severity"], "medium")
+
+    def test_cors_wildcard_with_credentials_is_high(self):
+        findings = header_scanner.analyze_headers(self._page({
+            "access-control-allow-origin": "*",
+            "access-control-allow-credentials": "true",
+        }))
+        rules = {f["rule_id"]: f for f in findings}
+        self.assertEqual(rules["header-cors-credentials"]["severity"], "high")
+
+    def test_csp_unsafe_inline_is_medium(self):
+        findings = header_scanner.analyze_headers(self._page({
+            "content-security-policy": "default-src 'self'; script-src 'unsafe-inline'",
+        }))
+        self.assertIn("header-csp-unsafe", {f["rule_id"] for f in findings})
+
+    def test_clean_headers_no_findings(self):
+        findings = header_scanner.analyze_headers(self._page({"server": "cloudflare"}))
+        self.assertEqual(findings, [])
+
+    def test_no_pages_returns_empty(self):
+        self.assertEqual(header_scanner.analyze_headers([]), [])
+
+    def test_bad_input_returns_empty(self):
+        self.assertEqual(header_scanner.analyze_headers(None), [])
