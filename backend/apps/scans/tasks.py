@@ -1,5 +1,6 @@
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
+from urllib.parse import urlparse
 
 from asgiref.sync import sync_to_async
 from celery import shared_task
@@ -19,6 +20,10 @@ from apps.scans.scanners import (
     analyze_site_signals,
     calculate_scores,
 )
+from apps.scans.security import owasp_mapper
+from apps.scans.security.cookie_scanner import analyze_cookies
+from apps.scans.security.header_scanner import analyze_headers
+from apps.scans.security.ssl_scanner import analyze_ssl
 
 
 def _write_progress(
@@ -244,6 +249,29 @@ def run_scan_job(self, scan_job_id: int) -> dict:
         for finding in katana_findings + nuclei_findings:
             Finding.objects.create(scan_job=scan_job, page=None, **finding)
         all_findings.extend(katana_findings + nuclei_findings)
+
+        # === 深度被動安全掃描（security/ sub-package，純加法、silent-fail）===
+        host = urlparse(scan_job.normalized_url).hostname or ""
+        root_page = next((p for p in crawled_pages if p.get("headers")), None)
+        root_headers = root_page["headers"] if root_page else {}
+        root_url = (
+            (root_page.get("final_url") or root_page.get("url"))
+            if root_page else scan_job.normalized_url
+        )
+        deep_security_findings = (
+            analyze_ssl(host, scan_job_id=scan_job.id)
+            + analyze_cookies(root_headers, root_url)
+            + analyze_headers(crawled_pages)
+        )
+        deep_security_findings = [owasp_mapper.tag(f) for f in deep_security_findings]
+        for finding in deep_security_findings:
+            Finding.objects.create(scan_job=scan_job, page=None, **finding)
+        all_findings.extend(deep_security_findings)
+        owasp_mapper.backfill(scan_job)
+        append_log(
+            scan_job_id,
+            f"深度被動安全掃描完成：{len(deep_security_findings)} 項發現",
+        )
 
         if katana_tech:
             updated_warnings = dict(scan_job.warning_summary or {})
