@@ -20,3 +20,19 @@ backend/staticfiles/
 .ruff_cache/
 .ms-playwright/
 frontend/dist/
+
+# === 個人 / 工具暫存 / 大型素材（不該推上 GitHub）===
+# Playwright MCP 工具暫存
+.playwright-mcp/
+# 本機截圖工具與輸出
+_shot.py
+_shots/
+# 個人課程 / 學校資料（避免隱私洩漏，逐檔指定不用 *.pdf 全包以免誤殺合法文件）
+114-2_日間部專題發表順序暨發表提醒(二技及四技)-115.6.2.pdf
+115年_時間(按鈴)圖.doc
+# 設計 / 素材草稿目錄與圖檔（容量大、不屬於 source；要納入請改放 frontend/src/assets/）
+文件生成/
+網站範例/
+過場動畫和網站設計範本/
+粒子穿越特色.jpg
+網站商標.png

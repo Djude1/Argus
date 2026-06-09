@@ -46,7 +46,7 @@ def build_scan_report(scan_job: ScanJob) -> str:
     for category, score in (scan_job.category_scores or {}).items():
         document.add_paragraph(f"{category.upper()}：{score}")
 
-    document.add_heading("優先處理項目", level=1)
+    document.add_heading("優先改善建議（依影響程度排序）", level=1)
     for action in scan_job.top_actions or []:
         severity = action.get("severity", "")
         severity_display = get_severity_display(severity)
@@ -56,7 +56,7 @@ def build_scan_report(scan_job: ScanJob) -> str:
             style="List Bullet",
         )
 
-    document.add_heading("Findings", level=1)
+    document.add_heading("發現項目", level=1)
     for finding in scan_job.findings.select_related("page").all():
         severity_display = get_severity_display(finding.severity)
 
