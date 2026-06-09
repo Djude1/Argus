@@ -26,10 +26,21 @@ queued → crawling → scanning → [agent_testing] → completed
 |---|---|---|
 | `tasks.py` | Celery task 入口、狀態機推進、呼叫 billing | 直接執行爬蟲邏輯 |
 | `crawler.py` | Playwright BFS 爬蟲、收集頁面 | 修改 ScanJob.status、呼叫 billing |
-| `scanners.py` | 四維掃描（SEO/AEO/GEO/Security）、產生 findings | 修改 ScanJob.status |
+| `scanners.py` | SEO/AEO/GEO 掃描 + 被動式基本安全檢查（HTTPS/header 存在性/CSRF/PII）、產生 findings | 修改 ScanJob.status、深度資安分析 |
 | `cancellation.py` | CancellationToken，供 worker 輪詢是否要終止 | 直接終止 worker process |
 | `reports.py` | 產生 Word 報告（.docx） | 任何 DB 寫入 |
 | `nuclei_scanner.py` | Nuclei binary 封裝；fast/deep 雙模式；JSONL 解析；Finding mapping | 在 passive mode 執行（已由 deep 旗標控制） |
+| `security/` | 深度主動式資安檢查（SSL/TLS、Cookie、CORS、CSP 品質、OWASP 對映、Kali 工具）| 修改 ScanJob.status、呼叫 billing |
+
+### 資安邊界（重要）
+
+`scanners.py` 的 `analyze_security()` 與 `security/` sub-package 的分工：
+
+- **`scanners.py` 留著**：被動讀取已有 response headers/HTML，不需要額外連線（HTTPS 判斷、header 存在性、CSRF token、PII 偵測）
+- **`security/` 新增**：需要額外連線或工具呼叫的深度分析（SSL 憑證讀取、Cookie API、OPTIONS 探測、docker exec kali）
+- **新的資安功能一律寫進 `security/`**，不要再擴充 `scanners.py` 的資安部分
+
+詳細規則見 [`security/CLAUDE.md`](security/CLAUDE.md)。
 
 ---
 
