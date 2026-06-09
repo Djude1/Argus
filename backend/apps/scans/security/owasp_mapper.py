@@ -22,8 +22,29 @@ _RULE_OWASP_MAP: dict[str, tuple[str, str]] = {
 }
 
 
+# 既有 scanners.py 的 analyze_security 產生的 rule_id 格式為
+# SECURITY_<正規化標題>_<sha1 前 10 碼>（如 SECURITY_HSTS_6A08D9EE20），
+# 無法用精確 key 比對，改用標題 token 子字串涵蓋。順序：較長/具體者在前。
+_KEYWORD_OWASP_MAP: tuple[tuple[str, str, str], ...] = (
+    ("X_CONTENT_TYPE_OPTIONS", "A05", "CWE-693"),
+    ("X_FRAME_OPTIONS", "A05", "CWE-1021"),
+    ("HSTS", "A05", "CWE-319"),
+    ("CSP", "A05", "CWE-693"),
+    ("CSRF", "A01", "CWE-352"),
+    ("PII", "A02", "CWE-359"),
+    ("HTTPS", "A02", "CWE-319"),
+)
+
+
 def _lookup(rule_id: str) -> tuple[str, str]:
-    return _RULE_OWASP_MAP.get(rule_id or "", ("", ""))
+    rid = rule_id or ""
+    if rid in _RULE_OWASP_MAP:
+        return _RULE_OWASP_MAP[rid]
+    upper = rid.upper()
+    for token, owasp, cwe in _KEYWORD_OWASP_MAP:
+        if token in upper:
+            return owasp, cwe
+    return ("", "")
 
 
 def tag(finding: dict) -> dict:

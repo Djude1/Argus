@@ -239,3 +239,39 @@ class TestFindingSerializerOwasp(TestCase):
         data = FindingSerializer(f).data
         self.assertEqual(data["owasp_category"], "A05")
         self.assertEqual(data["cwe_id"], "CWE-614")
+
+
+class TestOwaspMapperExistingFindings(TestCase):
+    """既有 analyze_security 的 SECURITY_<token>_<hash> rule_id 也要被涵蓋。"""
+
+    def test_keyword_lookup_covers_passive_security_rule_ids(self):
+        cases = {
+            "SECURITY_HSTS_6A08D9EE20": ("A05", "CWE-319"),
+            "SECURITY_CSP_BD010B5BE0": ("A05", "CWE-693"),
+            "SECURITY_X_FRAME_OPTIONS_A7A326FEA9": ("A05", "CWE-1021"),
+            "SECURITY_X_CONTENT_TYPE_OPTIONS_89053405E6": ("A05", "CWE-693"),
+            "SECURITY_HTTPS_1234567890": ("A02", "CWE-319"),
+            "SECURITY_PII_8B24BB8B28": ("A02", "CWE-359"),
+            "SECURITY_CSRF_TOKEN_DEADBEEF12": ("A01", "CWE-352"),
+        }
+        for rule_id, expected in cases.items():
+            self.assertEqual(owasp_mapper._lookup(rule_id), expected, rule_id)
+
+    def test_exact_match_takes_priority_over_keyword(self):
+        # 新 scanner 的乾淨 rule_id 走精確比對
+        self.assertEqual(owasp_mapper._lookup("header-csp-unsafe"), ("A05", "CWE-1021"))
+
+    def test_backfill_tags_existing_passive_security_finding(self):
+        scan = _make_scan()
+        f = Finding.objects.create(
+            scan_job=scan, category="security", severity="medium",
+            rule_id="SECURITY_HSTS_6A08D9EE20", title="缺少 HSTS",
+            description="d", remediation="r", ai_handoff_prompt="p",
+        )
+        owasp_mapper.backfill(scan)
+        f.refresh_from_db()
+        self.assertEqual(f.owasp_category, "A05")
+        self.assertEqual(f.cwe_id, "CWE-319")
+
+    def test_unmappable_rule_id_stays_empty(self):
+        self.assertEqual(owasp_mapper._lookup("SECURITY_SOMETHING_NEW_AABBCC1122"), ("", ""))
