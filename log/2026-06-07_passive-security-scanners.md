@@ -34,5 +34,5 @@
 
 ## 備註
 
-- `owasp_mapper._RULE_OWASP_MAP` 目前只涵蓋本套件新 scanner 的 rule_id；若要讓既有 Nuclei / analyze_security 的 security finding 也被 `backfill` 涵蓋，需查實際 rule_id 後擴充對映表。
+- ~~`owasp_mapper._RULE_OWASP_MAP` 目前只涵蓋本套件新 scanner 的 rule_id~~ → 已於 2026-06-09 修正：新增 `_KEYWORD_OWASP_MAP` 子字串比對涵蓋既有 `analyze_security` findings，詳見 [`log/2026-06-09_passive-security-e2e-verification.md`](2026-06-09_passive-security-e2e-verification.md)。
 - 既有 `tests_nuclei_scanner.py` 有 2 個 pre-existing 的 ruff F841 警告，非本次引入，依精準修改原則未動。
