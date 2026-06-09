@@ -89,10 +89,15 @@ TEMPLATES = [
 WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
 
+# conn_max_age=0：每個請求結束即關閉 DB 連線。
+# 原因：web 用多執行緒 runserver，搭配 conn_max_age>0 的持久連線 +
+# 前端高頻輪詢，會讓連線只進不出，撐滿 Postgres max_connections（100）後
+# 整個 API 回 500「too many clients already」。設 0 讓連線數被「同時處理中的
+# 請求數」上限住，不再累積。改用 gunicorn 綁定 worker 數後可再評估調回 >0。
 DATABASES = {
     "default": dj_database_url.config(
         default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
-        conn_max_age=600,
+        conn_max_age=0,
     )
 }
 
