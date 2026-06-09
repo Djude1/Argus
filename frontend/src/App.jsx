@@ -2444,6 +2444,11 @@ function TopNav() {
   if (["/project", "/team", "/purchase", "/download"].some((p) =>
     location.pathname.startsWith(p),
   )) return null;
+  // 掃描頁的 top bar 不顯示「評論」入口（首頁等其他頁保留）
+  const onScanPage = location.pathname.startsWith("/scans");
+  const visibleNavItems = onScanPage
+    ? NAV_ITEMS.filter((item) => item.to !== "/reviews")
+    : NAV_ITEMS;
   return (
     <nav className="argus-nav">
       <div className="argus-nav-inner">
@@ -2452,7 +2457,7 @@ function TopNav() {
           <span className="argus-brand-sub">AI 網站健檢平台</span>
         </button>
         <div className="argus-nav-links">
-          {NAV_ITEMS.map((item) => (
+          {visibleNavItems.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
@@ -5192,7 +5197,7 @@ function RequireAdmin({ children }) {
 }
 
 function AdminLayout() {
-  const { setToken, me } = useArgusStore();
+  const { setToken, me, replayIntro } = useArgusStore();
   const navigate = useNavigate();
   function handleLogout() {
     setToken(null);
@@ -5205,13 +5210,10 @@ function AdminLayout() {
   return (
     <div className="admin-shell">
       <aside className="admin-sidebar">
-        <div className="admin-brand">
-          <span className="admin-brand-glyph">⟡</span>
-          <div>
-            <div className="admin-brand-title">ARGUS</div>
-            <div className="admin-brand-sub">管理後台</div>
-          </div>
-        </div>
+        <button type="button" className="admin-brand" onClick={replayIntro} title="回到前台首頁" aria-label="回到前台首頁">
+          <img src={brandLogo} className="admin-brand-logo" alt="ARGUS" />
+          <span className="admin-brand-sub">管理後台</span>
+        </button>
         <nav className="admin-nav">
           {navItems.map((item) => (
             <NavLink

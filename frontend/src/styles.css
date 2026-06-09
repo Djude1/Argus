@@ -2526,24 +2526,29 @@
   }
 
   .admin-brand {
-    @apply flex items-center gap-3;
+    @apply flex flex-col items-start gap-2;
     padding: 20px 14px;
+    border: none;
     border-bottom: 1px solid rgba(51, 65, 85, 0.5);
+    background: transparent;
+    width: 100%;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.15s ease;
   }
-  .admin-brand-glyph {
-    @apply flex h-9 w-9 items-center justify-center rounded-xl text-base font-extrabold flex-shrink-0;
-    background: linear-gradient(135deg, #22d3ee 0%, #6366f1 100%);
-    color: #fff;
-    box-shadow: 0 6px 14px -4px rgba(99, 102, 241, 0.5);
+  .admin-brand:hover {
+    background: rgba(34, 211, 238, 0.06);
   }
-  .admin-brand-title {
-    @apply text-sm font-bold leading-tight;
-    color: #f8fafc;
-    letter-spacing: 0.18em;
+  .admin-brand-logo {
+    height: 40px;
+    width: auto;
+    display: block;
+    flex-shrink: 0;
   }
   .admin-brand-sub {
-    @apply text-xs mt-0.5 font-medium;
+    @apply text-xs font-medium;
     color: #22d3ee;
+    letter-spacing: 0.04em;
   }
 
   .admin-nav {
@@ -5023,7 +5028,7 @@
 .settings-section-title.danger { color: #f87171; }
 .settings-form { display: flex; flex-direction: column; gap: .75rem; }
 .settings-field { display: flex; flex-direction: column; gap: .25rem; }
-.settings-field label { font-size: .8rem; color: #64748b; }
+.settings-field label { font-size: .8rem; color: #94a3b8; }
 .settings-field-value { color: #e2e8f0; margin: 0; }
 .settings-save-btn { padding: .6rem 1.25rem; background: #6366f1; border: none; border-radius: 8px; color: #fff; font-weight: 600; cursor: pointer; align-self: flex-start; }
 .settings-save-btn:disabled { opacity: .6; }
