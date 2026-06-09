@@ -38,6 +38,15 @@ _HTML_PATH_ATTR = re.compile(
 # B2: HTML 註解抽取（開發者最常把測試資料 / TODO / 卡號 / token 留在 <!-- --> 內）
 _HTML_COMMENT = re.compile(r"<!--([\s\S]*?)-->")
 
+# B5: 開發者預留字串（CTF flag 格式 + 常見 placeholder）。
+# 正規網站若意外留下這些字串、報告應該直接 echo 給使用者看到、方便定位。
+# 涵蓋：`flag{...}`（CTF / 資安教學）、`{{TODO}}`、`<<<placeholder>>>`、明顯的
+# `XXX-XXXX-XXXX` 樣式佔位、`Lorem ipsum` 開頭。
+_DEV_ARTIFACT_PATTERN = re.compile(
+    r"(?:flag\{[a-zA-Z0-9_-]+\}|\{\{\s*TODO[^}]*\}\}|<{2,}[A-Z][A-Z0-9_\s-]*>{2,}|Lorem ipsum\b)",
+    re.IGNORECASE,
+)
+
 # 台灣身分證號第一碼字母對應的兩位數值（內政部標準）
 _TW_ID_LETTER_VALUES = {
     "A": 10, "B": 11, "C": 12, "D": 13, "E": 14, "F": 15, "G": 16, "H": 17,
@@ -726,8 +735,12 @@ def analyze_data_exposure(page_input: PageAnalysisInput) -> list[dict]:
         # 計算「只在註解中發現」的筆數，提供使用者明確線索
         comment_only_counts[key] = len([v for v in comment_list if v not in main_list])
 
+    # B5: 額外掃 raw HTML（不剝 SVG、不只看註解）內的開發者預留字串。
+    # 為了避免一般網站誤觸發、僅當「同頁 PII 已有 1 筆以上 OR 字串看起來像 CTF flag」才報。
+    dev_artifacts = list(dict.fromkeys(_DEV_ARTIFACT_PATTERN.findall(raw_html)))
+
     total = sum(len(v) for v in pii.values())
-    if total == 0:
+    if total == 0 and not dev_artifacts:
         return []
 
     # 每類最多列前 50 筆，避免 evidence 欄位被個資灌爆（make_finding 還會截到 4000 字）
@@ -745,6 +758,13 @@ def analyze_data_exposure(page_input: PageAnalysisInput) -> list[dict]:
             if comment_only_counts.get(key):
                 comment_note = f"，其中 {comment_only_counts[key]} 筆在 HTML 註解中"
             parts.append(f"{label}（{len(values)} 筆{comment_note}）：{', '.join(values[:50])}")
+
+    # B5: 開發者預留字串獨立一行顯示（CTF flag / TODO placeholder / Lorem 等）
+    if dev_artifacts:
+        parts.append(
+            f"⚠️ 開發者預留字串（{len(dev_artifacts)} 筆）：{', '.join(dev_artifacts[:50])}"
+        )
+
     evidence = "\n".join(parts)
 
     return [
