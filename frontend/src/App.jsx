@@ -4087,30 +4087,50 @@ function PublicLayout() {
   );
 }
 
-// useInstallPrompt：監聽 beforeinstallprompt 事件，給 DownloadPage 的安裝按鈕用
+// useInstallPrompt：取得 PWA 安裝能力。事件在 main.jsx 已全域捕捉到 window，
+// 這裡讀回並監聽後續事件，避免「事件在元件掛載前觸發」的 race。
+function isStandalone() {
+  if (typeof window === "undefined") return false;
+  return (
+    window.matchMedia?.("(display-mode: standalone)").matches ||
+    window.navigator.standalone === true
+  );
+}
 function useInstallPrompt() {
-  const [deferred, setDeferred] = useState(null);
-  const [installed, setInstalled] = useState(false);
+  const [deferred, setDeferred] = useState(() => window.__argusInstallPrompt || null);
+  const [installed, setInstalled] = useState(() => !!window.__argusInstalled || isStandalone());
   useEffect(() => {
     function onPrompt(e) {
       e.preventDefault();
+      window.__argusInstallPrompt = e;
       setDeferred(e);
+    }
+    function onInstallable() {
+      setDeferred(window.__argusInstallPrompt);
     }
     function onInstalled() {
       setInstalled(true);
       setDeferred(null);
     }
+    // 掛載時若全域已捕捉到事件，立即採用（修正 race）
+    if (window.__argusInstallPrompt) setDeferred(window.__argusInstallPrompt);
     window.addEventListener("beforeinstallprompt", onPrompt);
+    window.addEventListener("argus-installable", onInstallable);
     window.addEventListener("appinstalled", onInstalled);
+    window.addEventListener("argus-installed", onInstalled);
     return () => {
       window.removeEventListener("beforeinstallprompt", onPrompt);
+      window.removeEventListener("argus-installable", onInstallable);
       window.removeEventListener("appinstalled", onInstalled);
+      window.removeEventListener("argus-installed", onInstalled);
     };
   }, []);
   async function trigger() {
-    if (!deferred) return null;
-    deferred.prompt();
-    const { outcome } = await deferred.userChoice;
+    const d = deferred || window.__argusInstallPrompt;
+    if (!d) return null;
+    d.prompt();
+    const { outcome } = await d.userChoice;
+    window.__argusInstallPrompt = null;
     setDeferred(null);
     return outcome;
   }
@@ -4376,12 +4396,16 @@ function TeamMemberCard({ member }) {
         <div className="public-team-card-meta">
           <div className="public-team-name">{m.name}</div>
           <div className="public-team-role">{m.role}</div>
+          {m.student_id && (
+            <div className="public-team-id-badge">🎓 學號 {m.student_id}</div>
+          )}
           {m.bio && <p className="public-team-bio">{m.bio}</p>}
         </div>
       </header>
 
       {Array.isArray(m.skill_levels) && m.skill_levels.length > 0 && (
         <div className="public-team-skill-bars">
+          <div className="public-team-block-label">⚡ 技能熟練度</div>
           {m.skill_levels.map((s) => (
             <div key={s.name} className="public-team-skill-row">
               <div className="public-team-skill-row-head">
@@ -4401,7 +4425,7 @@ function TeamMemberCard({ member }) {
 
       {Array.isArray(m.contributions) && m.contributions.length > 0 && (
         <div className="public-team-contrib">
-          <div className="public-team-contrib-label">負責項目</div>
+          <div className="public-team-contrib-label">🎯 負責項目</div>
           <ul className="public-team-contrib-list">
             {m.contributions.map((c, i) => (
               <li key={i}>
@@ -4418,6 +4442,7 @@ function TeamMemberCard({ member }) {
 
       {Array.isArray(m.skills) && m.skills.length > 0 && (
         <div className="public-team-skills">
+          <div className="public-team-block-label public-team-skills-label">🧩 技術棧</div>
           {m.skills.map((s) => (
             <span key={s} className="public-team-skill-chip">{s}</span>
           ))}
@@ -5056,17 +5081,23 @@ function DownloadPage() {
           <div className="public-hero-actions">
             {installed ? (
               <span className="public-install-installed">✓ 已安裝，請從主畫面開啟</span>
-            ) : canInstall ? (
-              <button type="button" className="public-cta-primary public-install-cta" onClick={trigger}>
-                ⬇ 安裝 Argus PWA
-              </button>
             ) : (
               <button
                 type="button"
                 className="public-cta-primary public-install-cta"
-                onClick={() => document.getElementById("install-guide")?.scrollIntoView({ behavior: "smooth" })}
+                onClick={async () => {
+                  if (canInstall) {
+                    await trigger();
+                  } else {
+                    // 瀏覽器尚未提供安裝（如 iOS Safari 不支援程式化安裝，或事件未就緒）
+                    // → 帶到各平台安裝步驟
+                    document
+                      .getElementById("install-guide")
+                      ?.scrollIntoView({ behavior: "smooth" });
+                  }
+                }}
               >
-                📖 查看安裝步驟
+                ⬇ 點擊下載
               </button>
             )}
             {!installed && latest?.download_url && (
@@ -6339,6 +6370,7 @@ const TEAM_SCHEMA = {
   titleField: "name",
   fields: [
     { key: "name", label: "姓名", type: "text", required: true },
+    { key: "student_id", label: "學號", type: "text", hint: "例：11246034" },
     { key: "role", label: "角色", type: "text", required: true },
     { key: "avatar_emoji", label: "頭像 emoji", type: "text", hint: "例：🧑‍💻 🎨" },
     { key: "bio", label: "簡介", type: "textarea", rows: 3 },
@@ -6352,6 +6384,7 @@ const TEAM_SCHEMA = {
     { key: "sort_order", label: "順序", num: true },
     { key: "avatar_emoji", label: "頭像", render: (i) => <span style={{ fontSize: 22 }}>{i.avatar_emoji}</span> },
     { key: "name", label: "姓名" },
+    { key: "student_id", label: "學號" },
     { key: "role", label: "角色" },
     { key: "is_active", label: "啟用", render: (i) => i.is_active ? "✓" : "—" },
   ],

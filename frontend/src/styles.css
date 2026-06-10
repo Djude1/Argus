@@ -3443,16 +3443,14 @@
     color: #94a3b8;
   }
 
+  /* 四宮格（2×2）：桌機/平板兩欄，手機單欄（RWD） */
   .public-team-grid-pro {
     @apply grid gap-6;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    max-width: 1040px;
+    margin-inline: auto;
   }
-  @media (max-width: 1024px) {
-    .public-team-grid-pro {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-  }
-  @media (max-width: 560px) {
+  @media (max-width: 640px) {
     .public-team-grid-pro {
       grid-template-columns: minmax(0, 1fr);
     }
@@ -3468,6 +3466,21 @@
     transform: translateY(-4px);
     border-color: rgba(103, 232, 249, 0.45);
     box-shadow: 0 18px 40px -12px rgba(6, 182, 212, 0.4);
+  }
+  /* 卡片頂部科技感漸層飾條，hover 時點亮 */
+  .public-team-card-pro::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #06b6d4, #6366f1, #ec4899);
+    opacity: 0.5;
+    transition: opacity 0.3s ease;
+  }
+  .public-team-card-pro:hover::before {
+    opacity: 1;
   }
 
   .public-team-card-head {
@@ -3509,6 +3522,34 @@
   .public-team-card-meta {
     flex: 1;
     min-width: 0;
+  }
+  /* 學號徽章：等寬字玻璃膠囊 */
+  .public-team-id-badge {
+    display: inline-flex;
+    align-items: center;
+    margin-top: 6px;
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-family: ui-monospace, "JetBrains Mono", "Fira Code", monospace;
+    letter-spacing: 0.04em;
+    color: #7dd3fc;
+    background: rgba(56, 189, 248, 0.1);
+    border: 1px solid rgba(56, 189, 248, 0.28);
+    box-shadow: inset 0 0 8px rgba(56, 189, 248, 0.12);
+  }
+
+  /* 卡片內區塊小標（⚡ 技能熟練度 / 🧩 技術棧），與負責項目標題同調 */
+  .public-team-block-label {
+    @apply mb-3 text-xs uppercase tracking-wider;
+    color: #67e8f9;
+    font-weight: 600;
+  }
+  /* 技術棧小標：在 chip flex 容器中佔滿整行，讓 chips 換到下一行 */
+  .public-team-skills-label {
+    flex: 0 0 100%;
+    text-align: left;
+    margin-bottom: 4px;
   }
 
   /* skill bar */
@@ -5830,6 +5871,12 @@ details[open] .scan-log-summary::before { transform: rotate(90deg); }
 }
 :root[data-theme="light"] .public-team-contrib-title { color: #132033; }
 :root[data-theme="light"] .public-team-contrib-desc { color: #475569; }
+:root[data-theme="light"] .public-team-id-badge {
+  color: #0369a1;
+  background: rgba(2, 132, 199, 0.08);
+  border-color: rgba(2, 132, 199, 0.25);
+}
+:root[data-theme="light"] .public-team-block-label { color: #075985; }
 :root[data-theme="light"] .public-team-skill-chip {
   background: #e0f2fe;
   color: #075985;

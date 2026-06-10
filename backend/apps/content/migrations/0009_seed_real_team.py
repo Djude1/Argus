@@ -1,15 +1,24 @@
-from django.core.management.base import BaseCommand
+"""以系統手冊（第115401組）的真實組員，取代先前的佔位團隊資料。
 
-from apps.content.models import TeamMember
+先前的種子有兩套互不一致的佔位資料：
+- migration 0002 / 0004：name 是職稱（後端工程師 / 前端工程師 / AI / Agent / DevOps / QA）
+- seed_team 指令：name 是「組長A / B同學 / C同學 / D同學」
 
-# 兩套已知佔位成員的 name（清除用，與 migration 0009 一致）
+本 migration 清除這兩套佔位成員，改以手冊「表 4-2-2 工作內容與貢獻度表」
+與「表 4-2-1 分工表」的真實 4 位組員建立，並以 student_id 為冪等鍵。
+reverse 時不刪除（避免回滾誤刪 staff 後台已編輯的真實資料）。
+"""
+
+from django.db import migrations
+
+# 兩套已知佔位成員的 name（清除用）
 PLACEHOLDER_NAMES = [
-    "後端工程師", "前端工程師", "AI / Agent", "DevOps / QA",
-    "組長A", "B同學", "C同學", "D同學",
+    "後端工程師", "前端工程師", "AI / Agent", "DevOps / QA",  # 0002 / 0004
+    "組長A", "B同學", "C同學", "D同學",  # seed_team（舊版）
 ]
 
-# 真實組員：與 migration 0009 同一份資料（手冊表 4-2-2 / 4-2-1，第115401組）
-TEAM_DATA = [
+# 真實組員：bio 取自手冊表 4-2-2；contributions 取自表 4-2-1 的 ● 主責項目
+REAL_TEAM = [
     {
         "student_id": "11246034",
         "name": "侯雨利",
@@ -113,18 +122,18 @@ TEAM_DATA = [
 ]
 
 
-class Command(BaseCommand):
-    help = "Seed 四位真實組員資料（idempotent，以 student_id 為鍵，並清除舊佔位成員）"
+def seed(apps, schema_editor):
+    Member = apps.get_model("content", "TeamMember")
+    # 清除兩套佔位成員
+    Member.objects.filter(name__in=PLACEHOLDER_NAMES).delete()
+    # 以 student_id 為冪等鍵建立 / 更新真實組員
+    for data in REAL_TEAM:
+        Member.objects.update_or_create(
+            student_id=data["student_id"],
+            defaults={k: v for k, v in data.items() if k != "student_id"},
+        )
 
-    def handle(self, *args, **options):
-        removed, _ = TeamMember.objects.filter(name__in=PLACEHOLDER_NAMES).delete()
-        if removed:
-            self.stdout.write(f"  清除佔位成員：{removed} 筆")
-        for data in TEAM_DATA:
-            member, created = TeamMember.objects.update_or_create(
-                student_id=data["student_id"],
-                defaults={k: v for k, v in data.items() if k != "student_id"},
-            )
-            action = "建立" if created else "更新"
-            self.stdout.write(f"  {action}：{member.student_id} {member.name}（{member.role}）")
-        self.stdout.write(self.style.SUCCESS("[OK] 真實組員資料 seed 完成"))
+
+class Migration(migrations.Migration):
+    dependencies = [("content", "0008_teammember_student_id")]
+    operations = [migrations.RunPython(seed, migrations.RunPython.noop)]
