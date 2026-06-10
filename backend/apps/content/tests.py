@@ -89,3 +89,16 @@ class ContentAPITests(APITestCase):
         # 學號欄位有回傳且正確
         leader = next(m for m in members if m["name"] == "侯雨利")
         self.assertEqual(leader["student_id"], "11246034")
+
+    def test_milestones_seeded_real_timeline(self):
+        """migration 0010：開發歷程應為手冊真實時程（跨 2025/12–2026/06），不殘留舊里程碑。"""
+        response = self.client.get(reverse("content-milestones"))
+        ms = response.data["milestones"]
+        titles = [m["title"] for m in ms]
+        self.assertIn("主題構思與需求分析", titles)
+        self.assertIn("系統整合測試與初評", titles)
+        # 舊的擠在 5 月的里程碑不應殘留
+        for old in ["MVP 完成", "Hermes-Agent 上線", "電子發票 + 載具"]:
+            self.assertNotIn(old, titles)
+        # 時間軸應回溯到 2025（手冊起始 114/12）
+        self.assertTrue(any(str(m["date"]).startswith("2025") for m in ms))
