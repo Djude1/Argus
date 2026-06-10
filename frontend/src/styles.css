@@ -4683,15 +4683,11 @@
 .scan-estimate-conf { color: #64748b; font-size: .8rem; }
 
 /* ===== Responsive polish：收斂手機版密度與可點擊範圍 ===== */
-@media (max-width: 900px) {
-  .argus-main {
-    padding: 0.875rem;
-  }
 
-  .argus-main.with-nav {
-    padding-top: 0.875rem;
-  }
-
+/* TOP BAR（登入後 nav）：在 ≤1140px 就把連結列收到第二行（全寬、可橫向捲動），
+   避免 ~640–1133px 之間 nav 連結與 brand/dashboard 擠在一起、換行雜亂。
+   斷點刻意設在 1133px 之上，讓該區間呈現與手機一致的「連結獨佔一列」樣式。 */
+@media (max-width: 1140px) {
   .argus-nav-inner {
     gap: 0.625rem;
     padding: 0.75rem;
@@ -4735,6 +4731,16 @@
   .nav-logout-btn {
     padding: 0.5rem 0.65rem;
     white-space: nowrap;
+  }
+}
+
+@media (max-width: 900px) {
+  .argus-main {
+    padding: 0.875rem;
+  }
+
+  .argus-main.with-nav {
+    padding-top: 0.875rem;
   }
 
   .scan-layout.list-mode {
