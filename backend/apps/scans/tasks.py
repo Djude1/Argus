@@ -1,5 +1,6 @@
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
+from urllib.parse import urlparse
 
 from asgiref.sync import sync_to_async
 from celery import shared_task
@@ -19,6 +20,10 @@ from apps.scans.scanners import (
     analyze_site_signals,
     calculate_scores,
 )
+from apps.scans.security import owasp_mapper
+from apps.scans.security.cookie_scanner import analyze_cookies
+from apps.scans.security.header_scanner import analyze_headers
+from apps.scans.security.ssl_scanner import analyze_ssl
 
 
 def _write_progress(
@@ -170,6 +175,10 @@ def run_scan_job(self, scan_job_id: int) -> dict:
             "資安補充掃描開始 — Katana（JS 秘鑰 / 技術棧）並行 Nuclei"
             f"（{'深度付費' if deep_mode else '快速免費'}）",
         )
+        # 收集已爬取的頁面 URL（排除被阻擋的頁面），整批餵給 Nuclei
+        crawled_urls = [
+            p["url"] for p in crawled_pages if not p.get("blocked_reason")
+        ]
         with ThreadPoolExecutor(max_workers=2) as executor:
             f_katana = executor.submit(
                 run_katana,
@@ -182,6 +191,7 @@ def run_scan_job(self, scan_job_id: int) -> dict:
                 scan_job.normalized_url,
                 scan_job_id,
                 deep=deep_mode,
+                extra_urls=crawled_urls,
             )
         try:
             katana_findings, katana_tech = f_katana.result()
@@ -194,9 +204,74 @@ def run_scan_job(self, scan_job_id: int) -> dict:
             append_log(scan_job_id, f"Nuclei 略過（{exc.__class__.__name__}）", level="warn")
             nuclei_findings = []
 
+        # 若 Nuclei 無發現，且 Katana 偵測到已知 WAF / CDN，
+        # 新增 info finding 向使用者說明探針遭攔截、保護機制有效
+        if not nuclei_findings and katana_tech:
+            _WAF_KEYWORDS = {"cloudflare", "fastly", "akamai", "aws waf", "imperva", "sucuri", "f5"}
+            detected_wafs = [t for t in katana_tech if any(w in t.lower() for w in _WAF_KEYWORDS)]
+            if detected_wafs:
+                waf_names = "、".join(detected_wafs)
+                scanned_count = len(crawled_urls) + 1  # entry URL + crawled
+                nuclei_findings = [{
+                    "category": "security",
+                    "severity": "info",
+                    "title": f"Nuclei 資安掃描受 WAF / CDN 保護攔截（{waf_names}）",
+                    "description": (
+                        f"偵測到 {waf_names} 等 WAF / CDN 保護機制，"
+                        f"Nuclei 對 {scanned_count} 個頁面發出的主動探針請求可能被攔截，"
+                        "導致掃描回傳 0 項發現。"
+                        "這表示您的網站已部署有效的入侵防護，屬正向安全指標。"
+                    ),
+                    "remediation": (
+                        "此為資訊性提示，無需修復。"
+                        "如需完整弱點掃描，建議在 WAF 規則中加入可信掃描來源 IP 的例外，"
+                        "或在 staging 環境（無 WAF）執行深度資安稽核。"
+                    ),
+                    "evidence": (
+                        f"偵測技術棧：{', '.join(katana_tech)}；"
+                        f"Nuclei 掃描 {scanned_count} 個 URL，回傳 0 項發現"
+                    ),
+                    "selector": "",
+                    "bounding_box": None,
+                    "impact_area": "vulnerability",
+                    "confidence": 0.9,
+                    "priority_score": 10.0,
+                    "ai_handoff_prompt": (
+                        f"網站部署了 {waf_names} WAF / CDN 保護，Nuclei 資安探針被攔截。"
+                        "這是良好的安全措施。建議定期在授權環境下進行深度內部安全掃描。"
+                    ),
+                }]
+                append_log(
+                    scan_job_id,
+                    f"偵測到 WAF 保護（{waf_names}），Nuclei 探針可能被攔截，已新增說明 finding",
+                )
+
         for finding in katana_findings + nuclei_findings:
             Finding.objects.create(scan_job=scan_job, page=None, **finding)
         all_findings.extend(katana_findings + nuclei_findings)
+
+        # === 深度被動安全掃描（security/ sub-package，純加法、silent-fail）===
+        host = urlparse(scan_job.normalized_url).hostname or ""
+        root_page = next((p for p in crawled_pages if p.get("headers")), None)
+        root_headers = root_page["headers"] if root_page else {}
+        root_url = (
+            (root_page.get("final_url") or root_page.get("url"))
+            if root_page else scan_job.normalized_url
+        )
+        deep_security_findings = (
+            analyze_ssl(host, scan_job_id=scan_job.id)
+            + analyze_cookies(root_headers, root_url)
+            + analyze_headers(crawled_pages)
+        )
+        deep_security_findings = [owasp_mapper.tag(f) for f in deep_security_findings]
+        for finding in deep_security_findings:
+            Finding.objects.create(scan_job=scan_job, page=None, **finding)
+        all_findings.extend(deep_security_findings)
+        owasp_mapper.backfill(scan_job)
+        append_log(
+            scan_job_id,
+            f"深度被動安全掃描完成：{len(deep_security_findings)} 項發現",
+        )
 
         if katana_tech:
             updated_warnings = dict(scan_job.warning_summary or {})

@@ -13,9 +13,8 @@ model: sonnet
 
 審查任何 diff 前，先用 Read 載入：
 - `CLAUDE.md`：硬性規則（繁體中文、禁止洩漏個資、API Key 安全）
-- `AGENTS.md`：API provider 規則、授權限制
-- `skills/argus-project/references/project-rules.md`：法律授權邊界
-- `skills/argus-project/references/api-provider-workflow.md`：API Key 處理流程
+- `Project_說明.md`：法律授權邊界、same-origin、深度/頁數/RPS 限制、AuthorizationConsent
+- `backend/apps/agent/CLAUDE.md`：API Key 處理、provider chain、same-origin 約束
 
 ## 重點審查面向（依優先順序）
 

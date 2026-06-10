@@ -26,10 +26,21 @@ queued → crawling → scanning → [agent_testing] → completed
 |---|---|---|
 | `tasks.py` | Celery task 入口、狀態機推進、呼叫 billing | 直接執行爬蟲邏輯 |
 | `crawler.py` | Playwright BFS 爬蟲、收集頁面 | 修改 ScanJob.status、呼叫 billing |
-| `scanners.py` | 四維掃描（SEO/AEO/GEO/Security）、產生 findings | 修改 ScanJob.status |
+| `scanners.py` | SEO/AEO/GEO 掃描 + 被動式基本安全檢查（HTTPS/header 存在性/CSRF/PII）、產生 findings | 修改 ScanJob.status、深度資安分析 |
 | `cancellation.py` | CancellationToken，供 worker 輪詢是否要終止 | 直接終止 worker process |
 | `reports.py` | 產生 Word 報告（.docx） | 任何 DB 寫入 |
 | `nuclei_scanner.py` | Nuclei binary 封裝；fast/deep 雙模式；JSONL 解析；Finding mapping | 在 passive mode 執行（已由 deep 旗標控制） |
+| `security/` | 深度主動式資安檢查（SSL/TLS、Cookie、CORS、CSP 品質、OWASP 對映、Kali 工具）| 修改 ScanJob.status、呼叫 billing |
+
+### 資安邊界（重要）
+
+`scanners.py` 的 `analyze_security()` 與 `security/` sub-package 的分工：
+
+- **`scanners.py` 留著**：被動讀取已有 response headers/HTML，不需要額外連線（HTTPS 判斷、header 存在性、CSRF token、PII 偵測）
+- **`security/` 新增**：需要額外連線或工具呼叫的深度分析（SSL 憑證讀取、Cookie API、OPTIONS 探測、docker exec kali）
+- **新的資安功能一律寫進 `security/`**，不要再擴充 `scanners.py` 的資安部分
+
+詳細規則見 [`security/CLAUDE.md`](security/CLAUDE.md)。
 
 ---
 
@@ -93,6 +104,37 @@ refund_full_for_scan(scan)  ← 全退（冪等）
 
 ---
 
+## 整合測試規則（必讀）
+
+**掃描功能整合測試一律使用 Docker 環境（`localhost:8080`），禁止用本機 runserver 測試。**
+
+原因：本機 runserver 缺少 Redis（Celery broker 無法運作）、Celery worker、正確前端 dist，繞過這些限制需要大量額外工作且驗證不完整。
+
+```powershell
+# 標準整合測試流程
+docker compose up -d --build web worker   # 含最新程式碼重建
+
+# 給測試帳號補充 coin
+docker exec argus-web-1 uv run python manage.py shell -c "
+from django.contrib.auth import get_user_model
+from apps.billing.services import get_or_create_wallet, admin_adjust
+User = get_user_model()
+user = User.objects.filter(email='YOUR_EMAIL').first()
+admin = User.objects.filter(is_superuser=True).first()
+admin_adjust(target_user=user, delta=999999, admin_actor=admin, note='test')
+"
+
+# 開啟 localhost:8080，用 UI 建立掃描並觀察 log
+```
+
+確認 Docker worker 有安裝 nuclei/katana：
+```powershell
+docker exec argus-worker-1 nuclei -version
+docker exec argus-worker-1 katana -version
+```
+
+---
+
 ## 禁止事項
 
 | 禁止 | 原因 |
@@ -102,3 +144,4 @@ refund_full_for_scan(scan)  ← 全退（冪等）
 | `playwright install` 不加 `PLAYWRIGHT_BROWSERS_PATH` | 污染全域路徑 |
 | Nuclei deep mode 需 `scan_mode=active AND active_testing_authorized` | 未授權的主動測試 |
 | 直接 `ScanJob.objects.filter(...).update(status=...)` | 繞過 signal，狀態不一致 |
+| 用本機 `runserver` 做掃描整合測試 | 缺少 Redis/Celery，驗證不完整 |
