@@ -42,6 +42,10 @@ class GoogleLoginView(views.APIView):
                 credential,
                 google_requests.Request(),
                 client_id,
+                # 容忍 ±10 秒的本機/Google 時鐘漂移（WSL2 host 從 sleep/hibernate
+                # 恢復後 vm 時鐘不會自動 NTP sync，曾觀察到固定慢 2 秒導致
+                # "Token used too early"。預設為 0 太嚴格）。
+                clock_skew_in_seconds=10,
             )
         except ValueError:
             return Response(
