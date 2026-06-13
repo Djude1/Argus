@@ -386,3 +386,19 @@ class TestAnalyzeDnsWiring(TestCase):
 
     def test_empty_host_returns_empty(self):
         self.assertEqual(dns_scanner.analyze_dns(""), [])
+
+
+class TestOwaspMappingNew(TestCase):
+    def test_new_rule_ids_mapped(self):
+        cases = {
+            "sri-missing-integrity": ("A08", "CWE-353"),
+            "dns-spf-missing": ("A07", "CWE-290"),
+            "dns-spf-permissive": ("A07", "CWE-290"),
+            "dns-dmarc-missing": ("A07", "CWE-290"),
+            "dns-dmarc-policy-weak": ("A07", "CWE-290"),
+            "dns-dnssec-missing": ("A05", "CWE-345"),
+        }
+        for rule_id, (owasp, cwe) in cases.items():
+            tagged = owasp_mapper.tag({"category": "security", "rule_id": rule_id})
+            self.assertEqual(tagged["owasp_category"], owasp, rule_id)
+            self.assertEqual(tagged["cwe_id"], cwe, rule_id)
