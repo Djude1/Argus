@@ -19,6 +19,8 @@ _RULE_OWASP_MAP: dict[str, tuple[str, str]] = {
     "header-cors-wildcard": ("A05", "CWE-942"),
     "header-cors-credentials": ("A05", "CWE-942"),
     "header-csp-unsafe": ("A05", "CWE-1021"),
+    # Kali 主動驗證（kali_tools 攻擊鏈）
+    "kali-sqlmap-sqli": ("A03", "CWE-89"),
 }
 
 

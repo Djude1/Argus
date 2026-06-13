@@ -169,6 +169,12 @@ ARGUS_AGENT_MAX_TOKENS = int(os.getenv("ARGUS_AGENT_MAX_TOKENS", "60000"))
 ARGUS_AGENT_STEP_TIMEOUT = int(os.getenv("ARGUS_AGENT_STEP_TIMEOUT", "30"))
 ARGUS_AGENT_ENABLED = env_bool("ARGUS_AGENT_ENABLED", default=False)
 
+# Phase 3 Kali 主動驗證工具（docker exec 呼叫 kali container 的 sqlmap/metasploit）
+# 預設關閉；即使開啟，仍需 scan_mode=active 且 active_testing_authorized=True 才會執行（三重鎖）
+ARGUS_KALI_ENABLED = env_bool("ARGUS_KALI_ENABLED", default=False)
+ARGUS_KALI_CONTAINER = os.getenv("ARGUS_KALI_CONTAINER", "argus-kali-1")
+ARGUS_KALI_TIMEOUT = int(os.getenv("ARGUS_KALI_TIMEOUT", "120"))  # 單一工具 subprocess 超時（秒）
+
 # Google OAuth Client ID（從 Google Cloud Console > Credentials 取得）
 # 一般使用者透過 Google 帳號登入時用於驗證 ID Token；空字串代表未啟用
 GOOGLE_OAUTH_CLIENT_ID = os.getenv("GOOGLE_OAUTH_CLIENT_ID", "")
