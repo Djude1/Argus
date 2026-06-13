@@ -75,7 +75,7 @@ deep_security_findings = [owasp_mapper.tag(f) for f in deep_security_findings]
 
 ### 實作要點
 
-- 解析用 `BeautifulSoup`（專案已有，`scanners.py` 在用），不自刻 regex
+- 解析用 stdlib `html.parser.HTMLParser`（`scanners.py:195` 的 `HtmlSignalParser` 已用此模式），不引入 BeautifulSoup、不自刻 regex
 - 跨來源判定：比對標籤 URL 的 netloc 與頁面 `final_url` 的 netloc，不同才算外部
 - **去重**：以「外部資源 URL」當 key 收進 set，整個 scan 同一 CDN URL 只報一次
 - 掃全部 pages 後去重（pages 都在手上，最簡單）
