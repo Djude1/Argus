@@ -70,7 +70,9 @@ def analyze_sri(pages: list[dict]) -> list[dict]:
                         f"外部資源 {resolved} 未設定 integrity 屬性，"
                         "若該 CDN 遭竄改，惡意程式碼將直接於使用者瀏覽器執行。"
                     ),
-                    remediation="為外部 <script>/<link> 加上 integrity 與 crossorigin 屬性（SRI hash）。",
+                    remediation=(
+                        "為外部 <script>/<link> 加上 integrity 與 crossorigin 屬性（SRI hash）。"
+                    ),
                     evidence=f"<{tag} ...{res_url}>（無 integrity）",
                     impact_area="vulnerability",
                 ))

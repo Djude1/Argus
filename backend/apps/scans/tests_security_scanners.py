@@ -313,7 +313,8 @@ class TestSriScanner(TestCase):
         self.assertEqual(len(findings), 1)
 
     def test_empty_html_returns_empty(self):
-        self.assertEqual(sri_scanner.analyze_sri([{"html": "", "final_url": "https://example.com/"}]), [])
+        page = {"html": "", "final_url": "https://example.com/"}
+        self.assertEqual(sri_scanner.analyze_sri([page]), [])
 
     def test_no_pages_returns_empty(self):
         self.assertEqual(sri_scanner.analyze_sri([]), [])
@@ -333,7 +334,8 @@ class TestDnsEval(TestCase):
         self.assertEqual(findings[0]["severity"], "high")
 
     def test_spf_strict_no_finding(self):
-        self.assertEqual(dns_scanner._eval_spf("v=spf1 include:_spf.google.com -all", "example.com"), [])
+        result = dns_scanner._eval_spf("v=spf1 include:_spf.google.com -all", "example.com")
+        self.assertEqual(result, [])
 
     # --- DMARC ---
     def test_dmarc_missing_low(self):
