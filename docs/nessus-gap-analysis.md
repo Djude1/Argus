@@ -31,10 +31,10 @@
 | 1 | **SSL/TLS 深度分析** | 憑證到期日、自簽憑證、弱加密套件（RC4/3DES）、過期協議（TLS 1.0/1.1）、憑證鏈完整性 | 只判斷 scheme 是否為 HTTPS | 低（Python `ssl` 模組） |
 | 2 | **Cookie 安全旗標** | Secure、HttpOnly、SameSite 屬性逐一檢查 | 完全沒有 | 低（Playwright 可直接讀 cookies） |
 | 3 | **資訊洩露標頭** | Server 版本洩露（`Apache/2.4.x`）、`X-Powered-By`、`X-Generator`、`X-AspNet-Version` | 完全沒有 | 低（分析 response headers） |
-| 4 | **SRI 缺失** | 外部 CDN `<script>/<link>` 缺少 `integrity` hash | 完全沒有 | 低（HTML parser 已有基礎） |
+| 4 | **SRI 缺失** | 外部 CDN `<script>/<link>` 缺少 `integrity` hash | ✅ 已補齊（security/sri_scanner.py） | 低（HTML parser 已有基礎） |
 | 5 | **CORS 設定分析** | `Access-Control-Allow-Origin: *` 過寬、credentials + wildcard 錯誤組合 | 完全沒有 | 低（分析 CORS headers） |
 | 6 | **CSP 品質分析** | `unsafe-inline`、`unsafe-eval`、wildcard source 偵測 | 只偵測有無 CSP header | 中（需解析 CSP policy 字串） |
-| 7 | **DNS / 郵件安全** | SPF record、DKIM 設定、DMARC 政策、DNSSEC | 無（免費工具釣魚郵件分析中只解析 header，未做 DNS 查詢） | 中（需 `dnspython`） |
+| 7 | **DNS / 郵件安全** | SPF record、DKIM 設定、DMARC 政策、DNSSEC | ✅ 已補齊 SPF/DMARC/DNSSEC（security/dns_scanner.py）；DKIM 不做（黑盒無法可靠列舉 selector） | 中（需 `dnspython`） |
 | 8 | **OWASP Top 10 對映** | 每個 finding 標記對應的 OWASP 分類（A01~A10）、CWE 編號 | finding 有 category/impact_area，但沒有 OWASP/CWE 對映 | 低（報告層面加標籤） |
 
 ### 部分覆蓋（Nuclei 有幫忙，但不完整）

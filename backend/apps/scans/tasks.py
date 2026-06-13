@@ -22,8 +22,10 @@ from apps.scans.scanners import (
 )
 from apps.scans.security import owasp_mapper
 from apps.scans.security.cookie_scanner import analyze_cookies
+from apps.scans.security.dns_scanner import analyze_dns
 from apps.scans.security.header_scanner import analyze_headers
 from apps.scans.security.kali_tools import validate_findings_with_kali
+from apps.scans.security.sri_scanner import analyze_sri
 from apps.scans.security.ssl_scanner import analyze_ssl
 
 
@@ -285,6 +287,8 @@ def run_scan_job(self, scan_job_id: int) -> dict:
             analyze_ssl(host, scan_job_id=scan_job.id)
             + analyze_cookies(root_headers, root_url)
             + analyze_headers(crawled_pages)
+            + analyze_sri(crawled_pages)
+            + analyze_dns(host)
         )
         deep_security_findings = [owasp_mapper.tag(f) for f in deep_security_findings]
         for finding in deep_security_findings:
