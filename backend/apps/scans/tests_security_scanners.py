@@ -9,6 +9,7 @@ from apps.scans.security import (
     cookie_scanner,
     header_scanner,
     owasp_mapper,
+    sri_scanner,
     ssl_scanner,
 )
 from apps.scans.serializers import FindingSerializer
@@ -275,3 +276,43 @@ class TestOwaspMapperExistingFindings(TestCase):
 
     def test_unmappable_rule_id_stays_empty(self):
         self.assertEqual(owasp_mapper._lookup("SECURITY_SOMETHING_NEW_AABBCC1122"), ("", ""))
+
+
+class TestSriScanner(TestCase):
+    def _page(self, html):
+        return {"html": html, "final_url": "https://example.com/"}
+
+    def test_cross_origin_script_without_integrity_flagged(self):
+        html = '<script src="https://cdn.other.com/a.js"></script>'
+        findings = sri_scanner.analyze_sri([self._page(html)])
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0]["rule_id"], "sri-missing-integrity")
+        self.assertEqual(findings[0]["severity"], "low")
+
+    def test_cross_origin_link_stylesheet_without_integrity_flagged(self):
+        html = '<link rel="stylesheet" href="https://cdn.other.com/a.css">'
+        findings = sri_scanner.analyze_sri([self._page(html)])
+        self.assertEqual(len(findings), 1)
+
+    def test_script_with_integrity_not_flagged(self):
+        html = '<script src="https://cdn.other.com/a.js" integrity="sha384-x"></script>'
+        self.assertEqual(sri_scanner.analyze_sri([self._page(html)]), [])
+
+    def test_same_origin_script_not_flagged(self):
+        html = '<script src="https://example.com/a.js"></script>'
+        self.assertEqual(sri_scanner.analyze_sri([self._page(html)]), [])
+
+    def test_relative_path_not_flagged(self):
+        html = '<script src="/static/a.js"></script>'
+        self.assertEqual(sri_scanner.analyze_sri([self._page(html)]), [])
+
+    def test_same_external_url_deduped_across_pages(self):
+        html = '<script src="https://cdn.other.com/a.js"></script>'
+        findings = sri_scanner.analyze_sri([self._page(html), self._page(html)])
+        self.assertEqual(len(findings), 1)
+
+    def test_empty_html_returns_empty(self):
+        self.assertEqual(sri_scanner.analyze_sri([{"html": "", "final_url": "https://example.com/"}]), [])
+
+    def test_no_pages_returns_empty(self):
+        self.assertEqual(sri_scanner.analyze_sri([]), [])
