@@ -7,6 +7,7 @@ from django.test import TestCase
 from apps.scans.models import Finding, ScanJob
 from apps.scans.security import (
     cookie_scanner,
+    dns_scanner,
     header_scanner,
     owasp_mapper,
     sri_scanner,
@@ -316,3 +317,72 @@ class TestSriScanner(TestCase):
 
     def test_no_pages_returns_empty(self):
         self.assertEqual(sri_scanner.analyze_sri([]), [])
+
+
+class TestDnsEval(TestCase):
+    # --- SPF ---
+    def test_spf_missing_medium(self):
+        findings = dns_scanner._eval_spf(None, "example.com")
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0]["rule_id"], "dns-spf-missing")
+        self.assertEqual(findings[0]["severity"], "medium")
+
+    def test_spf_permissive_all_high(self):
+        findings = dns_scanner._eval_spf("v=spf1 +all", "example.com")
+        self.assertEqual(findings[0]["rule_id"], "dns-spf-permissive")
+        self.assertEqual(findings[0]["severity"], "high")
+
+    def test_spf_strict_no_finding(self):
+        self.assertEqual(dns_scanner._eval_spf("v=spf1 include:_spf.google.com -all", "example.com"), [])
+
+    # --- DMARC ---
+    def test_dmarc_missing_low(self):
+        findings = dns_scanner._eval_dmarc(None, "example.com")
+        self.assertEqual(findings[0]["rule_id"], "dns-dmarc-missing")
+        self.assertEqual(findings[0]["severity"], "low")
+
+    def test_dmarc_policy_none_low(self):
+        findings = dns_scanner._eval_dmarc("v=DMARC1; p=none", "example.com")
+        self.assertEqual(findings[0]["rule_id"], "dns-dmarc-policy-weak")
+        self.assertEqual(findings[0]["severity"], "low")
+
+    def test_dmarc_policy_reject_no_finding(self):
+        self.assertEqual(dns_scanner._eval_dmarc("v=DMARC1; p=reject", "example.com"), [])
+
+    def test_dmarc_policy_parser(self):
+        self.assertEqual(dns_scanner._dmarc_policy("v=DMARC1; p=quarantine; pct=100"), "quarantine")
+
+    # --- DNSSEC ---
+    def test_dnssec_missing_low(self):
+        findings = dns_scanner._eval_dnssec(False, "example.com")
+        self.assertEqual(findings[0]["rule_id"], "dns-dnssec-missing")
+        self.assertEqual(findings[0]["severity"], "low")
+
+    def test_dnssec_present_no_finding(self):
+        self.assertEqual(dns_scanner._eval_dnssec(True, "example.com"), [])
+
+    def test_dnssec_unknown_no_finding(self):
+        self.assertEqual(dns_scanner._eval_dnssec(None, "example.com"), [])
+
+    # --- org domain 退一層 ---
+    def test_org_domain_strips_subdomain(self):
+        self.assertEqual(dns_scanner._org_domain("www.example.com"), "example.com")
+
+    def test_org_domain_keeps_two_label(self):
+        self.assertEqual(dns_scanner._org_domain("example.com"), "example.com")
+
+
+class TestAnalyzeDnsWiring(TestCase):
+    def test_all_missing_produces_three_findings(self):
+        orig_txt, orig_key = dns_scanner._query_txt, dns_scanner._has_dnskey
+        dns_scanner._query_txt = lambda name: []
+        dns_scanner._has_dnskey = lambda name: False
+        try:
+            findings = dns_scanner.analyze_dns("example.com")
+        finally:
+            dns_scanner._query_txt, dns_scanner._has_dnskey = orig_txt, orig_key
+        rule_ids = {f["rule_id"] for f in findings}
+        self.assertEqual(rule_ids, {"dns-spf-missing", "dns-dmarc-missing", "dns-dnssec-missing"})
+
+    def test_empty_host_returns_empty(self):
+        self.assertEqual(dns_scanner.analyze_dns(""), [])
