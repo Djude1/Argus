@@ -445,6 +445,21 @@ class PiiDetectionTests(APITestCase):
         result = detect_pii_in_text("流水號 1234567890123456 不是卡號")
         self.assertEqual(result["credit_card"], [])
 
+    def test_detect_pii_ignores_bare_luhn_valid_without_context(self):
+        # 通過 Luhn 但無分隔、附近也無信用卡關鍵字（流水號）→ 不採計，收斂誤報
+        result = detect_pii_in_text("序號 4111111111111111 結束")
+        self.assertEqual(result["credit_card"], [])
+
+    def test_detect_pii_keeps_formatted_card_without_context(self):
+        # 4-4-4-4 格式化卡號即使無關鍵字，仍視為高信心
+        result = detect_pii_in_text("備註 4111-1111-1111-1111 完")
+        self.assertEqual(result["credit_card"], ["4111-1111-1111-1111"])
+
+    def test_detect_pii_keeps_bare_card_with_context(self):
+        # 裸號但附近有「卡」關鍵字 → 採計
+        result = detect_pii_in_text("信用卡號 4111111111111111")
+        self.assertEqual(result["credit_card"], ["4111111111111111"])
+
     def test_detect_pii_dedups_repeated_values(self):
         result = detect_pii_in_text("a@b.com a@b.com a@b.com 重複出現")
         self.assertEqual(result["email"], ["a@b.com"])
