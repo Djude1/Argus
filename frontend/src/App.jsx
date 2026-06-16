@@ -2771,6 +2771,50 @@ function StatTile({ label, value, hint, tone = "neutral", animateValue, onClick 
 
 // formatRelativeTime 在下方 L3690 已定義，這裡不重複。
 
+// 臨時公告用右下 toast（自動 5 秒消失、不阻斷使用流）；常駐公告用中央 modal（要求使用者確認）。
+// 業界做法：把不重要的通知降級為 toast，避免每次小事都打斷使用者操作。
+function AnnouncementToast({ announcements, onDismiss }) {
+  const [hovering, setHovering] = useState({});
+
+  useEffect(() => {
+    // 對每個顯示中的 toast 排 5 秒自動關（hover 時暫停）
+    const timers = announcements
+      .filter((a) => !hovering[a.id])
+      .map((a) =>
+        setTimeout(() => onDismiss(a.id), 5000),
+      );
+    return () => timers.forEach((t) => clearTimeout(t));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [announcements, hovering]);
+
+  if (!announcements.length) return null;
+  return (
+    <div className="argus-toast-stack" role="status" aria-live="polite">
+      {announcements.map((ann) => (
+        <div
+          key={ann.id}
+          className="argus-toast"
+          onMouseEnter={() => setHovering((h) => ({ ...h, [ann.id]: true }))}
+          onMouseLeave={() => setHovering((h) => ({ ...h, [ann.id]: false }))}
+        >
+          <div className="argus-toast-body">
+            <div className="argus-toast-title">{ann.title}</div>
+            <div className="argus-toast-content">{ann.content.slice(0, 100)}{ann.content.length > 100 ? "…" : ""}</div>
+          </div>
+          <button
+            type="button"
+            className="argus-toast-close"
+            onClick={() => onDismiss(ann.id)}
+            aria-label="關閉公告"
+          >
+            ×
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function AnnouncementModal({ announcements, onDismiss, onConfirm }) {
   const [index, setIndex] = useState(0);
   if (!announcements.length) return null;
@@ -2824,7 +2868,8 @@ function DashboardPage() {
   const [data, setData] = useState(null);
   const [categoriesData, setCategoriesData] = useState(null);
   const [error, setError] = useState("");
-  const [announcements, setAnnouncements] = useState([]);
+  const [announcements, setAnnouncements] = useState([]); // permanent → modal
+  const [toasts, setToasts] = useState([]); // temporary → toast
   const [annVisible, setAnnVisible] = useState(false);
 
   useEffect(() => {
@@ -2855,9 +2900,15 @@ function DashboardPage() {
           if (!confirmed) return true;
           return Date.now() - Number(confirmed) > 24 * 60 * 60 * 1000;
         });
-        if (toShow.length) {
-          setAnnouncements(toShow);
+        // 分流：temporary → toast (右下、自動消失)；permanent → modal (中央、要求確認)
+        const permanent = toShow.filter((a) => a.type === "permanent");
+        const temporary = toShow.filter((a) => a.type === "temporary");
+        if (permanent.length) {
+          setAnnouncements(permanent);
           setAnnVisible(true);
+        }
+        if (temporary.length) {
+          setToasts(temporary);
         }
       })
       .catch(() => {});
@@ -2865,6 +2916,7 @@ function DashboardPage() {
 
   function handleDismiss(annId) {
     localStorage.setItem(`ann_dismissed_${annId}`, "1");
+    setToasts((prev) => prev.filter((a) => a.id !== annId));
     const remaining = announcements.filter((a) => a.id !== annId);
     if (!remaining.length) setAnnVisible(false);
     setAnnouncements(remaining);
@@ -3042,6 +3094,7 @@ function DashboardPage() {
           onConfirm={handleConfirm}
         />
       )}
+      <AnnouncementToast announcements={toasts} onDismiss={handleDismiss} />
     </div>
   );
 }
@@ -4867,12 +4920,8 @@ const COMPARE_ROWS = [
 ];
 
 function PurchasePage() {
-  const [plans, setPlans] = useState([]);
   const [openFaq, setOpenFaq] = useState(0);
   const navigate = useNavigate();
-  useEffect(() => {
-    api.get("/billing/plans/").then((r) => setPlans(r.data.plans || [])).catch(() => {});
-  }, []);
   return (
     <div className="public-page">
       <section className="public-hero compact">
@@ -4882,7 +4931,7 @@ function PurchasePage() {
           <span className="hero-orb hero-orb-3" />
         </div>
         <div className="public-hero-content">
-          <span className="public-hero-eyebrow">PURCHASE · 購買方案</span>
+          <span className="public-hero-eyebrow">PRICING · 為什麼選 Argus</span>
           <h1 className="public-hero-title">
             <span className="hero-grad">按頁付費</span>，永久有效
           </h1>
@@ -4890,53 +4939,15 @@ function PurchasePage() {
             每爬一頁 10 coin，新會員每月自動贈送 200 coin；買越多越划算，
             點數不會過期，失敗或取消自動全額退回。
           </p>
-        </div>
-      </section>
-
-      <section className="public-section">
-        <header className="public-section-head">
-          <h2>方案一覽</h2>
-          <p>四個方案任選，全部一次看清楚</p>
-        </header>
-        <div className="public-plan-grid">
-          {plans.map((p) => {
-            const featured = p.code === "advanced";
-            // 1 coin = 1 頁掃描；用業界 SEO 工具的網站規模切分換算
-            const pages = p.coin_amount;
-            const smallSites = Math.floor(pages / 20);
-            const mediumSites = Math.floor(pages / 100);
-            return (
-              <div
-                key={p.code}
-                className={`public-plan-card ${featured ? "is-featured" : ""}`}
-              >
-                {featured && <span className="public-plan-recommend">★ 最受歡迎</span>}
-                {p.badge && <span className="public-plan-badge">{p.badge}</span>}
-                <h3 className="public-plan-name">{p.name}</h3>
-                <div className="public-plan-coin">{p.coin_amount.toLocaleString()}<span> coin</span></div>
-                <div className="public-plan-price">NT$ {p.price_ntd.toLocaleString()}</div>
-                <div className="public-plan-rate">{p.coin_per_ntd?.toFixed(2)} coin / NT$</div>
-                <ul className="public-plan-equivalents">
-                  <li>≈ {pages.toLocaleString()} 頁掃描</li>
-                  {smallSites >= 1 && (
-                    <li>≈ {smallSites} 個小型網站健檢（20 頁/站）</li>
-                  )}
-                  {mediumSites >= 1 && (
-                    <li>≈ {mediumSites} 個中型網站健檢（100 頁/站）</li>
-                  )}
-                </ul>
-                {p.description && <p className="public-plan-desc">{p.description}</p>}
-                <button
-                  type="button"
-                  className="public-plan-cta"
-                  onClick={() => navigate(`/billing?plan=${p.code}`)}
-                >
-                  選此方案 →
-                </button>
-              </div>
-            );
-          })}
-          {plans.length === 0 && <p className="public-empty">尚未設定方案。</p>}
+          <div className="public-hero-actions">
+            <button
+              type="button"
+              className="public-cta-primary"
+              onClick={() => navigate("/billing")}
+            >
+              看方案 + 開始結帳 →
+            </button>
+          </div>
         </div>
       </section>
 
