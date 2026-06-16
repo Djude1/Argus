@@ -30,14 +30,15 @@ queued → crawling → scanning → [agent_testing] → completed
 | `cancellation.py` | CancellationToken，供 worker 輪詢是否要終止 | 直接終止 worker process |
 | `reports.py` | 產生 Word 報告（.docx） | 任何 DB 寫入 |
 | `nuclei_scanner.py` | Nuclei binary 封裝；fast/deep 雙模式；JSONL 解析；Finding mapping | 在 passive mode 執行（已由 deep 旗標控制） |
-| `security/` | 深度主動式資安檢查（SSL/TLS、Cookie、CORS、CSP 品質、OWASP 對映、Kali 工具）| 修改 ScanJob.status、呼叫 billing |
+| `security/` | 深度主動式資安檢查（SSL/TLS、Cookie、CORS、CSP 品質、敏感檔外洩探測、硬編碼秘鑰偵測、OWASP 對映、Kali 工具）| 修改 ScanJob.status、呼叫 billing |
 
 ### 資安邊界（重要）
 
 `scanners.py` 的 `analyze_security()` 與 `security/` sub-package 的分工：
 
 - **`scanners.py` 留著**：被動讀取已有 response headers/HTML，不需要額外連線（HTTPS 判斷、header 存在性、CSRF token、PII 偵測）
-- **`security/` 新增**：需要額外連線或工具呼叫的深度分析（SSL 憑證讀取、Cookie API、OPTIONS 探測、docker exec kali）
+- **`security/` 新增**：需要額外連線或工具呼叫的深度分析（SSL 憑證讀取、Cookie API、OPTIONS 探測、敏感檔主動探測 content discovery、docker exec kali）
+- **例外（被動但放 security/）**：硬編碼秘鑰偵測 `secret_scanner.detect_secrets_in_text` 是純解析，但因屬「深度解析」歸 security/；由 tasks.py 對已抓 HTML 被動呼叫（零額外請求）
 - **新的資安功能一律寫進 `security/`**，不要再擴充 `scanners.py` 的資安部分
 
 詳細規則見 [`security/CLAUDE.md`](security/CLAUDE.md)。

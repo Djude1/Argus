@@ -103,13 +103,24 @@ def load_robot_parser(origin: str) -> RobotFileParser:
 
 
 async def probe_site_signals(context, origin: str, robot_parser: RobotFileParser) -> dict:
-    """檢查站台層級的 GEO 訊號：llms.txt 是否存在、robots.txt 是否阻擋 AI 爬蟲。"""
-    signals: dict = {"llms_txt_found": False, "blocked_ai_crawlers": []}
+    """檢查站台層級訊號：llms.txt 是否存在、robots.txt 是否阻擋 AI 爬蟲、robots Disallow 清單。
+
+    robots_disallow 供資安層判斷「robots.txt 是否把敏感路徑當地圖洩露」（被動）。
+    """
+    from apps.scans.security.exposure_scanner import parse_robots_disallow
+
+    signals: dict = {"llms_txt_found": False, "blocked_ai_crawlers": [], "robots_disallow": []}
     try:
         response = await context.request.get(f"{origin}/llms.txt", timeout=10000)
         signals["llms_txt_found"] = response.ok
     except Exception:
         signals["llms_txt_found"] = False
+    try:
+        resp = await context.request.get(f"{origin}/robots.txt", timeout=10000)
+        if resp.ok:
+            signals["robots_disallow"] = parse_robots_disallow(await resp.text())
+    except Exception:
+        signals["robots_disallow"] = []
     for agent in AI_CRAWLER_USER_AGENTS:
         if not robot_parser.can_fetch(agent, f"{origin}/"):
             signals["blocked_ai_crawlers"].append(agent)

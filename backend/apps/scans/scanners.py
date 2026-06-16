@@ -119,12 +119,48 @@ def is_valid_luhn(text: str) -> bool:
     return checksum % 10 == 0
 
 
+# 信用卡上下文關鍵字：附近出現這些字才把「裸數字串」當卡號，降低隨機數字誤報
+_CARD_CONTEXT_KEYWORDS = (
+    "card", "卡", "信用", "visa", "master", "amex", "jcb", "unionpay", "銀聯",
+    "付款", "payment", "刷卡", "帳單", "cvv", "cvc", "expir", "到期", "持卡",
+)
+
+
+def _is_formatted_card(match: str) -> bool:
+    """卡號有 4-4-4-4 / 4-6-5 之類分隔且去分隔後為 15/16 位 → 視為高信心格式。"""
+    digits = re.sub(r"\D", "", match)
+    return ("-" in match or " " in match) and len(digits) in (15, 16)
+
+
+def _card_has_context(text: str, match: str, window: int = 48) -> bool:
+    """match 在 text 任一出現位置的前後 window 字元內，是否有信用卡關鍵字。"""
+    low = text.lower()
+    target = match.lower()
+    idx = low.find(target)
+    while idx != -1:
+        seg = low[max(0, idx - window): idx + len(target) + window]
+        if any(k in seg for k in _CARD_CONTEXT_KEYWORDS):
+            return True
+        idx = low.find(target, idx + 1)
+    return False
+
+
 def detect_pii_in_text(text: str) -> dict[str, list[str]]:
     """從文字中偵測 PII，回傳各類別去重後的列表（按出現順序保留）。
 
     身分證與信用卡會額外用檢查碼過濾，降低 false positive。
+
+    信用卡精準度（收斂誤報）：通過 Luhn 後，僅在「格式化（含分隔且 15/16 位）」
+    或「附近有信用卡關鍵字」時才採計；裸數字串（流水號、座標、雜湊片段巧過 Luhn）
+    不採計，避免報告灌入大量假卡號（已於靶機報告觀察到此問題）。
     """
     text = text or ""
+    cc_valid = [
+        m for m in dict.fromkeys(CREDIT_CARD_PATTERN.findall(text)) if is_valid_luhn(m)
+    ]
+    credit_card = [
+        m for m in cc_valid if _is_formatted_card(m) or _card_has_context(text, m)
+    ]
     return {
         "email": list(dict.fromkeys(EMAIL_PATTERN.findall(text))),
         "mobile": list(dict.fromkeys(TW_MOBILE_PATTERN.findall(text))),
@@ -132,10 +168,7 @@ def detect_pii_in_text(text: str) -> dict[str, list[str]]:
             m for m in dict.fromkeys(TW_NATIONAL_ID_PATTERN.findall(text))
             if is_valid_tw_national_id(m)
         ],
-        "credit_card": [
-            m for m in dict.fromkeys(CREDIT_CARD_PATTERN.findall(text))
-            if is_valid_luhn(m)
-        ],
+        "credit_card": credit_card,
     }
 
 
