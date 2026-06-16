@@ -179,6 +179,26 @@ GOOGLE_OAUTH_CLIENT_ID = os.getenv("GOOGLE_OAUTH_CLIENT_ID", "")
 ARGUS_MONTHLY_BONUS_COINS = int(os.getenv("ARGUS_MONTHLY_BONUS_COINS", "200"))
 ARGUS_COIN_PER_PAGE = int(os.getenv("ARGUS_COIN_PER_PAGE", "10"))
 
+# Email 寄送（購買收據、未來通知）
+# dev 預設用 filebased backend（信件存到 dev_emails/，每封一檔，可直接打開看內容；
+# 避開 Windows console cp950 編碼炸 emoji 的問題）。
+# production 設 DJANGO_EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+# 並提供 EMAIL_HOST_USER / EMAIL_HOST_PASSWORD（Gmail 用 App Password，不是登入密碼）
+EMAIL_BACKEND = os.getenv(
+    "DJANGO_EMAIL_BACKEND",
+    "django.core.mail.backends.filebased.EmailBackend",
+)
+EMAIL_FILE_PATH = os.getenv(
+    "EMAIL_FILE_PATH",
+    str(PROJECT_ROOT / "backend" / "dev_emails"),
+)
+EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.gmail.com")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
+EMAIL_USE_TLS = env_bool("EMAIL_USE_TLS", default=True)
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "Argus 系統 <no-reply@argus.local>")
+
 # Django Admin 已完全移除（不再提供 `/django-admin/` 後門）；唯一後台為 React `/admin/*`
 # （admin_api 提供 CRUD endpoint）。`django.contrib.admin` 仍留在 INSTALLED_APPS：
 # 提供 LogEntry 等基礎設施並避免動到既有 migration，但已無對外 URL、無法存取。

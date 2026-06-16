@@ -36,3 +36,6 @@ _shots/
 過場動畫和網站設計範本/
 粒子穿越特色.jpg
 網站商標.png
+
+# Dev email outputs (filebased EmailBackend)
+backend/dev_emails/*.log
