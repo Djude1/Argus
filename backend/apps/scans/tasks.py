@@ -20,11 +20,12 @@ from apps.scans.scanners import (
     analyze_site_signals,
     calculate_scores,
 )
-from apps.scans.security import owasp_mapper
+from apps.scans.security import exposure_scanner, owasp_mapper
 from apps.scans.security.cookie_scanner import analyze_cookies
 from apps.scans.security.dns_scanner import analyze_dns
 from apps.scans.security.header_scanner import analyze_headers
 from apps.scans.security.kali_tools import validate_findings_with_kali
+from apps.scans.security.secret_scanner import build_secret_finding, detect_secrets_in_text
 from apps.scans.security.sri_scanner import analyze_sri
 from apps.scans.security.ssl_scanner import analyze_ssl
 
@@ -146,6 +147,15 @@ def run_scan_job(self, scan_job_id: int) -> dict:
                 all_findings.extend(page_findings)
                 for finding in page_findings:
                     Finding.objects.create(scan_job=scan_job, page=page, **finding)
+                # Inline/HTML 硬編碼秘鑰偵測（被動：只分析已抓到的 HTML，不發額外請求）
+                page_secrets = detect_secrets_in_text(page.html)
+                secret_finding = build_secret_finding(
+                    page_secrets, page.final_url or page.url, source="inline_html"
+                )
+                if secret_finding:
+                    secret_finding = owasp_mapper.tag(secret_finding)
+                    Finding.objects.create(scan_job=scan_job, page=page, **secret_finding)
+                    all_findings.append(secret_finding)
             # 不論是否被阻擋，已處理一頁就更新 progress；同時當作 cancel 檢查點
             _write_progress(
                 scan_job.id,
@@ -299,6 +309,44 @@ def run_scan_job(self, scan_job_id: int) -> dict:
             scan_job_id,
             f"深度被動安全掃描完成：{len(deep_security_findings)} 項發現",
         )
+
+        # === robots.txt 敏感路徑洩露（被動，任何模式都產出）===
+        robots_disclosure = exposure_scanner.analyze_robots_disclosure(
+            site_signals.get("robots_disallow") or []
+        )
+        for finding in robots_disclosure:
+            tagged = owasp_mapper.tag(finding)
+            Finding.objects.create(scan_job=scan_job, page=None, **tagged)
+        all_findings.extend(robots_disclosure)
+
+        # === 敏感檔案外洩主動探測（content discovery，僅付費 active+authorized）===
+        if deep_mode:
+            raise_if_cancelled(scan_job_id)
+            append_log(scan_job_id, "敏感檔案外洩探測開始（主動內容探測，繞連結直接探隱藏檔）")
+            try:
+                probe_results = asyncio.run(
+                    exposure_scanner.probe_paths(
+                        scan_job.normalized_url, scan_job.origin, scan_job_id
+                    )
+                )
+                exposure_findings = [
+                    owasp_mapper.tag(f)
+                    for f in exposure_scanner.analyze_probe_results(probe_results)
+                ]
+                for finding in exposure_findings:
+                    Finding.objects.create(scan_job=scan_job, page=None, **finding)
+                all_findings.extend(exposure_findings)
+                append_log(
+                    scan_job_id,
+                    f"敏感檔案外洩探測完成：探測 {len(probe_results)} 路徑，"
+                    f"發現 {len(exposure_findings)} 項外洩",
+                )
+            except Exception as exc:  # noqa: BLE001 — 探測失敗不影響主掃描
+                append_log(
+                    scan_job_id,
+                    f"敏感檔案外洩探測略過（{exc.__class__.__name__}）",
+                    level="warn",
+                )
 
         if katana_tech:
             updated_warnings = dict(scan_job.warning_summary or {})

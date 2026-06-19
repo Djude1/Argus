@@ -4,6 +4,8 @@
 端點故意設計成扁平的，避免暴露技術細節（AgentSession/Page/Finding 等）。
 """
 
+import os
+
 from django.contrib.auth import get_user_model
 from django.db.models import Count, Q, Sum
 from django.shortcuts import get_object_or_404
@@ -494,6 +496,53 @@ def me(request):
         "email": user.email,
         "is_staff": user.is_staff,
         "is_superuser": user.is_superuser,
+    })
+
+
+@api_view(["GET"])
+@permission_classes([permissions.IsAdminUser])
+def system_settings(request):
+    """系統關鍵設定（唯讀檢視；改動須改 .env 並重啟）。
+
+    只 expose 影響業務行為的設定；機密（SECRET_KEY、API KEY、密碼）一律不回。
+    """
+    from django.conf import settings as dj_settings
+
+    def has(name: str) -> bool:
+        return bool(getattr(dj_settings, name, "") or "")
+
+    return Response({
+        "billing": {
+            "ARGUS_MONTHLY_BONUS_COINS": dj_settings.ARGUS_MONTHLY_BONUS_COINS,
+            "ARGUS_COIN_PER_PAGE": dj_settings.ARGUS_COIN_PER_PAGE,
+        },
+        "agent": {
+            "ARGUS_AGENT_ENABLED": dj_settings.ARGUS_AGENT_ENABLED,
+            "ARGUS_AGENT_MAX_STEPS": dj_settings.ARGUS_AGENT_MAX_STEPS,
+            "ARGUS_AGENT_MAX_TOKENS": dj_settings.ARGUS_AGENT_MAX_TOKENS,
+        },
+        "email": {
+            "EMAIL_BACKEND": dj_settings.EMAIL_BACKEND,
+            "EMAIL_HOST": dj_settings.EMAIL_HOST,
+            "EMAIL_PORT": dj_settings.EMAIL_PORT,
+            "EMAIL_USE_TLS": dj_settings.EMAIL_USE_TLS,
+            "EMAIL_HOST_USER_SET": has("EMAIL_HOST_USER"),
+            "EMAIL_HOST_PASSWORD_SET": has("EMAIL_HOST_PASSWORD"),
+            "DEFAULT_FROM_EMAIL": dj_settings.DEFAULT_FROM_EMAIL,
+        },
+        "auth": {
+            "GOOGLE_OAUTH_CLIENT_ID_SET": has("GOOGLE_OAUTH_CLIENT_ID"),
+        },
+        "providers": {
+            "MINIMAX_KEY_SET": bool(os.getenv("MINIMAX_API_KEY", "")),
+            "GLM_KEY_SET": bool(os.getenv("GLM_API_KEY", "")),
+            "GOOGLE_API_KEY_SET": bool(os.getenv("GOOGLE_API_KEY", "")),
+        },
+        "deployment": {
+            "DEBUG": dj_settings.DEBUG,
+            "ALLOWED_HOSTS": dj_settings.ALLOWED_HOSTS,
+        },
+        "note": "本頁為唯讀；要改設定請編輯 .env 並重啟 server。",
     })
 
 

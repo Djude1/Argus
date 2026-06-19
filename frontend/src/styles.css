@@ -737,6 +737,15 @@
     color: rgba(186, 230, 253, 0.7);
   }
 
+  .dashboard-hero-text { @apply flex flex-col; }
+  .dashboard-hero-actions {
+    @apply mt-4 flex flex-wrap gap-2;
+  }
+  .dashboard-hero-actions .primary-button,
+  .dashboard-hero-actions .secondary-button {
+    @apply text-sm;
+  }
+
   .stat-grid {
     @apply col-span-full grid grid-cols-2 gap-3 md:grid-cols-4;
   }
@@ -762,6 +771,20 @@
   .stat-tile.tone-rose {
     border-color: rgba(251, 113, 133, 0.45);
     box-shadow: 0 0 18px -6px rgba(251, 113, 133, 0.5);
+  }
+
+  /* StatTile 變 button 時的可點 affordance（無 AI 味，只加 cursor + 輕量 hover） */
+  button.stat-tile.is-clickable {
+    @apply text-left w-full;
+    cursor: pointer;
+    transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+  }
+  button.stat-tile.is-clickable:hover {
+    transform: translateY(-2px);
+  }
+  button.stat-tile.is-clickable:focus-visible {
+    outline: 2px solid rgba(34, 211, 238, 0.6);
+    outline-offset: 2px;
   }
 
   .stat-tile-label {
@@ -858,6 +881,11 @@
 
   .recent-origin {
     @apply flex-1 truncate font-mono text-slate-700;
+  }
+
+  .recent-time {
+    @apply text-xs whitespace-nowrap;
+    color: #94a3b8;
   }
 
   /* ========================================
@@ -3080,6 +3108,14 @@
     color: #fff;
   }
   .wizard-confirm-total-value { @apply text-2xl font-bold; }
+  .wizard-confirm-saved {
+    @apply mt-2 text-sm;
+    color: #047857;
+    background: #ecfdf5;
+    border: 1px solid #a7f3d0;
+    border-radius: 8px;
+    padding: 0.5rem 0.75rem;
+  }
 
   .wizard-success {
     @apply mx-auto max-w-xl rounded-2xl border p-8 text-center;
@@ -3109,6 +3145,10 @@
   .admin-panel-head-row {
     @apply flex flex-wrap items-center justify-between gap-2 mb-3;
   }
+  .admin-panel-head-actions {
+    @apply flex flex-wrap items-center gap-2;
+  }
+  .admin-panel-head-actions a.admin-btn { text-decoration: none; }
   .admin-chart-legend {
     @apply flex flex-wrap gap-3 text-xs;
     color: #475569;
@@ -3737,6 +3777,34 @@
     @apply mt-2 text-sm;
     color: #cbd5e1;
     line-height: 1.7;
+  }
+  .billing-test-banner {
+    @apply mt-3 flex items-start gap-3 rounded-lg px-4 py-3 text-sm;
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(99, 102, 241, 0.1));
+    border: 1px solid rgba(245, 158, 11, 0.42);
+    color: #fbbf24;
+    line-height: 1.6;
+  }
+  .billing-test-banner strong { color: #fde68a; }
+  .billing-test-chip {
+    @apply inline-block rounded-full px-2.5 py-0.5 text-xs font-extrabold tracking-wider;
+    background: rgba(245, 158, 11, 0.25);
+    color: #fde68a;
+    border: 1px solid rgba(245, 158, 11, 0.5);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .public-plan-equivalents {
+    @apply mt-3 space-y-1 text-sm list-none;
+    color: #cbd5e1;
+    border-top: 1px dashed rgba(148, 163, 184, 0.22);
+    padding-top: 0.6rem;
+  }
+  .public-plan-equivalents li::before {
+    content: "✓ ";
+    color: #67e8f9;
+    font-weight: 700;
+    margin-right: 0.25rem;
   }
   .public-plan-cta {
     @apply mt-4 w-full rounded-lg px-4 py-2.5 font-semibold transition;
@@ -4660,9 +4728,42 @@
 }
 .login-submit:disabled { opacity: .6; cursor: default; }
 .login-forgot-hint { text-align: center; color: #64748b; font-size: .8rem; margin: 0; }
+.login-forgot-link {
+  background: none; border: none; padding: 0; cursor: pointer;
+  color: #818cf8; font-size: .8rem;
+  text-decoration: underline; text-underline-offset: 3px;
+  text-decoration-color: rgba(129, 140, 248, .4);
+  transition: color .15s, text-decoration-color .15s;
+}
+.login-forgot-link:hover {
+  color: #a5b4fc;
+  text-decoration-color: #a5b4fc;
+}
 .login-google-wrap { display: flex; justify-content: center; padding: .5rem 0; }
 .login-error { color: #f87171; font-size: .875rem; text-align: center; margin: 0; }
 .login-notice { font-size: .75rem; color: #475569; text-align: center; margin: 0; }
+.login-back {
+  align-self: flex-start;
+  background: none; border: none; padding: 0;
+  color: #94a3b8; font-size: .85rem; cursor: pointer;
+  transition: color .15s;
+}
+.login-back:hover { color: #cbd5e1; }
+.login-info-box {
+  display: flex; flex-direction: column; gap: .9rem;
+  background: rgba(99, 102, 241, .08);
+  border: 1px solid rgba(99, 102, 241, .25);
+  border-radius: 10px;
+  padding: 1rem 1.1rem;
+  color: #cbd5e1;
+  font-size: .92rem;
+  line-height: 1.6;
+}
+.login-info-box p { margin: 0; }
+.login-info-box .login-info-foot {
+  font-size: .8rem;
+  color: #64748b;
+}
 
 /* 掃描預估費用 */
 .scan-estimate-row { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; margin-top: .5rem; }
@@ -5112,6 +5213,36 @@
 .admin-plan-actions { display: flex; align-items: center; gap: .5rem; margin-top: .5rem; }
 .admin-plan-actions button { padding: .3rem .75rem; border: 1px solid rgba(255,255,255,.15); border-radius: 6px; background: transparent; color: #94a3b8; cursor: pointer; font-size: .85rem; }
 .admin-plan-actions button.danger { border-color: rgba(239,68,68,.3); color: #f87171; }
+.admin-plan-econ {
+  display: grid; grid-template-columns: auto 1fr; gap: .25rem .75rem;
+  margin: .35rem 0 0; padding: .5rem .65rem;
+  background: rgba(15, 23, 42, .45);
+  border: 1px dashed rgba(148, 163, 184, .25);
+  border-radius: 8px;
+  font-size: .8rem;
+}
+.admin-plan-econ dt { color: #94a3b8; margin: 0; }
+.admin-plan-econ dd { color: #e2e8f0; margin: 0; }
+.admin-plan-econ dd.tone-good { color: #34d399; }
+.admin-plan-econ dd.tone-warn { color: #fbbf24; }
+.admin-plan-econ dd.tone-bad { color: #f87171; }
+
+.admin-plan-econ-preview {
+  font-size: .85rem; padding: .55rem .75rem; border-radius: 8px;
+  background: rgba(15, 23, 42, .55); border: 1px solid rgba(148, 163, 184, .25);
+  color: #cbd5e1;
+}
+.admin-plan-econ-preview.tone-good { color: #6ee7b7; border-color: rgba(52, 211, 153, .4); }
+.admin-plan-econ-preview.tone-warn { color: #fcd34d; border-color: rgba(251, 191, 36, .4); }
+.admin-plan-econ-preview.tone-bad { color: #fca5a5; border-color: rgba(248, 113, 113, .4); }
+
+.admin-page-note {
+  color: #94a3b8; font-size: .85rem; margin: .25rem 0 1rem;
+  padding: .6rem .85rem;
+  background: rgba(15, 23, 42, .35);
+  border-left: 3px solid rgba(34, 211, 238, .5);
+  border-radius: 4px;
+}
 
 /* ===== Scan Log Panel ===== */
 .scan-log-panel {

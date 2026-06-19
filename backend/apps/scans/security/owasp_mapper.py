@@ -29,6 +29,26 @@ _RULE_OWASP_MAP: dict[str, tuple[str, str]] = {
     "dns-dnssec-missing": ("A05", "CWE-345"),
     # Kali 主動驗證（kali_tools 攻擊鏈）
     "kali-sqlmap-sqli": ("A03", "CWE-89"),
+    # 敏感檔案 / 路徑外洩（exposure_scanner）+ 硬編碼秘鑰（secret_scanner）
+    "exposure-hardcoded-secret": ("A07", "CWE-798"),
+    "exposure-file-env": ("A05", "CWE-200"),
+    "exposure-file-git": ("A05", "CWE-527"),
+    "exposure-file-credentials": ("A07", "CWE-798"),
+    "exposure-file-backup": ("A05", "CWE-530"),
+    "exposure-file-actuator": ("A05", "CWE-200"),
+    "exposure-file-data": ("A01", "CWE-200"),
+    "exposure-file-phpinfo": ("A05", "CWE-200"),
+    "exposure-file-server-status": ("A05", "CWE-200"),
+    "exposure-file-apidoc": ("A05", "CWE-200"),
+    "exposure-file-sourcemap": ("A05", "CWE-540"),
+    "exposure-file-metadata": ("A05", "CWE-200"),
+    "exposure-file-log": ("A05", "CWE-532"),
+    "exposure-file-config": ("A05", "CWE-200"),
+    "exposure-securitytxt": ("A05", "CWE-200"),
+    "exposure-admin-panel": ("A05", "CWE-200"),
+    "exposure-file-devnote": ("A05", "CWE-200"),
+    "exposure-dir-listing": ("A05", "CWE-548"),
+    "exposure-robots-disclosure": ("A05", "CWE-200"),
 }
 
 

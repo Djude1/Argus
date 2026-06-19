@@ -13,6 +13,7 @@ cms_router.register("milestones", cms_views.ProjectMilestoneViewSet, basename="a
 urlpatterns = [
     path("cms/", include(cms_router.urls)),
     path("me/", views.me, name="admin-me"),
+    path("settings/", views.system_settings, name="admin-settings"),
     path("overview/", views.overview, name="admin-overview"),
     path("users/", views.users_list, name="admin-users"),
     path("users/<int:user_id>/", views.user_detail, name="admin-user-detail"),

@@ -1935,6 +1935,13 @@ function LoginPage() {
   return (
     <div className="login-page">
       <div className="login-card">
+        <button
+          type="button"
+          className="login-back"
+          onClick={() => navigate("/project")}
+        >
+          ← 返回首頁
+        </button>
         <div className="login-brand">
           <span className="login-brand-glyph">⟡</span>
           <span className="login-brand-name">ARGUS</span>
@@ -2000,7 +2007,13 @@ function LoginPage() {
               {loading ? "登入中…" : "登入"}
             </button>
             <p className="login-forgot-hint">
-              忘記密碼？請聯絡管理員協助重設。
+              <button
+                type="button"
+                className="login-forgot-link"
+                onClick={() => navigate("/password-reset")}
+              >
+                忘記密碼？
+              </button>
             </p>
           </form>
         )}
@@ -2043,6 +2056,211 @@ function LoginPage() {
         <p className="login-notice">
           管理員請用上方 Email 登入，登入後於右上角進入 <code>/admin</code> 後台。
         </p>
+      </div>
+    </div>
+  );
+}
+
+function PasswordResetRequestPage() {
+  const navigate = useNavigate();
+  const [email, setEmail] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [serverMessage, setServerMessage] = useState("");
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (loading) return;
+    setLoading(true);
+    try {
+      const res = await api.post("/auth/password-reset/request/", {
+        email: email.trim().toLowerCase(),
+      });
+      setServerMessage(res.data?.detail || "若該 Email 已註冊，重設信已寄出。");
+      setSubmitted(true);
+    } catch {
+      // 後端設計為永遠成功；網路錯誤才會走到這
+      setServerMessage("送出失敗，請檢查網路連線後再試。");
+      setSubmitted(true);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="login-page">
+      <div className="login-card">
+        <button
+          type="button"
+          className="login-back"
+          onClick={() => navigate("/login")}
+        >
+          ← 返回登入
+        </button>
+        <div className="login-brand">
+          <span className="login-brand-glyph">⟡</span>
+          <span className="login-brand-name">重設密碼</span>
+        </div>
+        <p className="login-sub">輸入註冊時的 Email，我們會寄出重設連結（60 分鐘內有效）。</p>
+
+        {submitted ? (
+          <div className="login-info-box">
+            <p>{serverMessage}</p>
+            <p className="login-info-foot">
+              收不到信？請檢查垃圾郵件夾，或確認 Email 是否拼寫正確。
+            </p>
+            <button
+              type="button"
+              className="login-submit"
+              onClick={() => navigate("/login")}
+            >
+              回到登入頁
+            </button>
+          </div>
+        ) : (
+          <form className="login-form" onSubmit={handleSubmit}>
+            <input
+              className="input"
+              type="email"
+              placeholder="Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              autoComplete="email"
+              autoFocus
+            />
+            <button className="login-submit" type="submit" disabled={loading || !email.trim()}>
+              {loading ? "送出中…" : "寄出重設連結"}
+            </button>
+            <p className="login-forgot-hint">
+              Google 帳號的密碼請至 Google 帳號設定管理，本平台無法重設。
+            </p>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PasswordResetConfirmPage() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const token = (searchParams.get("token") || "").trim();
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [done, setDone] = useState(false);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError("");
+    if (password.length < 8) {
+      setError("新密碼至少需要 8 個字元。");
+      return;
+    }
+    if (password !== confirm) {
+      setError("兩次輸入的密碼不一致。");
+      return;
+    }
+    setLoading(true);
+    try {
+      await api.post("/auth/password-reset/confirm/", {
+        token,
+        new_password: password,
+      });
+      setDone(true);
+    } catch (err) {
+      const data = err.response?.data || {};
+      setError(data.token || data.new_password || data.detail || "重設失敗，請重新申請。");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (!token) {
+    return (
+      <div className="login-page">
+        <div className="login-card">
+          <button type="button" className="login-back" onClick={() => navigate("/login")}>
+            ← 返回登入
+          </button>
+          <div className="login-brand">
+            <span className="login-brand-glyph">⟡</span>
+            <span className="login-brand-name">重設密碼</span>
+          </div>
+          <p className="login-error">
+            連結缺少 token；請從信件中重新點擊重設連結，或回到「忘記密碼」重新申請。
+          </p>
+          <button
+            type="button"
+            className="login-submit"
+            onClick={() => navigate("/password-reset")}
+          >
+            重新申請
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="login-page">
+      <div className="login-card">
+        <button type="button" className="login-back" onClick={() => navigate("/login")}>
+          ← 返回登入
+        </button>
+        <div className="login-brand">
+          <span className="login-brand-glyph">⟡</span>
+          <span className="login-brand-name">設定新密碼</span>
+        </div>
+
+        {done ? (
+          <div className="login-info-box">
+            <p>密碼已重設成功。</p>
+            <p className="login-info-foot">請用新密碼登入。</p>
+            <button
+              type="button"
+              className="login-submit"
+              onClick={() => navigate("/login")}
+            >
+              前往登入
+            </button>
+          </div>
+        ) : (
+          <form className="login-form" onSubmit={handleSubmit}>
+            <p className="login-sub">請設定新密碼（至少 8 個字元）。設定完成後請用新密碼登入。</p>
+            {error && <p className="login-error">{error}</p>}
+            <input
+              className="input"
+              type="password"
+              placeholder="新密碼"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              autoComplete="new-password"
+              autoFocus
+              minLength={8}
+            />
+            <input
+              className="input"
+              type="password"
+              placeholder="再次輸入新密碼"
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              required
+              autoComplete="new-password"
+              minLength={8}
+            />
+            <button
+              className="login-submit"
+              type="submit"
+              disabled={loading || !password || !confirm}
+            >
+              {loading ? "送出中…" : "確認重設"}
+            </button>
+          </form>
+        )}
       </div>
     </div>
   );
@@ -2527,17 +2745,31 @@ function ScoreRing({ value, label, size = 96 }) {
   );
 }
 
-function StatTile({ label, value, hint, tone = "neutral", animateValue }) {
-  return (
-    <div className={`stat-tile tone-${tone}`}>
+function StatTile({ label, value, hint, tone = "neutral", animateValue, onClick }) {
+  const inner = (
+    <>
       <p className="stat-tile-label">{label}</p>
       <p className="stat-tile-value">
         {typeof animateValue === "number" ? <CountUp value={animateValue} /> : value}
       </p>
       {hint && <p className="stat-tile-hint">{hint}</p>}
-    </div>
+    </>
   );
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        className={`stat-tile tone-${tone} is-clickable`}
+        onClick={onClick}
+      >
+        {inner}
+      </button>
+    );
+  }
+  return <div className={`stat-tile tone-${tone}`}>{inner}</div>;
 }
+
+// formatRelativeTime 在下方 L3690 已定義，這裡不重複。
 
 function AnnouncementModal({ announcements, onDismiss, onConfirm }) {
   const [index, setIndex] = useState(0);
@@ -2667,7 +2899,7 @@ function DashboardPage() {
   return (
     <div className="dashboard-grid">
       <div className="dashboard-hero">
-        <div>
+        <div className="dashboard-hero-text">
           <p className="eyebrow text-cyan-300">總覽</p>
           <h2 className="dashboard-hero-title">
             你已執行 <span>{data.total_scans}</span> 次健檢
@@ -2676,6 +2908,22 @@ function DashboardPage() {
             完成 {data.completed_scans}・失敗 {data.failed_scans}・點數餘額{" "}
             <strong>{wallet?.balance ?? 0}</strong> coin
           </p>
+          <div className="dashboard-hero-actions">
+            <button
+              type="button"
+              className="primary-button"
+              onClick={() => navigate("/scans")}
+            >
+              + 開始新掃描
+            </button>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => navigate("/history")}
+            >
+              查看歷史
+            </button>
+          </div>
         </div>
         <ScoreRing value={data.average_score} label="平均分" size={120} />
       </div>
@@ -2690,7 +2938,7 @@ function DashboardPage() {
         <StatTile
           label="點數餘額"
           animateValue={wallet?.balance || 0}
-          hint={`累積購買 NT$ ${(wallet?.total_purchased_ntd || 0).toLocaleString()}`}
+          hint={`≈ 還能掃 ${Math.floor((wallet?.balance || 0) / (wallet?.coin_per_page || 10)).toLocaleString()} 頁 · 累積花費 NT$ ${(wallet?.total_purchased_ntd || 0).toLocaleString()}`}
           tone="violet"
         />
         <StatTile
@@ -2705,8 +2953,9 @@ function DashboardPage() {
             (data.severity_totals?.critical || 0) +
             (data.severity_totals?.high || 0)
           }
-          hint="critical + high"
+          hint="critical + high · 點看清單"
           tone="rose"
+          onClick={() => navigate("/scans")}
         />
       </div>
 
@@ -2778,6 +3027,7 @@ function DashboardPage() {
                 onClick={() => navigate(`/scans/${scan.id}`)}
               >
                 <span className="recent-origin">{scan.origin}</span>
+                <span className="recent-time">{formatRelativeTime(scan.completed_at || scan.created_at)}</span>
                 <ScanStatusBadge status={scan.status} />
                 <ScoreBadge score={scan.overall_score} />
               </button>
@@ -2963,6 +3213,7 @@ function BillingPage() {
   const me = useArgusStore((s) => s.me);
   const fetchMe = useArgusStore((s) => s.fetchMe);
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [buyer, setBuyer] = useState({
     buyer_name: "",
@@ -2989,6 +3240,20 @@ function BillingPage() {
       buyer_email: prev.buyer_email || me.email || "",
     }));
   }, [me]);
+
+  // 從 /purchase 跳來時帶 ?plan=advanced：plans 載完後自動選好並進 step 2
+  useEffect(() => {
+    if (selectedPlan || plans.length === 0) return;
+    const target = searchParams.get("plan");
+    if (!target) return;
+    const match = plans.find((p) => p.code === target);
+    if (match) {
+      setSelectedPlan(match);
+      setStep(2);
+      // 清掉 URL 上的 plan，避免使用者後續回到 step 1 再選又被自動覆蓋
+      setSearchParams({}, { replace: true });
+    }
+  }, [plans, searchParams, selectedPlan, setSearchParams]);
 
   function pickPlan(plan) {
     setSelectedPlan(plan);
@@ -3116,6 +3381,13 @@ function BillingPage() {
         <p className="mt-1 text-sm text-slate-600">
           每爬一頁需 {wallet?.coin_per_page ?? 10} coin；目前餘額 <strong>{wallet?.balance?.toLocaleString() ?? "—"}</strong> coin。
         </p>
+        <div className="billing-test-banner" role="status">
+          <span className="billing-test-chip">TEST MODE</span>
+          <span>
+            目前為<strong>測試環境模擬付款</strong>，不會真的扣款；正式上線將串接金流（Stripe / 綠界 ECPay）。
+            點數會立即入帳，並寄送收據到你的 email。
+          </span>
+        </div>
       </div>
 
       <WizardStepper current={step} />
@@ -3352,6 +3624,21 @@ function BillingPage() {
             <span>應付金額</span>
             <span className="wizard-confirm-total-value">NT$ {selectedPlan.price_ntd.toLocaleString()}</span>
           </div>
+          {(() => {
+            // 以最便宜方案（sort_order 最小）的單位單價為基準，算「比 N 次最便宜方案省多少」
+            const baseline = [...plans].sort((a, b) => a.price_ntd - b.price_ntd)[0];
+            if (!baseline || baseline.code === selectedPlan.code) return null;
+            const baselineRate = baseline.coin_amount / baseline.price_ntd;
+            const fairPrice = Math.round(selectedPlan.coin_amount / baselineRate);
+            const saved = fairPrice - selectedPlan.price_ntd;
+            if (saved <= 0) return null;
+            const pct = Math.round((saved / fairPrice) * 100);
+            return (
+              <p className="wizard-confirm-saved">
+                相比同等 coin 數量買{baseline.name}，這個方案省下 NT$ {saved.toLocaleString()}（約 {pct}%）。
+              </p>
+            );
+          })()}
 
           {Object.keys(errors).length > 0 && (
             <div className="billing-feedback tone-bad">
@@ -4200,17 +4487,26 @@ function ProjectScanDemo() {
   );
 }
 
+// 後台 CMS 可編輯前，先用這份 fallback；API 拉到資料就會覆蓋掉
+const PROJECT_FEATURES_FALLBACK = [
+  { id: -1, icon: "🕷️", title: "BFS 深度爬蟲", description: "以 Playwright 驅動的 BFS 爬蟲，自動探索整站結構。" },
+  { id: -2, icon: "🔍", title: "四維安全掃描", description: "涵蓋 SEO、AEO、GEO、Security 四個維度的全面分析。" },
+  { id: -3, icon: "🤖", title: "Hermes AI Agent", description: "LLM 驅動的智慧代理人，提供主動式漏洞驗證。" },
+  { id: -4, icon: "📊", title: "即時進度追蹤", description: "掃描進度即時更新，支援多任務並行管理。" },
+  { id: -5, icon: "📝", title: "Word 報告匯出", description: "一鍵產生專業 Word 格式掃描報告，方便交付客戶。" },
+  { id: -6, icon: "💎", title: "點數計費系統", description: "靈活的 Coin 計費模式，按頁計費，精準控制成本。" },
+];
+
 function ProjectPage() {
-  const features = [
-    { id: 1, icon: "🕷️", title: "BFS 深度爬蟲", description: "以 Playwright 驅動的 BFS 爬蟲，自動探索整站結構。" },
-    { id: 2, icon: "🔍", title: "四維安全掃描", description: "涵蓋 SEO、AEO、GEO、Security 四個維度的全面分析。" },
-    { id: 3, icon: "🤖", title: "Hermes AI Agent", description: "LLM 驅動的智慧代理人，提供主動式漏洞驗證。" },
-    { id: 4, icon: "📊", title: "即時進度追蹤", description: "掃描進度即時更新，支援多任務並行管理。" },
-    { id: 5, icon: "📝", title: "Word 報告匯出", description: "一鍵產生專業 Word 格式掃描報告，方便交付客戶。" },
-    { id: 6, icon: "💎", title: "點數計費系統", description: "靈活的 Coin 計費模式，按頁計費，精準控制成本。" },
-  ];
+  const [features, setFeatures] = useState(PROJECT_FEATURES_FALLBACK);
   const [milestones, setMilestones] = useState([]);
   useEffect(() => {
+    api.get("/content/features/")
+      .then((r) => {
+        const list = r.data.features || [];
+        if (list.length) setFeatures(list);
+      })
+      .catch(() => {});
     api.get("/content/milestones/").then((r) => setMilestones(r.data.milestones || [])).catch(() => {});
   }, []);
   return (
@@ -4605,6 +4901,10 @@ function PurchasePage() {
         <div className="public-plan-grid">
           {plans.map((p) => {
             const featured = p.code === "advanced";
+            // 1 coin = 1 頁掃描；用業界 SEO 工具的網站規模切分換算
+            const pages = p.coin_amount;
+            const smallSites = Math.floor(pages / 20);
+            const mediumSites = Math.floor(pages / 100);
             return (
               <div
                 key={p.code}
@@ -4616,15 +4916,28 @@ function PurchasePage() {
                 <div className="public-plan-coin">{p.coin_amount.toLocaleString()}<span> coin</span></div>
                 <div className="public-plan-price">NT$ {p.price_ntd.toLocaleString()}</div>
                 <div className="public-plan-rate">{p.coin_per_ntd?.toFixed(2)} coin / NT$</div>
+                <ul className="public-plan-equivalents">
+                  <li>≈ {pages.toLocaleString()} 頁掃描</li>
+                  {smallSites >= 1 && (
+                    <li>≈ {smallSites} 個小型網站健檢（20 頁/站）</li>
+                  )}
+                  {mediumSites >= 1 && (
+                    <li>≈ {mediumSites} 個中型網站健檢（100 頁/站）</li>
+                  )}
+                </ul>
                 {p.description && <p className="public-plan-desc">{p.description}</p>}
+                <button
+                  type="button"
+                  className="public-plan-cta"
+                  onClick={() => navigate(`/billing?plan=${p.code}`)}
+                >
+                  選此方案 →
+                </button>
               </div>
             );
           })}
           {plans.length === 0 && <p className="public-empty">尚未設定方案。</p>}
         </div>
-        <p className="public-plan-note">
-          ※ 想結帳請點下方「前往結帳」進入 3 步驟結帳流程
-        </p>
       </section>
 
       <section className="public-section">
@@ -5194,9 +5507,12 @@ function DownloadPage() {
 const ADMIN_NAV_ITEMS = [
   { to: "/admin/overview", label: "概覽", emoji: "📊" },
   { to: "/admin/users", label: "使用者", emoji: "👥" },
+  { to: "/admin/scans", label: "掃描", emoji: "🔍" },
+  { to: "/admin/transactions", label: "交易", emoji: "💳" },
   { to: "/admin/plans", label: "方案", emoji: "💼" },
   { to: "/admin/content", label: "內容", emoji: "📝" },
   { to: "/admin/reviews", label: "評論", emoji: "⭐" },
+  { to: "/admin/settings", label: "設定", emoji: "⚙️" },
 ];
 
 function RequireAdmin({ children }) {
@@ -6246,9 +6562,22 @@ function AdminCmsManager({ schema }) {
     <section className="admin-panel">
       <div className="admin-panel-head-row">
         <h3>{schema.title}（{items.length}）</h3>
-        <button type="button" className="admin-btn primary" onClick={startNew}>
-          + 新增
-        </button>
+        <div className="admin-panel-head-actions">
+          {schema.previewPath && (
+            <a
+              className="admin-btn"
+              href={schema.previewPath}
+              target="_blank"
+              rel="noreferrer noopener"
+              title="另開新分頁預覽前台效果"
+            >
+              {schema.previewLabel || "預覽前台 ↗"}
+            </a>
+          )}
+          <button type="button" className="admin-btn primary" onClick={startNew}>
+            + 新增
+          </button>
+        </div>
       </div>
 
       {/* 列表 */}
@@ -6364,9 +6693,32 @@ function AdminCmsManager({ schema }) {
   );
 }
 
+const FEATURE_SCHEMA = {
+  endpoint: "/admin/cms/features/",
+  title: "專案特色卡片",
+  previewPath: "/project",
+  previewLabel: "預覽 /project",
+  titleField: "title",
+  fields: [
+    { key: "title", label: "標題", type: "text", required: true },
+    { key: "icon", label: "圖示 emoji", type: "text", hint: "例：🕷️ 🔍 🤖" },
+    { key: "description", label: "說明", type: "textarea", rows: 3, required: true },
+    { key: "sort_order", label: "排序", type: "number", default: 0 },
+    { key: "is_active", label: "啟用", type: "boolean", default: true },
+  ],
+  displayFields: [
+    { key: "sort_order", label: "順序", num: true },
+    { key: "icon", label: "圖示", render: (i) => <span style={{ fontSize: 22 }}>{i.icon}</span> },
+    { key: "title", label: "標題" },
+    { key: "is_active", label: "啟用", render: (i) => i.is_active ? "✓" : "—" },
+  ],
+};
+
 const TEAM_SCHEMA = {
   endpoint: "/admin/cms/team/",
   title: "團隊成員",
+  previewPath: "/team",
+  previewLabel: "預覽 /team",
   titleField: "name",
   fields: [
     { key: "name", label: "姓名", type: "text", required: true },
@@ -6393,6 +6745,8 @@ const TEAM_SCHEMA = {
 const RELEASE_SCHEMA = {
   endpoint: "/admin/cms/releases/",
   title: "APP / PWA 版本",
+  previewPath: "/download",
+  previewLabel: "預覽 /download",
   titleField: "version",
   fields: [
     { key: "version", label: "版本", type: "text", required: true, hint: "例：1.0.0" },
@@ -6418,33 +6772,11 @@ const RELEASE_SCHEMA = {
   ],
 };
 
-const PLAN_SCHEMA = {
-  endpoint: "/admin/cms/plans/",
-  title: "購點方案",
-  titleField: "name",
-  fields: [
-    { key: "code", label: "code（系統識別，建立後勿改）", type: "text", required: true },
-    { key: "name", label: "名稱", type: "text", required: true },
-    { key: "price_ntd", label: "價格（NT$）", type: "number", required: true },
-    { key: "coin_amount", label: "coin 數量", type: "number", required: true },
-    { key: "badge", label: "徽章", type: "text", hint: "例：-20%、最熱門" },
-    { key: "description", label: "描述", type: "text" },
-    { key: "sort_order", label: "排序", type: "number", default: 0 },
-    { key: "is_active", label: "啟用", type: "boolean", default: true },
-  ],
-  displayFields: [
-    { key: "sort_order", label: "順序", num: true },
-    { key: "name", label: "名稱" },
-    { key: "price_ntd", label: "價格 NT$", num: true },
-    { key: "coin_amount", label: "coin", num: true },
-    { key: "badge", label: "徽章" },
-    { key: "is_active", label: "啟用", render: (i) => i.is_active ? "✓" : "—" },
-  ],
-};
-
 const MILESTONE_SCHEMA = {
   endpoint: "/admin/cms/milestones/",
   title: "開發里程碑",
+  previewPath: "/project",
+  previewLabel: "預覽 /project（timeline）",
   titleField: "title",
   fields: [
     { key: "title", label: "標題", type: "text", required: true },
@@ -6464,13 +6796,14 @@ const MILESTONE_SCHEMA = {
 };
 
 const CONTENT_TABS = [
+  { key: "features", label: "🎯 專案特色", schema: FEATURE_SCHEMA },
   { key: "team", label: "👥 團隊成員", schema: TEAM_SCHEMA },
   { key: "releases", label: "📱 APP / PWA 版本", schema: RELEASE_SCHEMA },
   { key: "milestones", label: "🚀 開發里程碑", schema: MILESTONE_SCHEMA },
 ];
 
 function AdminContentPage() {
-  const [tab, setTab] = useState("team");
+  const [tab, setTab] = useState("features");
   const active = CONTENT_TABS.find((t) => t.key === tab);
   return (
     <div className="admin-page">
@@ -6493,6 +6826,78 @@ function AdminContentPage() {
       </div>
 
       <AdminCmsManager key={tab} schema={active.schema} />
+    </div>
+  );
+}
+
+// 內部成本估算（依 log/2026-06-14_ui-ux-billing-cms-audit.md 中的推算）：
+//   - MiniMax M2 token 成本：每 12 頁 scan ≈ NT$0.43
+//   - 伺服器月固定費攤提（200 scans/月）：每 scan ≈ NT$7.5
+//   - 合計每 scan ≈ NT$8 → 每頁 ≈ NT$0.67（COIN = PAGE）
+const COIN_COST_NTD = 0.67;
+
+function planEconomics(plan) {
+  const coin = plan.coin_amount || 0;
+  const price = plan.price_ntd || 0;
+  const cost = Number((coin * COIN_COST_NTD).toFixed(1));
+  const margin = price - cost;
+  const marginPct = price > 0 ? Math.round((margin / price) * 100) : 0;
+  // pages = coin（每頁 10 coin 是 settings 的 ARGUS_COIN_PER_PAGE）
+  // 但這裡是「使用者能掃幾頁」直觀感受，所以直接顯示 coin / 10
+  const pagesEstimate = Math.floor(coin / 10);
+  return { cost, margin, marginPct, pagesEstimate };
+}
+
+function AdminSettingsPage() {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    api.get("/admin/settings/")
+      .then((r) => setData(r.data))
+      .catch((err) => setError(err.response?.data?.detail || "讀取設定失敗"));
+  }, []);
+
+  if (error) return <div className="admin-error">{error}</div>;
+  if (!data) return <div className="admin-loading">載入中…</div>;
+
+  const Section = ({ title, rows }) => (
+    <section className="admin-panel">
+      <h3>{title}</h3>
+      <table className="admin-table compact">
+        <tbody>
+          {rows.map(([k, v]) => {
+            let display;
+            if (v === true) display = <span className="status-active">是 / 已設定</span>;
+            else if (v === false) display = <span className="status-inactive">否 / 未設定</span>;
+            else if (Array.isArray(v)) display = v.join(", ");
+            else display = String(v);
+            return (
+              <tr key={k}>
+                <td style={{ width: 280, fontFamily: "monospace", color: "#94a3b8" }}>{k}</td>
+                <td>{display}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </section>
+  );
+
+  return (
+    <div className="admin-page">
+      <header className="admin-page-head">
+        <h1>系統設定（唯讀）</h1>
+        <p>{data.note}</p>
+      </header>
+      <Section title="計費" rows={Object.entries(data.billing)} />
+      <Section title="Hermes-Agent" rows={Object.entries(data.agent)} />
+      <Section title="Email 寄送" rows={Object.entries(data.email)} />
+      <Section title="第三方登入 / API 金鑰" rows={[
+        ...Object.entries(data.auth),
+        ...Object.entries(data.providers),
+      ]} />
+      <Section title="部署" rows={Object.entries(data.deployment)} />
     </div>
   );
 }
@@ -6540,24 +6945,43 @@ function AdminPlansPage() {
         <button className="admin-add-btn" onClick={openNew}>＋ 新增方案</button>
       </header>
 
+      <p className="admin-page-note">
+        定價建議：每 coin 內部成本約 NT$ {COIN_COST_NTD}（含 MiniMax token 與伺服器攤提）；
+        毛利率 80% 以上算健康，低於 50% 請重新定價。
+      </p>
+
       <div className="admin-plans-grid">
-        {plans.map((plan) => (
-          <div key={plan.id} className={`admin-plan-card ${plan.is_active ? "" : "is-inactive"}`}>
-            {plan.badge && <span className="admin-plan-badge">{plan.badge}</span>}
-            <h3 className="admin-plan-name">{plan.name}</h3>
-            <p className="admin-plan-price">NT$ {(plan.price_ntd || 0).toLocaleString()}</p>
-            <p className="admin-plan-coin">{(plan.coin_amount || 0).toLocaleString()} Coin</p>
-            <p className="admin-plan-rate">{coinPerNtd(plan)} coin/NT$</p>
-            {plan.description && <p className="admin-plan-desc">{plan.description}</p>}
-            <div className="admin-plan-actions">
-              <button onClick={() => openEdit(plan)}>編輯</button>
-              <button className="danger" onClick={() => handleDelete(plan.id)}>刪除</button>
-              <span className={plan.is_active ? "status-active" : "status-inactive"}>
-                {plan.is_active ? "啟用" : "停用"}
-              </span>
+        {plans.map((plan) => {
+          const econ = planEconomics(plan);
+          const marginTone = econ.marginPct >= 80 ? "good" : econ.marginPct >= 50 ? "warn" : "bad";
+          return (
+            <div key={plan.id} className={`admin-plan-card ${plan.is_active ? "" : "is-inactive"}`}>
+              {plan.badge && <span className="admin-plan-badge">{plan.badge}</span>}
+              <h3 className="admin-plan-name">{plan.name}</h3>
+              <p className="admin-plan-price">NT$ {(plan.price_ntd || 0).toLocaleString()}</p>
+              <p className="admin-plan-coin">{(plan.coin_amount || 0).toLocaleString()} Coin</p>
+              <p className="admin-plan-rate">{coinPerNtd(plan)} coin/NT$ · ≈ {econ.pagesEstimate.toLocaleString()} 頁掃描</p>
+
+              <dl className="admin-plan-econ">
+                <dt>內部成本</dt>
+                <dd>NT$ {econ.cost.toLocaleString()}</dd>
+                <dt>毛利</dt>
+                <dd className={`tone-${marginTone}`}>
+                  NT$ {econ.margin.toLocaleString()}（{econ.marginPct}%）
+                </dd>
+              </dl>
+
+              {plan.description && <p className="admin-plan-desc">{plan.description}</p>}
+              <div className="admin-plan-actions">
+                <button onClick={() => openEdit(plan)}>編輯</button>
+                <button className="danger" onClick={() => handleDelete(plan.id)}>刪除</button>
+                <span className={plan.is_active ? "status-active" : "status-inactive"}>
+                  {plan.is_active ? "啟用" : "停用"}
+                </span>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
         {!plans.length && <div className="admin-empty">尚無方案</div>}
       </div>
 
@@ -6575,6 +6999,15 @@ function AdminPlansPage() {
               </div>
               <input className="input" placeholder="徽章（選填）" value={form.badge || ""} onChange={(e) => setForm({ ...form, badge: e.target.value })} />
               <textarea className="input" rows={3} placeholder="描述" value={form.description || ""} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+              {(() => {
+                const e = planEconomics(form);
+                const tone = e.marginPct >= 80 ? "good" : e.marginPct >= 50 ? "warn" : "bad";
+                return (
+                  <div className={`admin-plan-econ-preview tone-${tone}`}>
+                    內部成本 NT$ {e.cost} · 毛利 NT$ {e.margin}（{e.marginPct}%） · ≈ {e.pagesEstimate} 頁
+                  </div>
+                );
+              })()}
               <label><input type="checkbox" checked={form.is_active !== false} onChange={(e) => setForm({ ...form, is_active: e.target.checked })} /> 啟用</label>
             </div>
             <footer className="ann-modal-footer">
@@ -7276,6 +7709,8 @@ function AppShell() {
         <Routes>
           <Route path="/" element={<Navigate to={accessToken ? "/dashboard" : "/project"} replace />} />
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/password-reset" element={<PasswordResetRequestPage />} />
+          <Route path="/password-reset/confirm" element={<PasswordResetConfirmPage />} />
           <Route element={<PublicLayout />}>
             <Route path="/project" element={<ProjectPage />} />
             <Route path="/free-tools" element={<FreeToolsPage />} />
@@ -7344,6 +7779,7 @@ function AppShell() {
             <Route path="/admin/scans/:scanId" element={<AdminScanDetailPage />} />
             <Route path="/admin/content" element={<AdminContentPage />} />
             <Route path="/admin/plans" element={<AdminPlansPage />} />
+            <Route path="/admin/settings" element={<AdminSettingsPage />} />
             <Route path="/admin/audit-log" element={<AdminAuditLogPage />} />
             <Route path="/admin/announcements" element={<AdminAnnouncementsPage />} />
           </Route>
