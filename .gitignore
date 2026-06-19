@@ -39,3 +39,6 @@ _shots/
 
 # Dev email outputs (filebased EmailBackend)
 backend/dev_emails/*.log
+
+# 資料庫備份（pg_dump 含真實使用者個資，絕不可推上公開 repo）
+backups/
