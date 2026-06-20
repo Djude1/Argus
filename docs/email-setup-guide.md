@@ -82,7 +82,7 @@ DEFAULT_FROM_EMAIL=Argus <no-reply@mail.<你的網域>>
 uv run python backend/manage.py test_email <你能收信的 email>
 
 # Docker
-docker exec argus-web-1 uv run python backend/manage.py test_email <你能收信的 email>
+docker exec argus-web-1 uv run python manage.py test_email <你能收信的 email>
 ```
 
 預期：`[OK] 寄送成功`，且收件 inbox 1 分鐘內收到玻璃擬態風格的收據。

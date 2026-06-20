@@ -11,7 +11,7 @@
 1. `git pull` 拿這次的 commit
 2. 在公網機的 `.env` **加 7 個新變數**（值要找使用者 USER 拿，**API key 不在這份文件裡**）
 3. `docker compose up -d --build web worker frontend`（前端要重 build，因為 App.jsx 改了 ~600 行）
-4. `docker exec argus-web-1 uv run python backend/manage.py test_email <你的真實 email>` 驗證寄信能用
+4. `docker exec argus-web-1 uv run python manage.py test_email <你的真實 email>` 驗證寄信能用
 5. 在線上跑一次 password reset 流程 → 收信 → 點 link → 設密碼 → 用新密碼登入
 
 詳細展開見下方。
@@ -139,7 +139,7 @@ docker compose up -d --build web worker frontend
 ### Step 4: 驗證寄信能用
 ```bash
 # 找一個你能收信的 email（例如你自己的 gmail）
-docker exec argus-web-1 uv run python backend/manage.py test_email <你的 email>
+docker exec argus-web-1 uv run python manage.py test_email <你的 email>
 
 # 預期輸出：
 #   目前 EMAIL_BACKEND = django.core.mail.backends.smtp.EmailBackend
@@ -174,7 +174,7 @@ docker exec argus-web-1 uv run python backend/manage.py test_email <你的 email
 
 如果是全新環境要建 superuser，**不要寫死帳密在 migration / commit**。用 shell 互動式建：
 ```bash
-docker exec -it argus-web-1 uv run python backend/manage.py createsuperuser
+docker exec -it argus-web-1 uv run python manage.py createsuperuser
 # 按提示輸入 username (email) / email / password
 ```
 
