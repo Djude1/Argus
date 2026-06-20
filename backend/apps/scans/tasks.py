@@ -22,8 +22,11 @@ from apps.scans.scanners import (
 )
 from apps.scans.security import exposure_scanner, owasp_mapper
 from apps.scans.security.cookie_scanner import analyze_cookies
+from apps.scans.security.dns_scanner import analyze_dns
 from apps.scans.security.header_scanner import analyze_headers
+from apps.scans.security.kali_tools import validate_findings_with_kali
 from apps.scans.security.secret_scanner import build_secret_finding, detect_secrets_in_text
+from apps.scans.security.sri_scanner import analyze_sri
 from apps.scans.security.ssl_scanner import analyze_ssl
 
 
@@ -260,6 +263,28 @@ def run_scan_job(self, scan_job_id: int) -> dict:
             Finding.objects.create(scan_job=scan_job, page=None, **finding)
         all_findings.extend(katana_findings + nuclei_findings)
 
+        # === Kali 主動驗證（攻擊鏈，純加法、三重授權鎖、silent-fail）===
+        # 僅 deep_mode（active + authorized）才嘗試；ARGUS_KALI_ENABLED 等其餘 gating
+        # 由 validate_findings_with_kali → run_sqlmap 的三重鎖負責，預設完全 inert。
+        if deep_mode:
+            try:
+                kali_findings = validate_findings_with_kali(scan_job_id, crawled_urls)
+            except Exception as exc:  # noqa: BLE001
+                append_log(
+                    scan_job_id,
+                    f"Kali 主動驗證略過（{exc.__class__.__name__}）",
+                    level="warn",
+                )
+                kali_findings = []
+            for finding in kali_findings:
+                Finding.objects.create(scan_job=scan_job, page=None, **finding)
+            all_findings.extend(kali_findings)
+            if kali_findings:
+                append_log(
+                    scan_job_id,
+                    f"Kali 主動驗證確認 {len(kali_findings)} 項可利用漏洞",
+                )
+
         # === 深度被動安全掃描（security/ sub-package，純加法、silent-fail）===
         host = urlparse(scan_job.normalized_url).hostname or ""
         root_page = next((p for p in crawled_pages if p.get("headers")), None)
@@ -272,6 +297,8 @@ def run_scan_job(self, scan_job_id: int) -> dict:
             analyze_ssl(host, scan_job_id=scan_job.id)
             + analyze_cookies(root_headers, root_url)
             + analyze_headers(crawled_pages)
+            + analyze_sri(crawled_pages)
+            + analyze_dns(host)
         )
         deep_security_findings = [owasp_mapper.tag(f) for f in deep_security_findings]
         for finding in deep_security_findings:

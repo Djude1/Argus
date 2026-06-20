@@ -19,6 +19,16 @@ _RULE_OWASP_MAP: dict[str, tuple[str, str]] = {
     "header-cors-wildcard": ("A05", "CWE-942"),
     "header-cors-credentials": ("A05", "CWE-942"),
     "header-csp-unsafe": ("A05", "CWE-1021"),
+    # SRI（本套件新 scanner）
+    "sri-missing-integrity": ("A08", "CWE-353"),
+    # DNS/郵件安全（本套件新 scanner）
+    "dns-spf-missing": ("A07", "CWE-290"),
+    "dns-spf-permissive": ("A07", "CWE-290"),
+    "dns-dmarc-missing": ("A07", "CWE-290"),
+    "dns-dmarc-policy-weak": ("A07", "CWE-290"),
+    "dns-dnssec-missing": ("A05", "CWE-345"),
+    # Kali 主動驗證（kali_tools 攻擊鏈）
+    "kali-sqlmap-sqli": ("A03", "CWE-89"),
     # 敏感檔案 / 路徑外洩（exposure_scanner）+ 硬編碼秘鑰（secret_scanner）
     "exposure-hardcoded-secret": ("A07", "CWE-798"),
     "exposure-file-env": ("A05", "CWE-200"),

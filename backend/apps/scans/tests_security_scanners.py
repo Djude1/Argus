@@ -7,8 +7,10 @@ from django.test import TestCase
 from apps.scans.models import Finding, ScanJob
 from apps.scans.security import (
     cookie_scanner,
+    dns_scanner,
     header_scanner,
     owasp_mapper,
+    sri_scanner,
     ssl_scanner,
 )
 from apps.scans.serializers import FindingSerializer
@@ -275,3 +277,130 @@ class TestOwaspMapperExistingFindings(TestCase):
 
     def test_unmappable_rule_id_stays_empty(self):
         self.assertEqual(owasp_mapper._lookup("SECURITY_SOMETHING_NEW_AABBCC1122"), ("", ""))
+
+
+class TestSriScanner(TestCase):
+    def _page(self, html):
+        return {"html": html, "final_url": "https://example.com/"}
+
+    def test_cross_origin_script_without_integrity_flagged(self):
+        html = '<script src="https://cdn.other.com/a.js"></script>'
+        findings = sri_scanner.analyze_sri([self._page(html)])
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0]["rule_id"], "sri-missing-integrity")
+        self.assertEqual(findings[0]["severity"], "low")
+
+    def test_cross_origin_link_stylesheet_without_integrity_flagged(self):
+        html = '<link rel="stylesheet" href="https://cdn.other.com/a.css">'
+        findings = sri_scanner.analyze_sri([self._page(html)])
+        self.assertEqual(len(findings), 1)
+
+    def test_script_with_integrity_not_flagged(self):
+        html = '<script src="https://cdn.other.com/a.js" integrity="sha384-x"></script>'
+        self.assertEqual(sri_scanner.analyze_sri([self._page(html)]), [])
+
+    def test_same_origin_script_not_flagged(self):
+        html = '<script src="https://example.com/a.js"></script>'
+        self.assertEqual(sri_scanner.analyze_sri([self._page(html)]), [])
+
+    def test_relative_path_not_flagged(self):
+        html = '<script src="/static/a.js"></script>'
+        self.assertEqual(sri_scanner.analyze_sri([self._page(html)]), [])
+
+    def test_same_external_url_deduped_across_pages(self):
+        html = '<script src="https://cdn.other.com/a.js"></script>'
+        findings = sri_scanner.analyze_sri([self._page(html), self._page(html)])
+        self.assertEqual(len(findings), 1)
+
+    def test_empty_html_returns_empty(self):
+        page = {"html": "", "final_url": "https://example.com/"}
+        self.assertEqual(sri_scanner.analyze_sri([page]), [])
+
+    def test_no_pages_returns_empty(self):
+        self.assertEqual(sri_scanner.analyze_sri([]), [])
+
+
+class TestDnsEval(TestCase):
+    # --- SPF ---
+    def test_spf_missing_medium(self):
+        findings = dns_scanner._eval_spf(None, "example.com")
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0]["rule_id"], "dns-spf-missing")
+        self.assertEqual(findings[0]["severity"], "medium")
+
+    def test_spf_permissive_all_high(self):
+        findings = dns_scanner._eval_spf("v=spf1 +all", "example.com")
+        self.assertEqual(findings[0]["rule_id"], "dns-spf-permissive")
+        self.assertEqual(findings[0]["severity"], "high")
+
+    def test_spf_strict_no_finding(self):
+        result = dns_scanner._eval_spf("v=spf1 include:_spf.google.com -all", "example.com")
+        self.assertEqual(result, [])
+
+    # --- DMARC ---
+    def test_dmarc_missing_low(self):
+        findings = dns_scanner._eval_dmarc(None, "example.com")
+        self.assertEqual(findings[0]["rule_id"], "dns-dmarc-missing")
+        self.assertEqual(findings[0]["severity"], "low")
+
+    def test_dmarc_policy_none_low(self):
+        findings = dns_scanner._eval_dmarc("v=DMARC1; p=none", "example.com")
+        self.assertEqual(findings[0]["rule_id"], "dns-dmarc-policy-weak")
+        self.assertEqual(findings[0]["severity"], "low")
+
+    def test_dmarc_policy_reject_no_finding(self):
+        self.assertEqual(dns_scanner._eval_dmarc("v=DMARC1; p=reject", "example.com"), [])
+
+    def test_dmarc_policy_parser(self):
+        self.assertEqual(dns_scanner._dmarc_policy("v=DMARC1; p=quarantine; pct=100"), "quarantine")
+
+    # --- DNSSEC ---
+    def test_dnssec_missing_low(self):
+        findings = dns_scanner._eval_dnssec(False, "example.com")
+        self.assertEqual(findings[0]["rule_id"], "dns-dnssec-missing")
+        self.assertEqual(findings[0]["severity"], "low")
+
+    def test_dnssec_present_no_finding(self):
+        self.assertEqual(dns_scanner._eval_dnssec(True, "example.com"), [])
+
+    def test_dnssec_unknown_no_finding(self):
+        self.assertEqual(dns_scanner._eval_dnssec(None, "example.com"), [])
+
+    # --- org domain 退一層 ---
+    def test_org_domain_strips_subdomain(self):
+        self.assertEqual(dns_scanner._org_domain("www.example.com"), "example.com")
+
+    def test_org_domain_keeps_two_label(self):
+        self.assertEqual(dns_scanner._org_domain("example.com"), "example.com")
+
+
+class TestAnalyzeDnsWiring(TestCase):
+    def test_all_missing_produces_three_findings(self):
+        orig_txt, orig_key = dns_scanner._query_txt, dns_scanner._has_dnskey
+        dns_scanner._query_txt = lambda name: []
+        dns_scanner._has_dnskey = lambda name: False
+        try:
+            findings = dns_scanner.analyze_dns("example.com")
+        finally:
+            dns_scanner._query_txt, dns_scanner._has_dnskey = orig_txt, orig_key
+        rule_ids = {f["rule_id"] for f in findings}
+        self.assertEqual(rule_ids, {"dns-spf-missing", "dns-dmarc-missing", "dns-dnssec-missing"})
+
+    def test_empty_host_returns_empty(self):
+        self.assertEqual(dns_scanner.analyze_dns(""), [])
+
+
+class TestOwaspMappingNew(TestCase):
+    def test_new_rule_ids_mapped(self):
+        cases = {
+            "sri-missing-integrity": ("A08", "CWE-353"),
+            "dns-spf-missing": ("A07", "CWE-290"),
+            "dns-spf-permissive": ("A07", "CWE-290"),
+            "dns-dmarc-missing": ("A07", "CWE-290"),
+            "dns-dmarc-policy-weak": ("A07", "CWE-290"),
+            "dns-dnssec-missing": ("A05", "CWE-345"),
+        }
+        for rule_id, (owasp, cwe) in cases.items():
+            tagged = owasp_mapper.tag({"category": "security", "rule_id": rule_id})
+            self.assertEqual(tagged["owasp_category"], owasp, rule_id)
+            self.assertEqual(tagged["cwe_id"], cwe, rule_id)
