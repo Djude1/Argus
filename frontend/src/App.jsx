@@ -1130,6 +1130,8 @@ function buildEvidenceCopyText(finding) {
     `Category: ${finding.category || ""}`,
     `Severity: ${finding.severity || ""}`,
     `Rule ID: ${finding.rule_id || "N/A"}`,
+    ...(finding.owasp_category ? [`OWASP: ${finding.owasp_category}`] : []),
+    ...(finding.cwe_id ? [`CWE: ${finding.cwe_id}`] : []),
     `Evidence Source: ${finding.evidence_source || "N/A"}`,
     `Evidence Type: ${finding.evidence_type || "N/A"}`,
     "",
@@ -1183,6 +1185,18 @@ function EvidencePanel({ finding }) {
           <span>證據型態</span>
           <strong>{finding.evidence_type || "text"}</strong>
         </div>
+        {finding.owasp_category && (
+          <div>
+            <span>OWASP</span>
+            <strong>{finding.owasp_category}</strong>
+          </div>
+        )}
+        {finding.cwe_id && (
+          <div>
+            <span>CWE</span>
+            <strong>{finding.cwe_id}</strong>
+          </div>
+        )}
       </div>
 
       {finding.evidence && (
