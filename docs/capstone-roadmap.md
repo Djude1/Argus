@@ -6,7 +6,7 @@
 
 ---
 
-## 進度快照（2026-06-12）
+## 進度快照（2026-06-23）
 
 | Phase | 狀態 | 說明 |
 |---|---|---|
@@ -16,6 +16,7 @@
 | Phase 1 — 靶機 | ✅ 已就緒 | CTF 靶機 `https://htb.xn--gst.tw/`（「宇宙錯誤知識管理局」）運行中，Kali 已驗證可連通 |
 | Phase 3 — CVE 實機展示 | ⏳ **待 worker rebuild 後實跑** | 程式鏈路全通；需 `--build` 重建 worker 並跑一次 active+authorized 掃描驗證端到端（實際攻擊動作需在場授權） |
 | Phase 4 次要 gap — SRI + DNS/郵件安全 | ✅ **已完成** | `security/sri_scanner.py`（SRI 缺失偵測，stdlib HTMLParser）/ `security/dns_scanner.py`（SPF/DMARC/DNSSEC，dnspython）已建並接入 `tasks.py` deep_security_findings；`owasp_mapper` 加 6 個 rule_id（含首用 A08）；新增相依 dnspython |
+| Phase 4 次要 gap — 第三方 JS 庫版本→CVE（gap C） | ✅ **已完成** | `security/js_library_scanner.py`（被動，vendored Retire.js 規則庫離線比對，zero-HTTP，零新套件）；`owasp_mapper` 加 `js-lib-known-vuln`→A06/CWE-1104；接入 `tasks.py` deep_security_findings；**Web 層 gap 全數補齊** |
 
 > ⚠ 下方各 Phase 的「第 N 天」原始規劃與「尚未開始」字樣為 2026-06-07 初版內容，實際進度以本快照為準。
 

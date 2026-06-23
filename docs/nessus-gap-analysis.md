@@ -43,7 +43,7 @@
 | # | 功能 | Nessus 做什麼 | Argus 現況 | 差距 |
 |---|---|---|---|---|
 | 9 | **敏感路徑暴露** | `/.git/HEAD`、`/.env`、`/phpinfo.php`、備份檔（`.bak/.old`）、目錄列舉 | ✅ 已補強客製探測（security/exposure_scanner.py）+ Nuclei `exposures` tag | 已有主動 content discovery，覆蓋度持續擴充 |
-| 10 | **第三方 JS 庫漏洞** | jQuery/Bootstrap/lodash 舊版本比對 CVE | Katana 識別 tech stack，但無版本→CVE 對比 | **仍缺** version-to-CVE 資料庫整合（唯一未做的 Web 層 gap） |
+| 10 | **第三方 JS 庫漏洞** | jQuery/Bootstrap/lodash 舊版本比對 CVE | ✅ 已補齊（security/js_library_scanner.py：Retire.js 規則庫離線比對，2026-06-23） | 已補齊 |
 | 11 | **預設憑證測試** | 廣泛的預設帳密嘗試清單 | Nuclei `default-logins` 模板有基本涵蓋 | 覆蓋率依模板安裝狀況而異 |
 
 ### Nessus 有但 Argus 不適合做（架構差異太大）
@@ -83,7 +83,7 @@
 | 功能 | 狀態 | 位置 / 備註 |
 |---|---|---|
 | DNS/郵件安全（SPF/DMARC/DNSSEC） | ✅ | `security/dns_scanner.py`（DKIM 刻意不做） |
-| 第三方 JS 庫 CVE 對比 | ⬜ **仍未做** | 需整合 OSS Index 或 Retire.js 版本→CVE，3-5 天 |
+| 第三方 JS 庫 CVE 對比 | ✅ **已補齊** | `security/js_library_scanner.py`（vendored Retire.js 規則庫，2026-06-23） |
 
 ### 額外完成（不在原表）
 
@@ -103,4 +103,4 @@
 > - **Argus 的獨特優勢**：SEO / AEO / GEO 三個維度是 Nessus 完全沒有的；外加 Nuclei→Kali AI 攻擊鏈主動驗證
 > - **Nessus 的明顯優勢**：網路層掃描、主機/OS 層稽核、合規性稽核（PCI/CIS/HIPAA）
 >
-> Web 應用層的第一/第二優先 gap 已全數補齊（SSL/Cookie/Header/CORS/CSP/SRI/DNS/OWASP 對映 + 敏感檔/秘鑰探測），純 Web 掃描範疇已涵蓋 Nessus Web Plugin 的主要子集；**唯一仍未做的 Web 層項目是第三方 JS 庫版本→CVE 對比**。
+> Web 應用層所有 gap 已全數補齊（SSL/Cookie/Header/CORS/CSP/SRI/DNS/OWASP 對映 + 敏感檔/秘鑰探測 + 第三方 JS 庫版本→CVE 對比），純 Web 掃描範疇已涵蓋 Nessus Web Plugin 的主要子集；**Web 層 gap 已全數補齊**。
