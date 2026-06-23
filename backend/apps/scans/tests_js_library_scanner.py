@@ -29,9 +29,16 @@ class TestIsVulnerable(TestCase):
 
     def test_range_atorabove_below(self):
         vuln = {"atOrAbove": "1.0.0", "below": "1.12.0"}
+        self.assertTrue(jls._is_vulnerable("1.0.0", vuln))
         self.assertTrue(jls._is_vulnerable("1.5.0", vuln))
         self.assertFalse(jls._is_vulnerable("0.9.0", vuln))
         self.assertFalse(jls._is_vulnerable("1.12.0", vuln))
 
     def test_no_bounds_never_matches(self):
         self.assertFalse(jls._is_vulnerable("1.0.0", {"severity": "high"}))
+
+    def test_atorbelow_match(self):
+        self.assertTrue(jls._is_vulnerable("1.9.9", {"atOrBelow": "2.0.0"}))
+
+    def test_atorbelow_no_match(self):
+        self.assertFalse(jls._is_vulnerable("2.0.1", {"atOrBelow": "2.0.0"}))

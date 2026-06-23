@@ -11,11 +11,11 @@ _VERSION_RE = r"([0-9][0-9.a-z_\-]+)"
 
 
 def _to_comparable(token: str | None) -> tuple[int, object]:
-    """單一版本段轉可比較值：純數字→(1, int)，其餘字串→(0, str)，缺段→(1, 0)。
+    """單一版本段轉可比較值：純數字→(1, int)，其餘字串→(0, str)，缺段或空字串→(1, 0)。
 
     回傳 tuple 首位為型別旗標（1=數字 > 0=字串），對齊 Retire.js「數字段大於字串段」語意。
     """
-    if token is None:
+    if not token:
         return (1, 0)
     if re.fullmatch(r"\d+", token):
         return (1, int(token))
