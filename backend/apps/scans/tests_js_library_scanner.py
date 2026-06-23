@@ -132,3 +132,91 @@ class TestDetectVersion(TestCase):
         finally:
             jls._DB_PATH = orig
             jls._load_db.cache_clear()
+
+
+class TestAnalyzeJsLibraries(TestCase):
+    _FAKE_DB = {
+        "jquery": {
+            "extractors": {
+                "uri": ["/(§§version§§)/jquery(.min)?.js"],
+                "filename": ["jquery-(§§version§§)(.min)?.js"],
+                "filecontent": ["/\\*! jQuery v(§§version§§)"],
+            },
+            "vulnerabilities": [
+                {"below": "1.6.3", "severity": "medium", "cwe": ["CWE-79"],
+                 "identifiers": {"summary": "XSS with location.hash",
+                                 "CVE": ["CVE-2011-4969"]},
+                 "info": ["http://example/9521"]},
+                {"below": "1.9.0", "severity": "critical", "cwe": ["CWE-79"],
+                 "identifiers": {"summary": "selector injection",
+                                 "CVE": ["CVE-2012-6708"]},
+                 "info": []},
+            ],
+        },
+    }
+
+    def setUp(self):
+        self._orig = jls._load_db
+        jls._load_db = lambda: self._FAKE_DB
+
+    def tearDown(self):
+        jls._load_db = self._orig
+
+    def _pages(self, html):
+        return [{"html": html, "final_url": "https://example.com/"}]
+
+    def test_outdated_jquery_flagged(self):
+        findings = jls.analyze_js_libraries(
+            self._pages('<script src="https://cdn.x/jquery-1.6.0.min.js"></script>')
+        )
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0]["rule_id"], "js-lib-known-vuln")
+
+    def test_aggregates_multiple_cves_into_one_finding(self):
+        findings = jls.analyze_js_libraries(
+            self._pages('<script src="https://cdn.x/jquery-1.6.0.min.js"></script>')
+        )
+        cves = findings[0]["evidence_json"]["vulnerabilities"]
+        self.assertEqual(len(cves), 2)
+
+    def test_critical_capped_to_high(self):
+        # 1.6.0 命中 medium + critical → 取最高且 critical 封頂為 high
+        findings = jls.analyze_js_libraries(
+            self._pages('<script src="https://cdn.x/jquery-1.6.0.min.js"></script>')
+        )
+        self.assertEqual(findings[0]["severity"], "high")
+
+    def test_patched_version_not_flagged(self):
+        findings = jls.analyze_js_libraries(
+            self._pages('<script src="https://cdn.x/jquery-3.6.0.min.js"></script>')
+        )
+        self.assertEqual(findings, [])
+
+    def test_dedup_same_lib_version_across_pages(self):
+        html = '<script src="https://cdn.x/jquery-1.6.0.min.js"></script>'
+        findings = jls.analyze_js_libraries(
+            [{"html": html, "final_url": "https://example.com/a"},
+             {"html": html, "final_url": "https://example.com/b"}]
+        )
+        self.assertEqual(len(findings), 1)
+
+    def test_inline_library_flagged(self):
+        findings = jls.analyze_js_libraries(
+            self._pages("<script>/*! jQuery v1.6.0 */ var x=1;</script>")
+        )
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0]["evidence_json"]["detected_from"], "inline")
+
+    def test_evidence_json_carries_specific_cwe(self):
+        findings = jls.analyze_js_libraries(
+            self._pages('<script src="https://cdn.x/jquery-1.6.0.min.js"></script>')
+        )
+        vulns = findings[0]["evidence_json"]["vulnerabilities"]
+        self.assertIn(["CWE-79"], [v["cwe"] for v in vulns])
+
+    def test_empty_db_returns_empty(self):
+        jls._load_db = lambda: {}
+        self.assertEqual(jls.analyze_js_libraries(self._pages("<script/>")), [])
+
+    def test_no_pages_returns_empty(self):
+        self.assertEqual(jls.analyze_js_libraries([]), [])

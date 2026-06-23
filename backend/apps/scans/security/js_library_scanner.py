@@ -10,6 +10,8 @@ from functools import lru_cache
 from html.parser import HTMLParser
 from pathlib import Path
 
+from apps.scans.scanners import make_finding
+
 # Retire.js 對 §§version§§ 佔位符的實際替換（版本捕獲組）
 _VERSION_RE = r"([0-9][0-9.a-z_\-]+)"
 
@@ -172,3 +174,94 @@ def _detect_version(
             return version, "inline"
 
     return None, None
+
+
+# Retire.js severity → 排名；critical 封頂為 high（被動偵測未實機確認可利用）
+_SEVERITY_RANK = {"low": 1, "medium": 2, "high": 3, "critical": 4}
+_RANK_TO_CAPPED = {1: "low", 2: "medium", 3: "high", 4: "high"}
+
+
+def _build_finding(name: str, version: str, source: str, vulns: list[dict]) -> dict:
+    """把一組命中的 vuln 聚合成單筆 finding；per-CVE 細節進 evidence_json。"""
+    cve_ids: list[str] = []
+    detail: list[dict] = []
+    rank = 1
+    for vuln in vulns:
+        identifiers = vuln.get("identifiers") or {}
+        cves = identifiers.get("CVE") or []
+        cve_ids.extend(cves)
+        rank = max(rank, _SEVERITY_RANK.get((vuln.get("severity") or "low").lower(), 1))
+        detail.append({
+            "cve": cves,
+            "cwe": vuln.get("cwe") or [],
+            "severity": vuln.get("severity") or "low",
+            "summary": identifiers.get("summary") or "",
+            "info": vuln.get("info") or [],
+        })
+    capped = _RANK_TO_CAPPED.get(rank, "low")
+    cve_ids = list(dict.fromkeys(cve_ids))  # 去重保序
+
+    if not cve_ids:
+        cve_summary = f"{len(vulns)} 項已知漏洞"
+        cve_list = "（無 CVE 編號，詳見參考連結）"
+    elif len(cve_ids) <= 2:
+        cve_summary = cve_list = "、".join(cve_ids)
+    else:
+        cve_summary = f"{cve_ids[0]} 等 {len(cve_ids)} 項"
+        cve_list = "、".join(cve_ids)
+
+    return make_finding(
+        category="security", severity=capped, rule_id="js-lib-known-vuln",
+        title=f"過時的第三方庫 {name} {version} 含已知漏洞（{cve_summary}）",
+        description=(
+            f"偵測到網站載入 {name} {version}，此版本存在 {len(vulns)} 項已知公開漏洞"
+            f"（{cve_list}）。攻擊者可利用對應漏洞對使用此庫的頁面發動攻擊。"
+        ),
+        remediation=(
+            f"將 {name} 升級至已修補的最新穩定版本，"
+            "並建立前端依賴的定期更新與漏洞掃描流程。"
+        ),
+        evidence=f"{name} {version}（來源：{source}）；命中：{cve_list}",
+        evidence_json={
+            "library": name,
+            "version": version,
+            "detected_from": source,
+            "vulnerabilities": detail,
+        },
+        impact_area="vulnerability",
+    )
+
+
+def analyze_js_libraries(pages: list[dict]) -> list[dict]:
+    """偵測過時第三方 JS 庫並比對已知 CVE。任何例外 silent-fail 回 []。"""
+    try:
+        db = _load_db()
+        if not db:
+            return []
+        src_urls, inline_scripts = _collect_scripts(pages)
+        if not src_urls and not inline_scripts:
+            return []
+
+        seen: set[tuple[str, str]] = set()
+        out: list[dict] = []
+        for name, component in db.items():
+            if not isinstance(component, dict):
+                continue
+            extractors = component.get("extractors") or {}
+            version, source = _detect_version(extractors, src_urls, inline_scripts)
+            if not version:
+                continue
+            key = (name, version)
+            if key in seen:
+                continue
+            matched = [
+                v for v in (component.get("vulnerabilities") or [])
+                if _is_vulnerable(version, v)
+            ]
+            if not matched:
+                continue
+            seen.add(key)
+            out.append(_build_finding(name, version, source or "unknown", matched))
+        return out
+    except Exception:
+        return []
