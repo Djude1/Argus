@@ -1,0 +1,53 @@
+"""第三方 JS 庫版本→CVE 比對（OWASP A06 Vulnerable & Outdated Components）。
+
+被動偵測：只解析爬蟲已抓到的 HTML <script>（外部 src URL + inline 內容），
+用 vendored Retire.js jsrepository.json 規則萃取版本並比對已知漏洞版本區間。
+零額外 HTTP、零新第三方套件；任何例外 silent-fail 回 []。
+"""
+import re
+
+# Retire.js 對 §§version§§ 佔位符的實際替換（版本捕獲組）
+_VERSION_RE = r"([0-9][0-9.a-z_\-]+)"
+
+
+def _to_comparable(token: str | None) -> tuple[int, object]:
+    """單一版本段轉可比較值：純數字→(1, int)，其餘字串→(0, str)，缺段→(1, 0)。
+
+    回傳 tuple 首位為型別旗標（1=數字 > 0=字串），對齊 Retire.js「數字段大於字串段」語意。
+    """
+    if token is None:
+        return (1, 0)
+    if re.fullmatch(r"\d+", token):
+        return (1, int(token))
+    return (0, token)
+
+
+def _compare_versions(v1: str, v2: str) -> int:
+    """以 . 與 - 切段逐段比較，回 -1 / 0 / 1。數字段以整數比較（非字典序）。"""
+    p1 = re.split(r"[.\-]", (v1 or "").strip())
+    p2 = re.split(r"[.\-]", (v2 or "").strip())
+    for i in range(max(len(p1), len(p2))):
+        c1 = _to_comparable(p1[i] if i < len(p1) else None)
+        c2 = _to_comparable(p2[i] if i < len(p2) else None)
+        if c1[0] != c2[0]:
+            return 1 if c1[0] > c2[0] else -1
+        if c1[1] > c2[1]:  # type: ignore[operator]
+            return 1
+        if c1[1] < c2[1]:  # type: ignore[operator]
+            return -1
+    return 0
+
+
+def _is_vulnerable(version: str, vuln: dict) -> bool:
+    """版本是否落入此 vuln 的受影響區間（atOrAbove / below / atOrBelow）。"""
+    at_or_above = vuln.get("atOrAbove")
+    below = vuln.get("below")
+    at_or_below = vuln.get("atOrBelow")
+    if at_or_above is not None and _compare_versions(version, at_or_above) < 0:
+        return False
+    if below is not None and _compare_versions(version, below) >= 0:
+        return False
+    if at_or_below is not None and _compare_versions(version, at_or_below) > 0:
+        return False
+    # 至少要有一個邊界才算有效區間，避免無邊界 entry 命中所有版本
+    return any(x is not None for x in (at_or_above, below, at_or_below))
