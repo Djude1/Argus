@@ -4,8 +4,11 @@
 用 vendored Retire.js jsrepository.json 規則萃取版本並比對已知漏洞版本區間。
 零額外 HTTP、零新第三方套件；任何例外 silent-fail 回 []。
 """
+import json
 import re
+from functools import lru_cache
 from html.parser import HTMLParser
+from pathlib import Path
 
 # Retire.js 對 §§version§§ 佔位符的實際替換（版本捕獲組）
 _VERSION_RE = r"([0-9][0-9.a-z_\-]+)"
@@ -104,3 +107,70 @@ def _is_vulnerable(version: str, vuln: dict) -> bool:
         return False
     # 至少要有一個邊界才算有效區間，避免無邊界 entry 命中所有版本
     return any(x is not None for x in (at_or_above, below, at_or_below))
+
+
+_DB_PATH = Path(__file__).parent / "data" / "jsrepository.json"
+
+
+@lru_cache(maxsize=1)
+def _load_db() -> dict:
+    """讀 vendored Retire.js 規則庫；檔案不存在 / JSON 壞掉 → 回 {}（silent-fail）。"""
+    try:
+        with open(_DB_PATH, encoding="utf-8") as fh:
+            data = json.load(fh)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _compile_patterns(patterns: list[str] | None) -> list:
+    """把 §§version§§ 佔位符換成版本捕獲組後編譯；個別 regex 編譯失敗就跳過。"""
+    compiled = []
+    for raw in patterns or []:
+        try:
+            compiled.append(re.compile(raw.replace("§§version§§", _VERSION_RE)))
+        except Exception:
+            continue
+    return compiled
+
+
+def _first_version(pattern_list: list, text: str) -> str | None:
+    """對 text 套用一組 pattern，回第一個看起來像版本（數字開頭）的捕獲值。"""
+    for pat in pattern_list:
+        match = pat.search(text)
+        if match and match.groups():
+            candidate = match.group(1)
+            if candidate and candidate[0].isdigit():
+                # 去除尾端常見檔名 suffix（greedy matching 可能吃進去）
+                for suffix in [".min", ".bundle", ".umd"]:
+                    if candidate.endswith(suffix):
+                        candidate = candidate[:-len(suffix)]
+                # 再次確認清理後仍以數字開頭且非空
+                if candidate and candidate[0].isdigit():
+                    return candidate
+    return None
+
+
+def _detect_version(
+    extractors: dict, src_urls: list[str], inline_scripts: list[str]
+) -> tuple[str | None, str | None]:
+    """用 uri/filename（打 URL）與 filecontent（打 inline）萃取版本。回 (version, source)。"""
+    uri_pats = _compile_patterns(extractors.get("uri"))
+    filename_pats = _compile_patterns(extractors.get("filename"))
+    filecontent_pats = _compile_patterns(extractors.get("filecontent"))
+
+    for url in src_urls:
+        version = _first_version(uri_pats, url)
+        if version:
+            return version, url
+        filename = url.rsplit("/", 1)[-1].split("?")[0]
+        version = _first_version(filename_pats, filename)
+        if version:
+            return version, url
+
+    for content in inline_scripts:
+        version = _first_version(filecontent_pats, content)
+        if version:
+            return version, "inline"
+
+    return None, None

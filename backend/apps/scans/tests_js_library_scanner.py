@@ -79,3 +79,48 @@ class TestCollectScripts(TestCase):
         srcs, inline = jls._collect_scripts(pages)  # 不應拋例外
         self.assertIsInstance(srcs, list)
         self.assertIsInstance(inline, list)
+
+
+class TestDetectVersion(TestCase):
+    _EXTRACTORS = {
+        "uri": ["/(§§version§§)/jquery(.min)?.js"],
+        "filename": ["jquery-(§§version§§)(.min)?.js"],
+        "filecontent": ["/\\*! jQuery v(§§version§§)"],
+    }
+
+    def test_filename_extractor_captures_version(self):
+        ver, src = jls._detect_version(
+            self._EXTRACTORS, ["https://cdn.x/jquery-1.6.0.min.js"], []
+        )
+        self.assertEqual(ver, "1.6.0")
+        self.assertEqual(src, "https://cdn.x/jquery-1.6.0.min.js")
+
+    def test_uri_extractor_captures_version(self):
+        ver, src = jls._detect_version(
+            self._EXTRACTORS, ["https://cdnjs/ajax/libs/jquery/3.4.1/jquery.min.js"], []
+        )
+        self.assertEqual(ver, "3.4.1")
+
+    def test_filecontent_extractor_marks_inline(self):
+        ver, src = jls._detect_version(
+            self._EXTRACTORS, [], ["/*! jQuery v1.6.0 */"]
+        )
+        self.assertEqual(ver, "1.6.0")
+        self.assertEqual(src, "inline")
+
+    def test_no_match_returns_none(self):
+        ver, src = jls._detect_version(self._EXTRACTORS, ["https://cdn.x/react.min.js"], [])
+        self.assertIsNone(ver)
+        self.assertIsNone(src)
+
+    def test_load_db_missing_file_returns_empty(self):
+        # 暫時指向不存在的路徑，確認 silent-fail（清掉 lru_cache）
+        import pathlib
+        orig = jls._DB_PATH
+        jls._load_db.cache_clear()
+        jls._DB_PATH = pathlib.Path("/nonexistent/jsrepository.json")
+        try:
+            self.assertEqual(jls._load_db(), {})
+        finally:
+            jls._DB_PATH = orig
+            jls._load_db.cache_clear()
