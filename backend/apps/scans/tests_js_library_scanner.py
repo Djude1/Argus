@@ -1,4 +1,6 @@
 """第三方 JS 庫 CVE scanner（js_library_scanner）單元測試。"""
+import pathlib
+
 from django.test import TestCase
 
 from apps.scans.security import js_library_scanner as jls
@@ -95,6 +97,13 @@ class TestDetectVersion(TestCase):
         self.assertEqual(ver, "1.6.0")
         self.assertEqual(src, "https://cdn.x/jquery-1.6.0.min.js")
 
+    def test_chained_suffix_stripped_to_core(self):
+        # jquery-1.6.0.bundle.min.js → 版本核心應為 1.6.0（丟棄連鎖後綴）
+        ver, _ = jls._detect_version(
+            self._EXTRACTORS, ["https://cdn.x/jquery-1.6.0.bundle.min.js"], []
+        )
+        self.assertEqual(ver, "1.6.0")
+
     def test_uri_extractor_captures_version(self):
         ver, src = jls._detect_version(
             self._EXTRACTORS, ["https://cdnjs/ajax/libs/jquery/3.4.1/jquery.min.js"], []
@@ -115,7 +124,6 @@ class TestDetectVersion(TestCase):
 
     def test_load_db_missing_file_returns_empty(self):
         # 暫時指向不存在的路徑，確認 silent-fail（清掉 lru_cache）
-        import pathlib
         orig = jls._DB_PATH
         jls._load_db.cache_clear()
         jls._DB_PATH = pathlib.Path("/nonexistent/jsrepository.json")

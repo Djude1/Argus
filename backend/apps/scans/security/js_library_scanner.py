@@ -13,6 +13,9 @@ from pathlib import Path
 # Retire.js 對 §§version§§ 佔位符的實際替換（版本捕獲組）
 _VERSION_RE = r"([0-9][0-9.a-z_\-]+)"
 
+# 從捕獲到的字串截取開頭的「數字點號版本核心」，丟棄尾端 .min/.bundle 等非版本雜訊
+_VERSION_CORE_RE = re.compile(r"[0-9]+(?:\.[0-9]+)*(?:-[0-9a-z.]+)?")
+
 
 class _ScriptParser(HTMLParser):
     """收集 <script src> 的 URL 與 inline <script> 內容。沿用 stdlib，不引入 BeautifulSoup。"""
@@ -123,7 +126,7 @@ def _load_db() -> dict:
         return {}
 
 
-def _compile_patterns(patterns: list[str] | None) -> list:
+def _compile_patterns(patterns: list[str] | None) -> list[re.Pattern]:
     """把 §§version§§ 佔位符換成版本捕獲組後編譯；個別 regex 編譯失敗就跳過。"""
     compiled = []
     for raw in patterns or []:
@@ -141,13 +144,8 @@ def _first_version(pattern_list: list, text: str) -> str | None:
         if match and match.groups():
             candidate = match.group(1)
             if candidate and candidate[0].isdigit():
-                # 去除尾端常見檔名 suffix（greedy matching 可能吃進去）
-                for suffix in [".min", ".bundle", ".umd"]:
-                    if candidate.endswith(suffix):
-                        candidate = candidate[:-len(suffix)]
-                # 再次確認清理後仍以數字開頭且非空
-                if candidate and candidate[0].isdigit():
-                    return candidate
+                # 截取數字點號版本核心，丟棄尾端 .min/.bundle/.js 等雜訊
+                return _VERSION_CORE_RE.match(candidate).group(0)
     return None
 
 
