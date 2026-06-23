@@ -64,7 +64,18 @@ class TestCollectScripts(TestCase):
         self.assertEqual(srcs, ["/a.js"])
         self.assertEqual(inline, [])
 
+    def test_mixed_external_and_inline_in_same_page(self):
+        html = (
+            '<script src="https://cdn.x/a.js"></script>'
+            "<script>/*! lib v2.0 */ var b=2;</script>"
+        )
+        srcs, inline = jls._collect_scripts([{"html": html}])
+        self.assertEqual(srcs, ["https://cdn.x/a.js"])
+        self.assertEqual(len(inline), 1)
+        self.assertIn("lib v2.0", inline[0])
+
     def test_malformed_html_does_not_raise(self):
         pages = [{"html": "<script src=<<>>broken"}]
         srcs, inline = jls._collect_scripts(pages)  # 不應拋例外
         self.assertIsInstance(srcs, list)
+        self.assertIsInstance(inline, list)
