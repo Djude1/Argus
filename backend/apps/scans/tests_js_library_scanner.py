@@ -4,6 +4,7 @@ import pathlib
 from django.test import TestCase
 
 from apps.scans.security import js_library_scanner as jls
+from apps.scans.security import owasp_mapper
 
 
 class TestVersionCompare(TestCase):
@@ -220,9 +221,6 @@ class TestAnalyzeJsLibraries(TestCase):
 
     def test_no_pages_returns_empty(self):
         self.assertEqual(jls.analyze_js_libraries([]), [])
-
-
-from apps.scans.security import owasp_mapper
 
 
 class TestJsLibOwaspMapping(TestCase):
