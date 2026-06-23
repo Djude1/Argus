@@ -5,9 +5,62 @@
 零額外 HTTP、零新第三方套件；任何例外 silent-fail 回 []。
 """
 import re
+from html.parser import HTMLParser
 
 # Retire.js 對 §§version§§ 佔位符的實際替換（版本捕獲組）
 _VERSION_RE = r"([0-9][0-9.a-z_\-]+)"
+
+
+class _ScriptParser(HTMLParser):
+    """收集 <script src> 的 URL 與 inline <script> 內容。沿用 stdlib，不引入 BeautifulSoup。"""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.src_urls: list[str] = []
+        self.inline_scripts: list[str] = []
+        self._in_script = False
+        self._buffer: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag.lower() != "script":
+            return
+        attributes = {name.lower(): (value or "") for name, value in attrs}
+        src = attributes.get("src", "").strip()
+        if src:
+            self.src_urls.append(src)
+        else:
+            self._in_script = True
+            self._buffer = []
+
+    def handle_data(self, data: str) -> None:
+        if self._in_script:
+            self._buffer.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.lower() == "script" and self._in_script:
+            self._in_script = False
+            content = "".join(self._buffer)
+            if content.strip():
+                self.inline_scripts.append(content)
+            self._buffer = []
+
+
+def _collect_scripts(pages: list[dict]) -> tuple[list[str], list[str]]:
+    """掃所有頁面的 HTML，回 (外部 script src URL 清單, inline script 內容清單)。"""
+    src_urls: list[str] = []
+    inline_scripts: list[str] = []
+    for page in pages or []:
+        html = (page or {}).get("html") or ""
+        if not html:
+            continue
+        parser = _ScriptParser()
+        try:
+            parser.feed(html)
+        except Exception:
+            continue
+        src_urls.extend(parser.src_urls)
+        inline_scripts.extend(parser.inline_scripts)
+    return src_urls, inline_scripts
 
 
 def _to_comparable(token: str | None) -> tuple[int, object]:

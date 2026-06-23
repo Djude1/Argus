@@ -42,3 +42,29 @@ class TestIsVulnerable(TestCase):
 
     def test_atorbelow_no_match(self):
         self.assertFalse(jls._is_vulnerable("2.0.1", {"atOrBelow": "2.0.0"}))
+
+
+class TestCollectScripts(TestCase):
+    def test_collects_external_src(self):
+        pages = [{"html": '<script src="https://cdn.x/jquery-1.6.0.min.js"></script>'}]
+        srcs, inline = jls._collect_scripts(pages)
+        self.assertEqual(srcs, ["https://cdn.x/jquery-1.6.0.min.js"])
+        self.assertEqual(inline, [])
+
+    def test_collects_inline_content(self):
+        pages = [{"html": "<script>/*! jQuery v1.6.0 */ var a=1;</script>"}]
+        srcs, inline = jls._collect_scripts(pages)
+        self.assertEqual(srcs, [])
+        self.assertEqual(len(inline), 1)
+        self.assertIn("jQuery v1.6.0", inline[0])
+
+    def test_empty_and_missing_html_skipped(self):
+        pages = [{"html": ""}, {}, {"html": "<script src='/a.js'></script>"}]
+        srcs, inline = jls._collect_scripts(pages)
+        self.assertEqual(srcs, ["/a.js"])
+        self.assertEqual(inline, [])
+
+    def test_malformed_html_does_not_raise(self):
+        pages = [{"html": "<script src=<<>>broken"}]
+        srcs, inline = jls._collect_scripts(pages)  # 不應拋例外
+        self.assertIsInstance(srcs, list)
