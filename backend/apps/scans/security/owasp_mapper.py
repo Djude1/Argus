@@ -27,6 +27,8 @@ _RULE_OWASP_MAP: dict[str, tuple[str, str]] = {
     "dns-dmarc-missing": ("A07", "CWE-290"),
     "dns-dmarc-policy-weak": ("A07", "CWE-290"),
     "dns-dnssec-missing": ("A05", "CWE-345"),
+    # 第三方 JS 庫已知漏洞（js_library_scanner）
+    "js-lib-known-vuln": ("A06", "CWE-1104"),
     # Kali 主動驗證（kali_tools 攻擊鏈）
     "kali-sqlmap-sqli": ("A03", "CWE-89"),
     # 敏感檔案 / 路徑外洩（exposure_scanner）+ 硬編碼秘鑰（secret_scanner）

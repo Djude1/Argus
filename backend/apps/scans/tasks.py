@@ -27,6 +27,7 @@ from apps.scans.security.header_scanner import analyze_headers
 from apps.scans.security.kali_tools import validate_findings_with_kali
 from apps.scans.security.secret_scanner import build_secret_finding, detect_secrets_in_text
 from apps.scans.security.sri_scanner import analyze_sri
+from apps.scans.security.js_library_scanner import analyze_js_libraries
 from apps.scans.security.ssl_scanner import analyze_ssl
 
 
@@ -299,6 +300,7 @@ def run_scan_job(self, scan_job_id: int) -> dict:
             + analyze_headers(crawled_pages)
             + analyze_sri(crawled_pages)
             + analyze_dns(host)
+            + analyze_js_libraries(crawled_pages)
         )
         deep_security_findings = [owasp_mapper.tag(f) for f in deep_security_findings]
         for finding in deep_security_findings:
