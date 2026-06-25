@@ -154,7 +154,13 @@ def _first_version(pattern_list: list, text: str) -> str | None:
 def _detect_version(
     extractors: dict, src_urls: list[str], inline_scripts: list[str]
 ) -> tuple[str | None, str | None]:
-    """用 uri/filename（打 URL）與 filecontent（打 inline）萃取版本。回 (version, source)。"""
+    """用 uri/filename（打 URL）與 filecontent（打 inline）萃取版本。回 (version, source)。
+
+    已知限制：每個庫的 extractor 會打所有 src_url，命中即回；若某庫的 regex 過於寬鬆而
+    比對到不相干的 script URL，可能誤判版本（偽陽性）。實務上 Retire.js extractor 多含庫名
+    特徵故風險低，且 analyze_js_libraries 以 (庫名,版本) 去重收斂；如需更嚴謹可改為先以
+    URL 含庫名過濾再萃取（YAGNI，現階段不做）。
+    """
     uri_pats = _compile_patterns(extractors.get("uri"))
     filename_pats = _compile_patterns(extractors.get("filename"))
     filecontent_pats = _compile_patterns(extractors.get("filecontent"))
